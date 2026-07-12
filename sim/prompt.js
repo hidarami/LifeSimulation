@@ -122,10 +122,9 @@ Age 18 · Small location · Average background · Limited resources ·
 No predefined trajectory · Legal adulthood applies
 
 FIRST TURN PROCEDURE:
-1. Display full stat block in exact progress bar format
-2. Describe an ordinary morning with concrete physical specificity:
+1. Describe an ordinary morning with concrete physical specificity:
    body state, immediate location, sensory environment
-3. End with: "What do you do?"
+2. End with: "What do you do?"
 
 PRIORITY HIERARCHY — resolve all conflicts by higher rank:
 1. Mechanical triggers: thresholds, probability rolls, automatic consequences

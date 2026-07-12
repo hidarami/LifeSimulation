@@ -87,6 +87,39 @@ export async function resetWorldState() {
   _worldId = null;
 }
 
+// ─── SUPABASE CLOUD SYNC ──────────────────────────────────────────────────────
+let _supabase = null;
+
+export function setSupabaseClient(client) {
+  _supabase = client;
+}
+
+export async function saveWorldStateCloud(state) {
+  if (!_supabase) return;
+  try {
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return;
+    await _supabase.from('world_states').upsert(
+      { user_id: user.id, state, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' }
+    );
+  } catch (e) { console.warn('[cloud] save failed:', e.message); }
+}
+
+export async function loadWorldStateCloud() {
+  if (!_supabase) return null;
+  try {
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return null;
+    const { data } = await _supabase
+      .from('world_states')
+      .select('state')
+      .eq('user_id', user.id)
+      .single();
+    return data?.state ?? null;
+  } catch { return null; }
+}
+
 // ─── EVENT LOG ────────────────────────────────────────────────────────────────
 // Full mechanical log — never sent to AI in full; queried by slice.
 // Categories: arrest | hospitalization | breakup | job_change |

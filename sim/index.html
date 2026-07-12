@@ -111,7 +111,7 @@ main{display:flex;flex-direction:column;overflow:hidden}
 /* SETTINGS MODAL */
 #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:99;align-items:center;justify-content:center}
 #modal.open{display:flex}
-.mbox{background:var(--sur);border:1px solid var(--bdr);padding:18px;width:350px;border-radius:4px}
+.mbox{background:var(--sur);border:1px solid var(--bdr);padding:18px;width:380px;max-height:85vh;overflow-y:auto;border-radius:4px}
 .mtitle{font-size:13px;margin-bottom:14px}
 .mrow{margin-bottom:11px}
 .mlabel{font-size:10px;color:var(--dim);display:block;margin-bottom:3px}
@@ -171,6 +171,10 @@ main{display:flex;flex-direction:column;overflow:hidden}
     <div class="mrow"><label class="mlabel">Grok API Key</label><input class="minput" id="k-grok" type="password" placeholder="xai-..."></div>
     <div class="mrow"><label class="mlabel">Gemini API Key</label><input class="minput" id="k-gem" type="password" placeholder="AIza..."></div>
     <div class="mrow"><label class="mlabel">OpenRouter (fallback)</label><input class="minput" id="k-or" type="password" placeholder="sk-or-..."></div>
+    <hr style="border-color:var(--bdr);margin:10px 0">
+    <div class="mrow"><label class="mlabel">Supabase URL</label><input class="minput" id="k-sb-url" placeholder="https://xxx.supabase.co"></div>
+    <div class="mrow"><label class="mlabel">Supabase Anon Key</label><input class="minput" id="k-sb-key" type="password" placeholder="eyJ..."></div>
+    <div class="mrow"><label class="mlabel">Email (cross-device sync login)</label><input class="minput" id="k-email" type="email" placeholder="you@email.com"><button class="btn" id="btn-login-link" style="margin-top:5px;width:100%">Send Login Link →</button><div id="auth-status" style="font-size:10px;color:var(--dim);margin-top:4px"></div></div>
     <div class="mactions">
       <button class="btn" id="btn-mcancel">Cancel</button>
       <button class="btn btn-pri" id="btn-msave">Save</button>
@@ -178,9 +182,11 @@ main{display:flex;flex-direction:column;overflow:hidden}
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script type="module">
 import { loadWorldState, saveWorldState, createInitialWorldState,
-         assembleTurnBrief, appendSignificantEvent, updateEventIndex, logEvent } from './state.js';
+         assembleTurnBrief, appendSignificantEvent, updateEventIndex, logEvent,
+         setSupabaseClient, saveWorldStateCloud, loadWorldStateCloud } from './state.js';
 import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
          rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION } from './engine.js';
 import { routeInput, isExplicit, classifyExplicitActivity,
@@ -356,6 +362,7 @@ async function processTurn(input) {
     renderNarration(prose, anchor, document.getElementById('feed'));
     WS = ws;
     await saveWorldState(ws);
+    saveWorldStateCloud(ws).catch(() => {});   // fire-and-forget cloud sync
     renderAll();
     setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
 
@@ -374,9 +381,20 @@ async function processTurn(input) {
 
 // ── BOOT ────────────────────────────────────────────────────────────────────
 async function boot() {
-  WS = await loadWorldState();
-  if (WS) { renderAll(); setStatus('Save loaded.'); }
-  else      setStatus('Ready.');
+  const sbUrl = localStorage.getItem('SUPABASE_URL');
+  const sbKey = localStorage.getItem('SUPABASE_ANON_KEY');
+  let signedIn = false;
+  if (sbUrl && sbKey && window.supabase) {
+    const client = window.supabase.createClient(sbUrl, sbKey);
+    setSupabaseClient(client);
+    await client.auth.getSession();
+    window.history.replaceState(null, '', window.location.pathname);
+    const { data: { user } } = await client.auth.getUser();
+    if (user) { signedIn = true; setStatus(`Signed in: ${user.email}`); }
+  }
+  WS = (await loadWorldStateCloud()) ?? (await loadWorldState());
+  if (WS) { renderAll(); if (!signedIn) setStatus('Save loaded.'); }
+  else if (!signedIn) setStatus('Ready.');
 }
 
 // ── EVENT LISTENERS ─────────────────────────────────────────────────────────
@@ -401,9 +419,12 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 document.getElementById('btn-settings').addEventListener('click', () => {
-  document.getElementById('k-grok').value = localStorage.getItem('GROK_API_KEY') ?? '';
-  document.getElementById('k-gem').value  = localStorage.getItem('GEMINI_API_KEY') ?? '';
-  document.getElementById('k-or').value   = localStorage.getItem('OPENROUTER_API_KEY') ?? '';
+  document.getElementById('k-grok').value   = localStorage.getItem('GROK_API_KEY') ?? '';
+  document.getElementById('k-gem').value    = localStorage.getItem('GEMINI_API_KEY') ?? '';
+  document.getElementById('k-or').value     = localStorage.getItem('OPENROUTER_API_KEY') ?? '';
+  document.getElementById('k-sb-url').value = localStorage.getItem('SUPABASE_URL') ?? '';
+  document.getElementById('k-sb-key').value = localStorage.getItem('SUPABASE_ANON_KEY') ?? '';
+  document.getElementById('auth-status').textContent = '';
   document.getElementById('modal').classList.add('open');
 });
 
@@ -411,12 +432,19 @@ document.getElementById('btn-mcancel').addEventListener('click', () =>
   document.getElementById('modal').classList.remove('open'));
 
 document.getElementById('btn-msave').addEventListener('click', () => {
-  const g  = document.getElementById('k-grok').value.trim();
-  const gm = document.getElementById('k-gem').value.trim();
+  const g   = document.getElementById('k-grok').value.trim();
+  const gm  = document.getElementById('k-gem').value.trim();
   const or_ = document.getElementById('k-or').value.trim();
+  const sbu = document.getElementById('k-sb-url').value.trim();
+  const sbk = document.getElementById('k-sb-key').value.trim();
   if (g)   localStorage.setItem('GROK_API_KEY', g);
   if (gm)  localStorage.setItem('GEMINI_API_KEY', gm);
   if (or_) localStorage.setItem('OPENROUTER_API_KEY', or_);
+  if (sbu) localStorage.setItem('SUPABASE_URL', sbu);
+  if (sbk) localStorage.setItem('SUPABASE_ANON_KEY', sbk);
+  if (sbu && sbk && window.supabase) {
+    setSupabaseClient(window.supabase.createClient(sbu, sbk));
+  }
   document.getElementById('modal').classList.remove('open');
   setStatus('Keys saved.');
 });
@@ -429,6 +457,22 @@ document.getElementById('btn-new').addEventListener('click', () => {
   document.getElementById('feed').innerHTML = '';
   renderAll();
   setStatus(`New game — ${name}`);
+});
+
+document.getElementById('btn-login-link').addEventListener('click', async () => {
+  const email  = document.getElementById('k-email').value.trim();
+  const status = document.getElementById('auth-status');
+  if (!email) { status.textContent = 'Enter an email first.'; return; }
+  const sbu = localStorage.getItem('SUPABASE_URL');
+  const sbk = localStorage.getItem('SUPABASE_ANON_KEY');
+  if (!sbu || !sbk || !window.supabase) {
+    status.textContent = 'Save Supabase URL + key first, then retry.';
+    return;
+  }
+  const client      = window.supabase.createClient(sbu, sbk);
+  const redirectTo  = window.location.href.split('#')[0];
+  const { error }   = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
+  status.textContent = error ? `Error: ${error.message}` : `Link sent to ${email} — check inbox.`;
 });
 
 boot();
