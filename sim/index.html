@@ -196,6 +196,8 @@ main{display:flex;flex-direction:column;overflow:hidden}
     <div class="mrow"><label class="mlabel">OpenRouter (fallback)</label><input class="minput" id="k-or" type="password" placeholder="sk-or-..."></div>
     <div class="mrow"><label class="mlabel">Groq (Gemini fallback)</label><input class="minput" id="k-groq" type="password" placeholder="gsk_..."></div>
     <hr style="border-color:var(--bdr);margin:10px 0">
+    <div class="mrow"><label class="mlabel">Lorebook — world &amp; character facts sent in every Grok prompt</label><textarea class="minput" id="k-lorebook" rows="6" style="resize:vertical;min-height:80px" placeholder="e.g. The player's name is Rico Diaz, age 18, male. He lives alone in a small apartment in Cavite, Philippines. He has no established romantic relationships..."></textarea></div>
+    <hr style="border-color:var(--bdr);margin:10px 0">
     <div class="mrow"><label class="mlabel">Supabase URL</label><input class="minput" id="k-sb-url" placeholder="https://xxx.supabase.co"></div>
     <div class="mrow"><label class="mlabel">Supabase Anon Key</label><input class="minput" id="k-sb-key" type="password" placeholder="eyJ..."></div>
     <div class="mrow"><label class="mlabel">Email (cross-device sync login)</label><input class="minput" id="k-email" type="email" placeholder="you@email.com"><button class="btn" id="btn-login-link" style="margin-top:5px;width:100%">Send Login Link →</button><div id="auth-status" style="font-size:10px;color:var(--dim);margin-top:4px"></div></div>
@@ -208,14 +210,15 @@ main{display:flex;flex-direction:column;overflow:hidden}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script type="module">
-import { loadWorldState, saveWorldState, createInitialWorldState,
+import { loadWorldState, saveWorldState, resetWorldState, createInitialWorldState,
          assembleTurnBrief, appendSignificantEvent, updateEventIndex, logEvent,
+         saveNarration, loadNarrations,
          setSupabaseClient, saveWorldStateCloud, loadWorldStateCloud } from './state.js';
 import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
          rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION } from './engine.js';
 import { routeInput, isExplicit, classifyExplicitActivity,
          EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, ROUTE } from './sanitizer.js';
-import { callGrok, classifyAction, evaluateNpcReaction,
+import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversationHistory,
          callGeminiAutopilot, compressSessionContext } from './api.js';
 import { renderStatPanel, renderNpcPanel, renderJobPanel,
          renderPossessionsPanel, renderNarration, renderTurnAnchor } from './renderer.js';
@@ -281,11 +284,18 @@ async function processTurn(input) {
 
     // ── PATH 1: Explicit ─────────────────────────────────────────────────────
     if (route === ROUTE.PATH_1_EXPLICIT) {
-      const type  = classifyExplicitActivity(input);
-      statDeltas  = EXPLICIT_ACTIVITY_TABLE[type] ?? {};
-      timeCost    = 0.5;
-      actionDesc  = `[explicit: ${type}]`;
-      riskResult  = rollRisk('low', ws.player.stats);
+      let type = classifyExplicitActivity(input);
+      // Activities that physically require an established partner
+      const NEEDS_PARTNER = ['intercourse', 'oral_giving', 'oral_receiving', 'manual_giving', 'manual_receiving', 'mutual_masturbation'];
+      const hasActiveNpc  = Object.values(ws.npcs).some(n => n.status === 'active' && n.significance >= 1);
+      const forcedSolo    = NEEDS_PARTNER.includes(type) && !hasActiveNpc;
+      if (forcedSolo) type = 'solo_masturbation';
+      statDeltas = EXPLICIT_ACTIVITY_TABLE[type] ?? {};
+      timeCost   = 0.5;
+      actionDesc = forcedSolo
+        ? `[explicit: solo_masturbation — no established partner]`
+        : `[explicit: ${type}]`;
+      riskResult = rollRisk('low', ws.player.stats);
     }
     // ── PATH 2: Novel ─────────────────────────────────────────────────────────
     else if (route === ROUTE.PATH_2_NOVEL) {
@@ -383,10 +393,13 @@ async function processTurn(input) {
     }
 
     // ── Render + save ─────────────────────────────────────────────────────────
+    ws.last_narration_prose = prose;
     const anchor = renderTurnAnchor(ws.turn, ws.sim_time, ws.player.location);
     renderNarration(prose, anchor, document.getElementById('feed'));
+    document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior: 'smooth' });
     WS = ws;
     await saveWorldState(ws);
+    await saveNarration(ws.turn, ws.sim_time, ws.player.location, prose);
     saveWorldStateCloud(ws).catch(() => {});   // fire-and-forget cloud sync
     renderAll();
     setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
@@ -420,7 +433,30 @@ async function boot() {
     if (user) { signedIn = true; setStatus(`Signed in: ${user.email}`); }
   }
   WS = (await loadWorldStateCloud()) ?? (await loadWorldState());
-  if (WS) { renderAll(); if (!signedIn) setStatus('Save loaded.'); }
+  if (WS) {
+    renderAll();
+    try {
+      const saved = await loadNarrations(50);
+      if (saved.length) {
+        const feed = document.getElementById('feed');
+        feed.innerHTML = '';
+        for (const n of saved) {
+          const anch = renderTurnAnchor(n.turn, n.data?.simTime ?? n.timestamp, n.data?.location ?? '');
+          renderNarration(n.description, anch, feed);
+        }
+        feed.scrollTop = feed.scrollHeight;
+        // Rebuild Grok conversation history from last 3 narrations for continuity
+        const recent = saved.slice(-3);
+        const history = [];
+        for (const n of recent) {
+          history.push({ role: 'user',      content: `[turn ${n.turn} context restored]` });
+          history.push({ role: 'assistant', content: n.description });
+        }
+        setConversationHistory(history);
+      }
+    } catch(e) { console.warn('[boot] narration restore failed:', e.message); }
+    if (!signedIn) setStatus(`Save loaded — Turn ${WS.turn}`);
+  }
   else if (!signedIn) setStatus('Ready.');
 }
 
@@ -446,11 +482,13 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 document.getElementById('btn-settings').addEventListener('click', () => {
-  document.getElementById('k-grok').value   = localStorage.getItem('GROK_API_KEY') ?? '';
-  document.getElementById('k-gem').value    = localStorage.getItem('GEMINI_API_KEY') ?? '';
-  document.getElementById('k-or').value     = localStorage.getItem('OPENROUTER_API_KEY') ?? '';
-  document.getElementById('k-sb-url').value = localStorage.getItem('SUPABASE_URL') ?? '';
-  document.getElementById('k-sb-key').value = localStorage.getItem('SUPABASE_ANON_KEY') ?? '';
+  document.getElementById('k-grok').value     = localStorage.getItem('GROK_API_KEY') ?? '';
+  document.getElementById('k-gem').value      = localStorage.getItem('GEMINI_API_KEY') ?? '';
+  document.getElementById('k-or').value       = localStorage.getItem('OPENROUTER_API_KEY') ?? '';
+  document.getElementById('k-groq').value     = localStorage.getItem('GROQ_API_KEY') ?? '';
+  document.getElementById('k-sb-url').value   = localStorage.getItem('SUPABASE_URL') ?? '';
+  document.getElementById('k-sb-key').value   = localStorage.getItem('SUPABASE_ANON_KEY') ?? '';
+  document.getElementById('k-lorebook').value = localStorage.getItem('LOREBOOK') ?? '';
   document.getElementById('auth-status').textContent = '';
   document.getElementById('modal').classList.add('open');
 });
@@ -471,6 +509,7 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   if (groq) localStorage.setItem('GROQ_API_KEY', groq);
   if (sbu) localStorage.setItem('SUPABASE_URL', sbu);
   if (sbk) localStorage.setItem('SUPABASE_ANON_KEY', sbk);
+  localStorage.setItem('LOREBOOK', document.getElementById('k-lorebook').value);
   if (sbu && sbk && window.supabase) {
     _sbClient = window.supabase.createClient(sbu, sbk);
     setSupabaseClient(_sbClient);
@@ -479,16 +518,17 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   setStatus('Keys saved.');
 });
 
-document.getElementById('btn-new').addEventListener('click', () => {
+document.getElementById('btn-new').addEventListener('click', async () => {
   const name = prompt('Character name:');
   if (!name) return;
+  if (!confirm(`Start new game as "${name.trim()}"? This will erase the current save.`)) return;
+  await resetWorldState();
   WS = createInitialWorldState(name.trim(), new Date().toISOString());
-  saveWorldState(WS);
-  document.getElementById('feed').innerHTML = '';
+  await saveWorldState(WS);
+  document.getElementById('feed').innerHTML = '<div style="color:var(--dim);font-size:12px;padding:24px;text-align:center">New game started. What do you do?</div>';
   renderAll();
-  setStatus(`New game — ${name}`);
-  // Reset Grok conversation ID so new game doesn't inherit stale conv
-  import('./api.js').then(m => m.resetConvId?.());
+  setStatus(`New game — ${name.trim()}`);
+  resetConvId();
 });
 
 // Mobile panel toggles

@@ -24,6 +24,7 @@ const GROK_MODEL = 'grok-4.3';
 let _convId = null;
 let _conversationHistory = []; // Store last 5 turns for narrative continuity
 export function resetConvId() { _convId = null; _conversationHistory = []; }
+export function setConversationHistory(h) { _conversationHistory = Array.isArray(h) ? [...h] : []; }
 
 function buildGrokUserMessage(turnBrief, mode) {
   const instruction = {
@@ -35,7 +36,8 @@ function buildGrokUserMessage(turnBrief, mode) {
 }
 
 export async function callGrok(turnBrief, mode) {
-  const sys = buildGrokNarrationPrompt();
+  const lorebook = typeof localStorage !== 'undefined' ? (localStorage.getItem('LOREBOOK') ?? '') : '';
+  const sys = buildGrokNarrationPrompt(lorebook);
   const usr = buildGrokUserMessage(turnBrief, mode);
   const grokKey = getKey('GROK_API_KEY');
   console.log('[Grok Debug] Key starts with:', grokKey.slice(0, 8), 'length:', grokKey.length);

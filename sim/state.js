@@ -57,6 +57,9 @@ export function createInitialWorldState(playerName, startDate) {
     // Last 5 NOTABLE+ events for turn brief — one sentence each
     recent_significant_events: [],
 
+    // Last Grok prose — for narrative continuity across turns and page reloads
+    last_narration_prose: '',
+
     // Session flavor — OPTIONAL; not required for continuity.
     // Grok can use it or ignore it. Never the sole source of context.
     session_context_flavor: '',
@@ -175,9 +178,16 @@ export function assembleTurnBrief(worldState, turnData) {
     .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v.description} (turn ${v.turn})`)
     .join('\n') || null;
 
+  const _td = new Date(simTime);
+  const sim_time_formatted =
+    _td.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) +
+    ' · ' +
+    _td.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
   return {
     turn:               turnNumber,
     sim_time:           simTime,
+    sim_time_formatted,
     location,
     player_stats:       player.stats,
     player_cash:        player.cash,
@@ -195,6 +205,8 @@ export function assembleTurnBrief(worldState, turnData) {
     structured_history: structuredHistory,
     // Optional flavor — narrator may use or ignore
     session_flavor:     session_context_flavor || null,
+    // Previous turn prose — for narrative continuity
+    last_narration:     worldState.last_narration_prose || null,
   };
 }
 
@@ -204,4 +216,25 @@ export function appendSignificantEvent(worldState, description) {
     recent_significant_events:
       [...worldState.recent_significant_events, description].slice(-5),
   };
+}
+
+// ─── NARRATION LOG ────────────────────────────────────────────────────────────
+export async function saveNarration(turn, simTime, location, prose) {
+  await db.events.add({
+    turn,
+    category:    'narration',
+    description: prose,
+    npc_id:      null,
+    data:        { simTime, location },
+    timestamp:   new Date().toISOString(),
+  });
+}
+
+export async function loadNarrations(limit = 50) {
+  const rows = await db.events
+    .where('category').equals('narration')
+    .reverse()
+    .limit(limit)
+    .toArray();
+  return rows.reverse(); // chronological order
 }
