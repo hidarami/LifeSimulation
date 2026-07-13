@@ -83,6 +83,27 @@ export function routeInput(input) {
   return ROUTE.PATH_2_NOVEL;
 }
 
+// ─── COMPOUND ACTION EXTRACTION ───────────────────────────────────────────────
+const EAT_PATTERNS = [
+  /\b(eat|ate|eating|eats|have\s+(a\s+)?(meal|food|lunch|dinner|breakfast|snack|bite)|cook(ed|ing)?|grab(bed)?\s+(food|a\s+bite)|drink(s|ed|ing)?|consume[ds]?)\b/i,
+];
+const LOCATION_HINTS = [
+  { pattern: /\b(outside|outdoors?|front\s*yard|backyard|yard|alley|street|road|sidewalk|driveway)\b/i, location: 'outside' },
+  { pattern: /\b(bedroom|in\s+(the\s+)?room|in\s+(my\s+)?bed)\b/i, location: 'bedroom' },
+  { pattern: /\b(bathroom|toilet|comfort\s*room|\bcr\b|shower)\b/i, location: 'bathroom' },
+  { pattern: /\b(kitchen)\b/i, location: 'kitchen' },
+  { pattern: /\b(living\s*room|sala|couch|sofa)\b/i, location: 'living room' },
+];
+export function extractCompoundContext(input) {
+  const n = input.toLowerCase();
+  const ate = EAT_PATTERNS.some(p => p.test(n));
+  let location_hint = null;
+  for (const { pattern, location } of LOCATION_HINTS) {
+    if (pattern.test(n)) { location_hint = location; break; }
+  }
+  return { ate, location_hint };
+}
+
 // ─── GEMINI CONTEXT STRIPPING ─────────────────────────────────────────────────
 export function sanitizeStateForGemini(worldState) {
   const safe = JSON.parse(JSON.stringify(worldState));

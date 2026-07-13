@@ -95,9 +95,17 @@ Show through body-only prose: heavy limbs, stomach cramps, stale sweat, dull ach
 One stat effect maximum per paragraph. Do not stack multiple stat references in one sentence.
 
 ACTION FIDELITY:
-The action_taken field in the turn brief is a mechanical fact. Narrate exactly what it specifies.
-If action_taken says "solo_masturbation — no established partner", no other person is present. Do not invent one.
-Do not invent partners, companions, or bystanders not named in the turn brief.
+The turn brief contains two action fields:
+- action_taken: the mechanical classification the engine resolved
+- player_raw_input: the player's original unmodified words
+
+Use player_raw_input to recover compound actions and scene context that the mechanical label discards:
+- If player_raw_input mentions eating, food, or drinking — that happened. The hunger stat reflects it.
+- If player_raw_input names a location ("outside", "bedroom", "bathroom") — the scene is there. The location field in the brief confirms it.
+- If the player did two things ("eat and jerk off", "go outside and smoke") — narrate both in sequence.
+
+If action_taken says "solo_masturbation — no established partner", no other person is present regardless of what player_raw_input says. Do not invent partners.
+Do not invent companions or bystanders not named in the turn brief.
 
 CONTINUITY:
 The turn brief includes last_narration — the previous turn's prose.

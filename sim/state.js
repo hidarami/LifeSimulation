@@ -10,6 +10,11 @@ db.version(1).stores({
   world:  '++id',
   events: '++id, category, turn',
 });
+db.version(2).stores({
+  world:   '++id',
+  events:  '++id, category, turn',
+  actions: '++id, turn',
+});
 
 // ─── INITIAL WORLD STATE ──────────────────────────────────────────────────────
 export function createInitialWorldState(playerName, startDate) {
@@ -169,7 +174,7 @@ export function assembleTurnBrief(worldState, turnData) {
   const {
     turnNumber, simTime, location, actionDescription,
     statDeltas, riskResult, consequenceUpdate,
-    npcReactions, turnClass, isExplicit,
+    npcReactions, turnClass, isExplicit, rawInput,
   } = turnData;
 
   // Build structured history from event_index — only non-null entries
@@ -207,6 +212,8 @@ export function assembleTurnBrief(worldState, turnData) {
     session_flavor:     session_context_flavor || null,
     // Previous turn prose — for narrative continuity
     last_narration:     worldState.last_narration_prose || null,
+    // Raw player input — Grok uses this to honor location hints and compound actions
+    player_raw_input:   rawInput || null,
   };
 }
 
@@ -237,4 +244,14 @@ export async function loadNarrations(limit = 50) {
     .limit(limit)
     .toArray();
   return rows.reverse(); // chronological order
+}
+
+// ─── ACTION LOG ────────────────────────────────────────────────────────────────
+export async function savePlayerAction(turn, simTime, input) {
+  await db.actions.add({ turn, input, timestamp: simTime });
+}
+
+export async function loadPlayerActions(limit = 200) {
+  const rows = await db.actions.orderBy('turn').reverse().limit(limit).toArray();
+  return rows.reverse();
 }

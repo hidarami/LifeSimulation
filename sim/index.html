@@ -30,10 +30,8 @@ header{grid-column:1/-1;padding:7px 14px;border-bottom:1px solid var(--bdr);
 .htitle{font-size:12px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase}
 #h-time{font-size:12px;color:var(--dim)}
 #h-cash{margin-left:auto;font-size:16px;color:var(--acc)}
-.btn{padding:6px 12px;font-family:var(--f);font-size:12px;cursor:pointer;border-radius:2px;border:1px solid var(--bdr);background:transparent;color:var(--txt)}
-.btn:hover{border-color:var(--acc);color:var(--acc)}
+.btn{padding:6px 12px;font-family:var(--f);font-size:12px;cursor:pointer;border-radius:2px;border:1px solid var(--bdr);background:transparent;color:var(--txt);user-select:none}
 .btn-pri{background:var(--acc);color:#0a0a0a;border-color:var(--acc);font-weight:700}
-.btn-pri:hover{opacity:.85}
 
 /* LEFT */
 #left-panel{padding:10px;border-right:1px solid var(--bdr);overflow-y:auto}
@@ -120,7 +118,13 @@ main{display:flex;flex-direction:column;overflow:hidden}
 .mlabel{font-size:10px;color:var(--dim);display:block;margin-bottom:3px}
 .minput{width:100%;background:var(--bg);border:1px solid var(--bdr);color:var(--txt);
   font-family:var(--f);font-size:12px;padding:5px 7px;border-radius:2px}
+.pw-wrapper{position:relative}
+.pw-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--dim);font-size:14px;background:none;border:none;padding:0}
+.pw-toggle:hover{color:var(--acc)}
 .mactions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+.mactions .btn{color:var(--txt)!important;background:transparent;border:1px solid var(--bdr)}
+.mactions .btn-pri{color:#0a0a0a!important;background:var(--acc);border-color:var(--acc);font-weight:700}
+.mactions .btn:hover,.mactions .btn-pri:hover{opacity:.85}
 
 @media(max-width:768px){
   body{grid-template-columns:1fr;grid-template-rows:auto 1fr auto auto}
@@ -138,6 +142,10 @@ main{display:flex;flex-direction:column;overflow:hidden}
   #status-bar{padding:6px 16px;font-size:11px}
 }
 .mobile-only{display:none}
+.log-entry{font-size:11px;padding:5px 0;border-bottom:1px solid var(--bdr);cursor:pointer;color:var(--dim);display:flex;gap:6px;align-items:baseline;line-height:1.4}
+.log-entry:hover{color:var(--acc)}
+.log-turn{color:var(--acc);min-width:28px;flex-shrink:0;font-size:10px}
+.log-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 </style>
 </head>
 <body>
@@ -149,6 +157,7 @@ main{display:flex;flex-direction:column;overflow:hidden}
   <button class="btn mobile-only" id="btn-stats">📊 Stats</button>
   <button class="btn mobile-only" id="btn-npcs">👥 People</button>
   <button class="btn" id="btn-settings">⚙ Settings</button>
+  <button class="btn" id="btn-load">↻ Load</button>
   <button class="btn" id="btn-new">+ New Game</button>
 </header>
 
@@ -158,18 +167,20 @@ main{display:flex;flex-direction:column;overflow:hidden}
       <div class="tab on" data-p="stats">Stats</div>
       <div class="tab" data-p="job">Job</div>
       <div class="tab" data-p="items">Items</div>
+      <div class="tab" data-p="log">Log</div>
     </div>
     <button class="btn mobile-only" id="btn-close-stats">✕</button>
   </div>
   <div id="p-stats" class="panel-section on"></div>
   <div id="p-job"   class="panel-section"></div>
   <div id="p-items" class="panel-section"></div>
+  <div id="p-log"   class="panel-section"></div>
 </aside>
 
 <main>
   <div id="feed">
     <div style="color:var(--dim);font-size:12px;padding:24px;text-align:center">
-      Start a new game or load a save to begin.
+      Start a new game or click Load to restore a save.
     </div>
   </div>
   <div id="input-area">
@@ -191,15 +202,15 @@ main{display:flex;flex-direction:column;overflow:hidden}
 <div id="modal">
   <div class="mbox">
     <div class="mtitle">API Keys</div>
-    <div class="mrow"><label class="mlabel">Grok API Key</label><input class="minput" id="k-grok" type="password" placeholder="xai-..."></div>
-    <div class="mrow"><label class="mlabel">Gemini API Key</label><input class="minput" id="k-gem" type="password" placeholder="AIza..."></div>
-    <div class="mrow"><label class="mlabel">OpenRouter (fallback)</label><input class="minput" id="k-or" type="password" placeholder="sk-or-..."></div>
-    <div class="mrow"><label class="mlabel">Groq (Gemini fallback)</label><input class="minput" id="k-groq" type="password" placeholder="gsk_..."></div>
+    <div class="mrow"><label class="mlabel">Grok API Key</label><div class="pw-wrapper"><input class="minput" id="k-grok" type="password" placeholder="xai-..." style="padding-right:32px"><button class="pw-toggle" data-target="k-grok">👁</button></div></div>
+    <div class="mrow"><label class="mlabel">Gemini API Key</label><div class="pw-wrapper"><input class="minput" id="k-gem" type="password" placeholder="AIza..." style="padding-right:32px"><button class="pw-toggle" data-target="k-gem">👁</button></div></div>
+    <div class="mrow"><label class="mlabel">OpenRouter (fallback)</label><div class="pw-wrapper"><input class="minput" id="k-or" type="password" placeholder="sk-or-..." style="padding-right:32px"><button class="pw-toggle" data-target="k-or">👁</button></div></div>
+    <div class="mrow"><label class="mlabel">Groq (Gemini fallback)</label><div class="pw-wrapper"><input class="minput" id="k-groq" type="password" placeholder="gsk_..." style="padding-right:32px"><button class="pw-toggle" data-target="k-groq">👁</button></div></div>
     <hr style="border-color:var(--bdr);margin:10px 0">
     <div class="mrow"><label class="mlabel">Lorebook — world &amp; character facts sent in every Grok prompt</label><textarea class="minput" id="k-lorebook" rows="6" style="resize:vertical;min-height:80px" placeholder="e.g. The player's name is Rico Diaz, age 18, male. He lives alone in a small apartment in Cavite, Philippines. He has no established romantic relationships..."></textarea></div>
     <hr style="border-color:var(--bdr);margin:10px 0">
     <div class="mrow"><label class="mlabel">Supabase URL</label><input class="minput" id="k-sb-url" placeholder="https://xxx.supabase.co"></div>
-    <div class="mrow"><label class="mlabel">Supabase Anon Key</label><input class="minput" id="k-sb-key" type="password" placeholder="eyJ..."></div>
+    <div class="mrow"><label class="mlabel">Supabase Anon Key</label><div class="pw-wrapper"><input class="minput" id="k-sb-key" type="password" placeholder="eyJ..." style="padding-right:32px"><button class="pw-toggle" data-target="k-sb-key">👁</button></div></div>
     <div class="mrow"><label class="mlabel">Email (cross-device sync login)</label><input class="minput" id="k-email" type="email" placeholder="you@email.com"><button class="btn" id="btn-login-link" style="margin-top:5px;width:100%">Send Login Link →</button><div id="auth-status" style="font-size:10px;color:var(--dim);margin-top:4px"></div></div>
     <div class="mactions">
       <button class="btn" id="btn-mcancel">Cancel</button>
@@ -208,16 +219,28 @@ main{display:flex;flex-direction:column;overflow:hidden}
   </div>
 </div>
 
+<div id="load-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:99;align-items:center;justify-content:center">
+  <div class="mbox" style="width:420px">
+    <div class="mtitle">Load Save</div>
+    <div id="load-status" style="font-size:11px;color:var(--dim);margin-bottom:10px"></div>
+    <div id="save-list" style="max-height:200px;overflow-y:auto;margin-bottom:10px"></div>
+    <div class="mactions">
+      <button class="btn" id="btn-load-cancel">Cancel</button>
+      <button class="btn btn-pri" id="btn-load-confirm">Load Selected</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script type="module">
 import { loadWorldState, saveWorldState, resetWorldState, createInitialWorldState,
          assembleTurnBrief, appendSignificantEvent, updateEventIndex, logEvent,
-         saveNarration, loadNarrations,
+         saveNarration, loadNarrations, savePlayerAction, loadPlayerActions,
          setSupabaseClient, saveWorldStateCloud, loadWorldStateCloud } from './state.js';
 import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
          rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION } from './engine.js';
 import { routeInput, isExplicit, classifyExplicitActivity,
-         EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, ROUTE } from './sanitizer.js';
+         EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE } from './sanitizer.js';
 import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversationHistory,
          callGeminiAutopilot, compressSessionContext } from './api.js';
 import { renderStatPanel, renderNpcPanel, renderJobPanel,
@@ -228,6 +251,29 @@ import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
 
 let WS = null;
 let _sbClient = null;
+
+async function renderActionLog() {
+  const container = document.getElementById('p-log');
+  if (!container) return;
+  container.innerHTML = '';
+  try {
+    const actions = await loadPlayerActions(100);
+    if (!actions.length) { container.innerHTML = '<p class="empty">No actions yet.</p>'; return; }
+    for (const a of actions) {
+      const el = document.createElement('div');
+      el.className = 'log-entry';
+      el.innerHTML = `<span class="log-turn">T${a.turn}</span><span class="log-text">${a.input.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
+      el.addEventListener('click', () => {
+        const target = document.querySelector(`.narration-entry[data-turn="${a.turn}"]`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        else setStatus(`Turn ${a.turn} not loaded in feed.`);
+      });
+      container.appendChild(el);
+    }
+  } catch(e) {
+    container.innerHTML = '<p class="empty">Log unavailable.</p>';
+  }
+}
 
 function setStatus(msg, type='') {
   const el = document.getElementById('status');
@@ -285,16 +331,23 @@ async function processTurn(input) {
     // ── PATH 1: Explicit ─────────────────────────────────────────────────────
     if (route === ROUTE.PATH_1_EXPLICIT) {
       let type = classifyExplicitActivity(input);
-      // Activities that physically require an established partner
       const NEEDS_PARTNER = ['intercourse', 'oral_giving', 'oral_receiving', 'manual_giving', 'manual_receiving', 'mutual_masturbation'];
       const hasActiveNpc  = Object.values(ws.npcs).some(n => n.status === 'active' && n.significance >= 1);
       const forcedSolo    = NEEDS_PARTNER.includes(type) && !hasActiveNpc;
       if (forcedSolo) type = 'solo_masturbation';
-      statDeltas = EXPLICIT_ACTIVITY_TABLE[type] ?? {};
+      // Spread so we don't mutate the source table
+      statDeltas = { ...(EXPLICIT_ACTIVITY_TABLE[type] ?? {}) };
+      // Compound: extract eating and location hints from the raw player input
+      const compound = extractCompoundContext(input);
+      if (compound.ate) {
+        statDeltas.hunger = (statDeltas.hunger ?? 0) - 30; // reduce hunger (0=full, 100=starving)
+        statDeltas.mood   = (statDeltas.mood   ?? 0) + 5;
+      }
+      if (compound.location_hint) locationChange = compound.location_hint;
       timeCost   = 0.5;
-      actionDesc = forcedSolo
+      actionDesc = (forcedSolo
         ? `[explicit: solo_masturbation — no established partner]`
-        : `[explicit: ${type}]`;
+        : `[explicit: ${type}]`) + (compound.ate ? ' + ate' : '');
       riskResult = rollRisk('low', ws.player.stats);
     }
     // ── PATH 2: Novel ─────────────────────────────────────────────────────────
@@ -372,6 +425,7 @@ async function processTurn(input) {
         location: ws.player.location, actionDescription: actionDesc,
         statDeltas, riskResult, consequenceUpdate: consequenceUpd,
         npcReactions, turnClass, isExplicit: route === ROUTE.PATH_1_EXPLICIT,
+        rawInput: input,
       });
       const mode = {
         [TURN_CLASSIFICATION.ROUTINE]: 'notable',
@@ -395,11 +449,12 @@ async function processTurn(input) {
     // ── Render + save ─────────────────────────────────────────────────────────
     ws.last_narration_prose = prose;
     const anchor = renderTurnAnchor(ws.turn, ws.sim_time, ws.player.location);
-    renderNarration(prose, anchor, document.getElementById('feed'));
+    renderNarration(prose, anchor, document.getElementById('feed'), ws.turn);
     document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior: 'smooth' });
     WS = ws;
     await saveWorldState(ws);
     await saveNarration(ws.turn, ws.sim_time, ws.player.location, prose);
+    await savePlayerAction(ws.turn, ws.sim_time, input);
     saveWorldStateCloud(ws).catch(() => {});   // fire-and-forget cloud sync
     renderAll();
     setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
@@ -442,7 +497,7 @@ async function boot() {
         feed.innerHTML = '';
         for (const n of saved) {
           const anch = renderTurnAnchor(n.turn, n.data?.simTime ?? n.timestamp, n.data?.location ?? '');
-          renderNarration(n.description, anch, feed);
+          renderNarration(n.description, anch, feed, n.turn);
         }
         feed.scrollTop = feed.scrollHeight;
         // Rebuild Grok conversation history from last 3 narrations for continuity
@@ -453,9 +508,14 @@ async function boot() {
           history.push({ role: 'assistant', content: n.description });
         }
         setConversationHistory(history);
+        if (!signedIn) setStatus(`Save loaded — Turn ${WS.turn} · ${WS.player.name}`);
+      } else {
+        if (!signedIn) setStatus(`Save loaded — Turn ${WS.turn} · ${WS.player.name} (no narrations)`);
       }
-    } catch(e) { console.warn('[boot] narration restore failed:', e.message); }
-    if (!signedIn) setStatus(`Save loaded — Turn ${WS.turn}`);
+    } catch(e) {
+      console.warn('[boot] narration restore failed:', e.message);
+      if (!signedIn) setStatus(`Save loaded — Turn ${WS.turn} · ${WS.player.name} (narrations error)`);
+    }
   }
   else if (!signedIn) setStatus('Ready.');
 }
@@ -478,6 +538,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.panel-section').forEach(p => p.classList.remove('on'));
     tab.classList.add('on');
     document.getElementById(`p-${tab.dataset.p}`).classList.add('on');
+    if (tab.dataset.p === 'log') renderActionLog();
   });
 });
 
@@ -493,6 +554,21 @@ document.getElementById('btn-settings').addEventListener('click', () => {
   document.getElementById('modal').classList.add('open');
 });
 
+// Password toggle functionality
+document.querySelectorAll('.pw-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const targetId = btn.dataset.target;
+    const input = document.getElementById(targetId);
+    if (input.type === 'password') {
+      input.type = 'text';
+      btn.textContent = '🙈';
+    } else {
+      input.type = 'password';
+      btn.textContent = '👁';
+    }
+  });
+});
+
 document.getElementById('btn-mcancel').addEventListener('click', () =>
   document.getElementById('modal').classList.remove('open'));
 
@@ -502,14 +578,17 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   const or_ = document.getElementById('k-or').value.trim();
   const sbu = document.getElementById('k-sb-url').value.trim();
   const sbk = document.getElementById('k-sb-key').value.trim();
-  if (g)   localStorage.setItem('GROK_API_KEY', g);
-  if (gm)  localStorage.setItem('GEMINI_API_KEY', gm);
-  if (or_) localStorage.setItem('OPENROUTER_API_KEY', or_);
   const groq = document.getElementById('k-groq').value.trim();
-  if (groq) localStorage.setItem('GROQ_API_KEY', groq);
-  if (sbu) localStorage.setItem('SUPABASE_URL', sbu);
-  if (sbk) localStorage.setItem('SUPABASE_ANON_KEY', sbk);
-  localStorage.setItem('LOREBOOK', document.getElementById('k-lorebook').value);
+  const lore = document.getElementById('k-lorebook').value;
+
+  localStorage.setItem('GROK_API_KEY', g);
+  localStorage.setItem('GEMINI_API_KEY', gm);
+  localStorage.setItem('OPENROUTER_API_KEY', or_);
+  localStorage.setItem('GROQ_API_KEY', groq);
+  localStorage.setItem('SUPABASE_URL', sbu);
+  localStorage.setItem('SUPABASE_ANON_KEY', sbk);
+  localStorage.setItem('LOREBOOK', lore);
+
   if (sbu && sbk && window.supabase) {
     _sbClient = window.supabase.createClient(sbu, sbk);
     setSupabaseClient(_sbClient);
@@ -529,6 +608,118 @@ document.getElementById('btn-new').addEventListener('click', async () => {
   renderAll();
   setStatus(`New game — ${name.trim()}`);
   resetConvId();
+});
+
+document.getElementById('btn-load').addEventListener('click', async () => {
+  const modal = document.getElementById('load-modal');
+  const statusEl = document.getElementById('load-status');
+  const listEl = document.getElementById('save-list');
+  listEl.innerHTML = '';
+  statusEl.textContent = 'Checking for saves...';
+  modal.style.display = 'flex';
+
+  try {
+    // Check local storage save
+    const localSave = await loadWorldState();
+    const cloudSave = await loadWorldStateCloud();
+
+    let html = '';
+    if (localSave) {
+      const d = new Date(localSave.sim_time);
+      html += `<div class="log-entry" data-source="local">
+        <span class="log-turn">LOCAL</span>
+        <span class="log-text">${localSave.player.name} — Turn ${localSave.turn} — ${d.toLocaleDateString()}</span>
+      </div>`;
+    }
+    if (cloudSave && (!localSave || cloudSave.turn !== localSave.turn)) {
+      const d = new Date(cloudSave.sim_time);
+      html += `<div class="log-entry" data-source="cloud">
+        <span class="log-turn">CLOUD</span>
+        <span class="log-text">${cloudSave.player.name} — Turn ${cloudSave.turn} — ${d.toLocaleDateString()}</span>
+      </div>`;
+    }
+    if (!html) {
+      html = '<p class="empty">No saves found. Start a new game first.</p>';
+      document.getElementById('btn-load-confirm').disabled = true;
+    } else {
+      document.getElementById('btn-load-confirm').disabled = false;
+      // Add click handlers
+      setTimeout(() => {
+        document.querySelectorAll('#save-list .log-entry').forEach(el => {
+          el.addEventListener('click', () => {
+            document.querySelectorAll('#save-list .log-entry').forEach(e => e.style.background = '');
+            el.style.background = 'var(--sur)';
+            el.dataset.selected = 'true';
+          });
+        });
+      }, 0);
+    }
+    listEl.innerHTML = html;
+    statusEl.textContent = localSave ? 'Found saves below.' : 'No saves found.';
+  } catch (e) {
+    statusEl.textContent = `Error: ${e.message}`;
+    console.error('[load modal]', e);
+  }
+});
+
+document.getElementById('btn-load-cancel').addEventListener('click', () => {
+  document.getElementById('load-modal').style.display = 'none';
+});
+
+document.getElementById('btn-load-confirm').addEventListener('click', async () => {
+  const selected = document.querySelector('#save-list .log-entry[data-selected="true"]');
+  if (!selected) { alert('Select a save first.'); return; }
+  const source = selected.dataset.source;
+  document.getElementById('load-modal').style.display = 'none';
+  setStatus('Loading save...', 'load');
+  lockInput(true);
+
+  try {
+    let ws;
+    if (source === 'cloud') {
+      ws = await loadWorldStateCloud();
+    } else {
+      ws = await loadWorldState();
+    }
+    if (!ws) throw new Error('Save not found');
+
+    WS = ws;
+    renderAll();
+    // Load narrations with better error handling
+    try {
+      const saved = await loadNarrations(50);
+      if (saved.length) {
+        const feed = document.getElementById('feed');
+        feed.innerHTML = '';
+        for (const n of saved) {
+          const anch = renderTurnAnchor(n.turn, n.data?.simTime ?? n.timestamp, n.data?.location ?? '');
+          renderNarration(n.description, anch, feed, n.turn);
+        }
+        feed.scrollTop = feed.scrollHeight;
+        // Rebuild Grok conversation history
+        const recent = saved.slice(-3);
+        const history = [];
+        for (const n of recent) {
+          history.push({ role: 'user', content: `[turn ${n.turn} context restored]` });
+          history.push({ role: 'assistant', content: n.description });
+        }
+        setConversationHistory(history);
+        setStatus(`Loaded: Turn ${ws.turn} · ${ws.player.name}`);
+      } else {
+        document.getElementById('feed').innerHTML = '<div style="color:var(--dim);font-size:12px;padding:24px;text-align:center">Save loaded but no narrations found. Start playing to generate new content.</div>';
+        setStatus(`Loaded: Turn ${ws.turn} · ${ws.player.name} (no narrations)`);
+      }
+    } catch (e) {
+      console.error('[load narrations]', e);
+      document.getElementById('feed').innerHTML = '<div style="color:var(--dim);font-size:12px;padding:24px;text-align:center">Save loaded but narrations failed to load. Check console for details.</div>';
+      setStatus(`Loaded: Turn ${ws.turn} · ${ws.player.name} (narrations error)`);
+    }
+  } catch (e) {
+    setStatus(`Load failed: ${e.message}`, 'err');
+    console.error('[load save]', e);
+  } finally {
+    lockInput(false);
+  }
 });
 
 // Mobile panel toggles

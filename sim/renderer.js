@@ -21,7 +21,7 @@ export function renderTurnAnchor(turn, simTime, location) {
 const STAT_META = {
   health:     { label: 'Health',  icon: '♥',  invert: false },
   energy:     { label: 'Energy',  icon: '⚡', invert: false },
-  hunger:     { label: 'Hunger',  icon: '▲',  invert: true  }, // full bar = starving
+  hunger:     { label: 'Hunger',  icon: '▲',  invert: false }, // 0 = full (not hungry), 100 = empty (starving)
   hygiene:    { label: 'Hygiene', icon: '◈',  invert: false },
   mood:       { label: 'Mood',    icon: '◉',  invert: false },
   arousal:    { label: 'Arousal', icon: '◈',  invert: false },
@@ -148,9 +148,10 @@ export function renderPossessionsPanel(possessions, irreversible, container) {
 }
 
 // ─── NARRATION DISPLAY ────────────────────────────────────────────────────────
-export function renderNarration(prose, anchorEl, feed) {
+export function renderNarration(prose, anchorEl, feed, turn) {
   const wrapper = document.createElement('div');
   wrapper.className = 'narration-entry';
+  if (turn != null) wrapper.dataset.turn = turn;
   wrapper.appendChild(anchorEl);
   const proseEl = document.createElement('div');
   proseEl.className = 'narration-prose';
