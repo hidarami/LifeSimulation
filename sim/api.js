@@ -20,7 +20,7 @@ function getKey(name) {
 
 // ─── GROK ─────────────────────────────────────────────────────────────────────
 const GROK_URL   = 'https://api.x.ai/v1/chat/completions';
-const GROK_MODEL = 'grok-4.3';
+const GROK_MODEL = 'grok-beta';
 let _convId = null;
 export function resetConvId() { _convId = null; }
 
@@ -102,7 +102,7 @@ async function geminiRaw(prompt, maxTokens = 400) {
       const gr = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-        body: JSON.stringify({ model: 'llama3-8b-8192', messages: [{ role: 'user', content: prompt }], temperature: 0.1, max_tokens: 400 }),
+        body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.1, max_tokens: 400 }),
       });
       if (gr.ok) {
         const text = (await gr.json()).choices[0].message.content;
