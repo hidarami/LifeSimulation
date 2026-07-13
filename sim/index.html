@@ -540,7 +540,6 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
           <div class="field"><label class="field-label">Age</label><input class="field-input" id="w-age" type="number" min="16" max="80" value="18"></div>
           <div class="field"><label class="field-label">Sex</label><select class="field-input field-select" id="w-sex"><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
         </div>
-        <div class="field"><label class="field-label">Birthday</label><input class="field-input" id="w-birthday" type="date"></div>
       </div>
       <!-- Step 2: Lorebook -->
       <div class="wizard-step" id="wizard-step2">
@@ -604,9 +603,11 @@ import { loadWorldState, saveWorldState, createInitialWorldState,
 import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
          rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION } from './engine.js';
 import { routeInput, isExplicit, classifyExplicitActivity,
-         EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE } from './sanitizer.js';
+         EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE,
+         hasThirdPartyPresence } from './sanitizer.js';
 import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversationHistory,
-         callGeminiAutopilot, compressSessionContext, parseLorebookToWorldState } from './api.js';
+         callGeminiAutopilot, compressSessionContext, parseLorebookToWorldState,
+         buildWorldWithMultipleAIs, checkNpcInitiative, evaluateDescribedNpc } from './api.js';
 import { renderNpcPanel, renderJobPanel,
          renderPossessionsPanel, renderNarration, renderTurnAnchor } from './renderer.js';
 import { checkWorldEvents, applyEventEffect } from './events.js';
@@ -687,13 +688,14 @@ function setProcessing(on) {
 
 // ── CENTER STATS ──────────────────────────────────────────────────────────────
 const CSTAT_META = {
-  health:     { label: 'Health',  icon: '♥',  invert: false },
-  energy:     { label: 'Energy',  icon: '⚡', invert: false },
-  hunger:     { label: 'Hunger',  icon: '🍽', invert: true  },
-  hygiene:    { label: 'Hygiene', icon: '◈',  invert: false },
-  mood:       { label: 'Mood',    icon: '◉',  invert: false },
-  social:     { label: 'Social',  icon: '◎',  invert: false },
-  reputation: { label: 'Rep',     icon: '★',  invert: false },
+  health:     { label: 'Health',   icon: '♥',  invert: false },
+  energy:     { label: 'Energy',   icon: '⚡', invert: false },
+  hunger:     { label: 'Hunger',   icon: '🍽', invert: true  },
+  hygiene:    { label: 'Hygiene',  icon: '◈',  invert: false },
+  mood:       { label: 'Mood',     icon: '◉',  invert: false },
+  arousal:    { label: 'Arousal',  icon: '◈',  invert: false },
+  social:     { label: 'Social',   icon: '◎',  invert: false },
+  reputation: { label: 'Rep',      icon: '★',  invert: false },
 };
 function cstatColor(v) {
   return v <= 20 ? 'sc-crit' : v <= 40 ? 'sc-low' : v >= 80 ? 'sc-high' : 'sc-norm';
@@ -771,20 +773,18 @@ function openCharModal() {
   if (!WS) return;
   const p = WS.player;
   const rows = [
-    ['Name', p.name || '—'], ['Age', p.age ?? '—'], ['Sex', p.sex || '—'],
-    ['Birthday', p.birthday || '—'], ['Location', p.location || '—'],
-    ['Cash', `₱${(p.cash || 0).toLocaleString()}`],
+    ['Name',     p.name || '—'],
+    ['Age',      p.age ?? '—'],
+    ['Sex',      p.sex || '—'],
+    ['Born',     p.birthday ? `~${p.birthday}` : '—'],
+    ['Location', p.location || '—'],
+    ['Cash',     `₱${(p.cash || 0).toLocaleString()}`],
   ];
-  const statLabels = { health:'Health', energy:'Energy', hunger:'Hunger', hygiene:'Hygiene', mood:'Mood', arousal:'Arousal', social:'Social', reputation:'Rep' };
   document.getElementById('modal-char-body').innerHTML = `
     <div id="modal-char-avatar-lg">${(p.name||'?').charAt(0).toUpperCase()}</div>
     <div class="section-hdr">Identity</div>
     ${rows.map(([k,v])=>`<div class="char-row"><span class="char-key">${k}</span><span class="char-val">${v}</span></div>`).join('')}
-    <div class="section-hdr" style="margin-top:14px">Stats</div>
-    ${Object.entries(p.stats||{}).map(([k,v])=>`
-      <div class="trait-row"><span class="trait-key">${statLabels[k]||k}</span>
-      <div class="trait-track"><div class="trait-fill" style="width:${v}%"></div></div>
-      <span style="font-size:10px;color:var(--dim);width:24px;text-align:right">${Math.round(v)}</span></div>`).join('')}
+    ${p.habits?.length ? `<div class="section-hdr" style="margin-top:14px">Habits</div>${p.habits.map(h=>`<div class="poss">${h}</div>`).join('')}` : ''}
     ${p.irreversible?.length ? `<div class="section-hdr" style="margin-top:14px">Permanent</div>${p.irreversible.map(i=>`<div class="irrev">${i}</div>`).join('')}` : ''}
   `;
   document.getElementById('modal-char').classList.add('open');
@@ -869,7 +869,6 @@ async function startNewGame() {
   const name     = document.getElementById('w-name').value.trim();
   const age      = parseInt(document.getElementById('w-age').value) || 18;
   const sex      = document.getElementById('w-sex').value;
-  const birthday = document.getElementById('w-birthday').value;
   const lorebook = document.getElementById('w-lorebook').value.trim();
 
   if (!confirm(`Start new game as "${name}"? This creates a new save slot.`)) return;
@@ -880,7 +879,9 @@ async function startNewGame() {
   if (lorebook) localStorage.setItem('LOREBOOK', lorebook);
 
   let ws = createInitialWorldState(name, new Date().toISOString());
-  ws.player.age = age; ws.player.sex = sex; ws.player.birthday = birthday;
+  ws.player.age = age;
+  ws.player.sex = sex;
+  ws.player.birthday = String(new Date(ws.sim_time).getFullYear() - age);
   resetConvId();
   document.getElementById('feed').innerHTML = '';
 
@@ -897,7 +898,7 @@ async function startNewGame() {
     // Stage 1: Parse lorebook with Gemini
     if (lorebook) {
       setStage('Parsing your world...', 'AI is reading your lorebook...', 10);
-      const parsed = await parseLorebookToWorldState(lorebook).catch(() => null);
+      const parsed = await buildWorldWithMultipleAIs(lorebook).catch(() => null);
       if (parsed) {
         setStage('Building world state...', 'Initializing characters and relationships...', 32);
         if (parsed.player?.location) ws.player.location = parsed.player.location;
@@ -1005,13 +1006,32 @@ async function processTurn(input) {
       let type = classifyExplicitActivity(input);
       const NEEDS_PARTNER = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
       const hasActiveNpc  = Object.values(ws.npcs).some(n => n.status==='active' && n.significance>=1);
-      if (NEEDS_PARTNER.includes(type) && !hasActiveNpc) type = 'solo_masturbation';
+      const thirdParty    = hasThirdPartyPresence(input);
+      if (NEEDS_PARTNER.includes(type) && !hasActiveNpc && !thirdParty) type = 'solo_masturbation';
       statDeltas = { ...(EXPLICIT_ACTIVITY_TABLE[type] ?? {}) };
       const compound = extractCompoundContext(input);
       if (compound.ate) { statDeltas.hunger=(statDeltas.hunger??0)-30; statDeltas.mood=(statDeltas.mood??0)+5; }
       if (compound.location_hint) locationChange = compound.location_hint;
-      timeCost=0.5; actionDesc=`[explicit: ${type}]`+(compound.ate?' + ate':'');
-      riskResult=rollRisk('low', ws.player.stats);
+      timeCost = 0.5;
+      const partnerTag = (thirdParty && NEEDS_PARTNER.includes(type))
+        ? ' — described partner in scene'
+        : (!hasActiveNpc && !thirdParty ? ' — no established partner' : '');
+      actionDesc = `[explicit: ${type}${partnerTag}]` + (compound.ate ? ' + ate' : '');
+      // Auto-register described third party via Groq (async, non-blocking)
+      if (thirdParty && !hasActiveNpc && NEEDS_PARTNER.includes(type)) {
+        evaluateDescribedNpc(input).then(nd => {
+          if (nd?.id && !WS?.npcs?.[nd.id]) {
+            const newNpc = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} });
+            newNpc.relationship_meter = nd.relationship_meter ?? 20;
+            newNpc.trust_meter = nd.trust_meter ?? 10;
+            newNpc.significance = 1;
+            WS.npcs[nd.id] = newNpc;
+            saveWorldState(WS).catch(() => {});
+            renderAll();
+          }
+        }).catch(() => {});
+      }
+      riskResult = rollRisk('low', ws.player.stats);
     }
     else if (route === ROUTE.PATH_2_NOVEL) {
       const safe = sanitizeStateForGemini(ws);
@@ -1072,6 +1092,32 @@ async function processTurn(input) {
     saveWorldStateCloud(ws).catch(()=>{});
     renderAll();
     setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
+
+    // NPC initiative — async, non-blocking, every 3rd turn
+    if (ws.turn % 3 === 0) {
+      const activeNpcs = Object.values(ws.npcs).filter(n => n.status === 'active' && n.significance >= 1);
+      if (activeNpcs.length) {
+        const npcCtxs = activeNpcs.map(n => buildNpcContextForGemini(n, ws.sim_time));
+        checkNpcInitiative(npcCtxs, ws.player.stats, ws.turn).then(inits => {
+          for (const init of inits) {
+            const npc = WS?.npcs?.[init.npc_id];
+            if (!npc) continue;
+            const notif = document.createElement('div');
+            notif.className = 'narration-entry';
+            notif.style.cssText = 'border-left-color:var(--acc);opacity:.9';
+            notif.innerHTML = `<div class="turn-anchor"><span class="ta-num" style="color:var(--pos)">${(init.type||'msg').toUpperCase()}</span><span class="ta-time" style="color:var(--acc)">${npc.name}</span></div><div class="narration-prose" style="font-size:13px;font-family:var(--f);color:var(--dim);line-height:1.6">${init.brief}</div>`;
+            document.getElementById('feed').appendChild(notif);
+            document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior: 'smooth' });
+            if (WS?.npcs?.[init.npc_id]) {
+              const ri = WS.npcs[init.npc_id].recent_interactions ?? [];
+              WS.npcs[init.npc_id].recent_interactions = [...ri, init.brief].slice(-5);
+              saveWorldState(WS).catch(() => {});
+              renderAll();
+            }
+          }
+        }).catch(() => {});
+      }
+    }
 
     if (turnClass === TURN_CLASSIFICATION.DEATH) {
       setStatus('☠ Character has died.', 'err');

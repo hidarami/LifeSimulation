@@ -99,6 +99,7 @@ export async function callGrok(turnBrief, mode) {
 
 // ─── GEMINI ───────────────────────────────────────────────────────────────────
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GROQ_URL   = 'https://api.groq.com/openai/v1/chat/completions';
 
 async function geminiRaw(prompt, maxTokens = 400) {
   const key = getKey('GEMINI_API_KEY');
@@ -154,9 +155,52 @@ export async function evaluateNpcReaction(npcContext, actionDescription, playerS
 
 // Fix #3: autopilot narration — Gemini with strict style guide; prose mode (no JSON)
 export async function callGeminiAutopilot(sanitizedState, hours, activityLabel) {
-  const key    = getKey('GEMINI_API_KEY');
   const prompt = buildGeminiAutopilotPrompt(sanitizedState, hours, activityLabel);
-  const res    = await fetch(`${GEMINI_URL}?key=${key}`, {
+
+  // Try OpenRouter first — free quota, saves Gemini for classification
+  const orKey = localStorage.getItem('OPENROUTER_API_KEY');
+  if (orKey) {
+    try {
+      const res = await fetch(OPENROUTER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${orKey}` },
+        body: JSON.stringify({
+          model: 'openai/gpt-oss-120b:free',
+          max_tokens: 150,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (res.ok) {
+        const text = (await res.json()).choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+      }
+    } catch {}
+  }
+
+  // Try Groq second
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (groqKey) {
+    try {
+      const res = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          max_tokens: 150,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.5,
+        }),
+      });
+      if (res.ok) {
+        const text = (await res.json()).choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+      }
+    } catch {}
+  }
+
+  // Fall back to Gemini
+  const key = getKey('GEMINI_API_KEY');
+  const res = await fetch(`${GEMINI_URL}?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -173,7 +217,30 @@ export async function callGeminiAutopilot(sanitizedState, hours, activityLabel) 
 export async function compressSessionContext(last10Events) {
   if (!last10Events?.length) return '';
   const prompt = `Summarize these simulation events in 1–2 sentences of atmospheric flavor only. Do not add facts not present in the events. Output only the summary:\n\n${last10Events.map((e, i) => `${i + 1}. ${e}`).join('\n')}`;
-  const key = getKey('GEMINI_API_KEY');
+
+  // Groq is fast and free for compression
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (groqKey) {
+    try {
+      const res = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.4,
+          max_tokens: 80,
+        }),
+      });
+      if (res.ok) {
+        const text = (await res.json()).choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+      }
+    } catch {}
+  }
+
+  const key = localStorage.getItem('GEMINI_API_KEY');
+  if (!key) return '';
   try {
     const res = await fetch(`${GEMINI_URL}?key=${key}`, {
       method: 'POST',
@@ -259,7 +326,8 @@ Each possession shape: { "name": "string", "note": "string or null" }
 
 NPC class rules: intimate=family/romantic/bestfriend, household=roommates/neighbors, professional=boss/coworker/teacher, institutional=gov/police/medical.
 Relationship meter: close family/romantic=70, good friend=50, acquaintance=20, stranger=0, rival=-40, enemy=-70.
-Traits default 50 if personality not described. Extract EVERY named person mentioned.`;
+Traits default 50 if personality not described. Extract EVERY named person mentioned.
+CRITICAL: Also extract clearly implied household members or close relationships even if only partially named. Examples: "I live with my two brothers Jay and Ray (20,21)" → extract Jay AND Ray as separate NPCs. "my parents" → extract as father/mother with ids parent_father/parent_mother. "my best friend Marco" → extract Marco. "my girlfriend" → extract with id girlfriend_unnamed and name "Girlfriend". Do not leave anyone the player clearly lives with or is emotionally close to unextracted.`;
 
   try {
     const res = await fetch(`${GEMINI_URL}?key=${key}`, {
@@ -278,4 +346,170 @@ Traits default 50 if personality not described. Extract EVERY named person menti
     console.warn('[lorebook] parse failed:', e.message);
     return null;
   }
+}
+
+// ─── MULTI-AI WORLD BUILDING ──────────────────────────────────────────────────
+// Runs Gemini (structure) and Groq (trait depth) in parallel during init.
+
+async function buildNpcDepthWithGroq(lorebook) {
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (!groqKey) return null;
+  const prompt = `From this lorebook, infer personality trait scores (0-100) for every named or implied NPC.
+
+Lorebook: """${lorebook.slice(0, 2000)}"""
+
+Return ONLY valid JSON, no markdown:
+{
+  "npc_traits": {
+    "npc_first_name_lowercase": {
+      "jealousy": 0-100,
+      "honesty": 0-100,
+      "patience": 0-100,
+      "warmth": 0-100,
+      "ambition": 0-100,
+      "impulsivity": 0-100,
+      "dominance": 0-100,
+      "openness": 0-100
+    }
+  }
+}
+
+Use the person's first name in lowercase as the key. Infer traits from described personality and behavior. Default 50 if not described.`;
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 500,
+      }),
+    });
+    if (!res.ok) return null;
+    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
+    return JSON.parse(text.replace(/```json|```/g, '').trim());
+  } catch { return null; }
+}
+
+export async function buildWorldWithMultipleAIs(lorebook) {
+  if (!lorebook?.trim()) return null;
+
+  // Run Gemini (structure) and Groq (NPC trait depth) in parallel
+  const [geminiResult, groqResult] = await Promise.allSettled([
+    parseLorebookToWorldState(lorebook),
+    buildNpcDepthWithGroq(lorebook),
+  ]);
+
+  const base  = geminiResult.status === 'fulfilled' ? geminiResult.value : null;
+  const depth = groqResult.status  === 'fulfilled'  ? groqResult.value  : null;
+
+  if (!base) return null;
+
+  // Merge: apply Groq trait overrides to Gemini's NPC list
+  if (depth?.npc_traits && Array.isArray(base.npcs)) {
+    for (const npc of base.npcs) {
+      // Match on first segment of id (first name)
+      const firstName = npc.id?.split('_')[0];
+      const traitData = depth.npc_traits[firstName] ?? depth.npc_traits[npc.id];
+      if (traitData) {
+        npc.traits = { ...(npc.traits ?? {}), ...traitData };
+      }
+    }
+  }
+
+  return base;
+}
+
+// ─── NPC INITIATIVE ────────────────────────────────────────────────────────────
+// Called async every 3rd turn. Groq decides if any NPC would naturally reach out.
+
+export async function checkNpcInitiative(npcContextArray, playerStats, turnNumber) {
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (!groqKey || !npcContextArray?.length) return [];
+
+  const prompt = `You are an NPC behavior engine for a life simulation. Decide if any NPC would naturally initiate contact with the player right now.
+
+NPCs: ${JSON.stringify(npcContextArray.slice(0, 5), null, 2)}
+Player mood: ${playerStats?.mood ?? 50}, social: ${playerStats?.social ?? 50}
+Turn: ${turnNumber}
+
+Rules:
+- Only trigger if relationship_meter > 20 OR a special circumstance warrants it
+- NPC must be available OR reaching out remotely (text, call) is plausible given their schedule
+- Maximum 1 NPC may initiate per call
+- Must be natural, in-character, specific to this NPC's traits and relationship
+- Do NOT trigger for NPCs with relationship_meter < 0
+
+Return ONLY valid JSON:
+{
+  "has_initiative": boolean,
+  "npc_id": "string or null",
+  "type": "text|call|visit|message or null",
+  "brief": "one concrete sentence describing exactly what the NPC does or says, present tense, no internal states"
+}`;
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.4,
+        max_tokens: 150,
+      }),
+    });
+    if (!res.ok) return [];
+    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return (parsed.has_initiative && parsed.npc_id && parsed.brief)
+      ? [{ npc_id: parsed.npc_id, type: parsed.type ?? 'message', brief: parsed.brief }]
+      : [];
+  } catch { return []; }
+}
+
+// ─── DESCRIBED NPC EXTRACTOR ──────────────────────────────────────────────────
+// When player describes a third party in explicit content who isn't in the NPC system,
+// Groq quickly extracts enough info to register them.
+
+export async function evaluateDescribedNpc(playerInput) {
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (!groqKey) return null;
+
+  const prompt = `From this player action, extract the described third party person.
+
+Player action: "${playerInput.slice(0, 300)}"
+
+Return ONLY valid JSON:
+{
+  "found": boolean,
+  "id": "lowercase_descriptor e.g. brothers_friend or jay or maria",
+  "name": "descriptive name if none given e.g. \"Brother's Friend\", otherwise their name",
+  "age": estimated_age_as_number,
+  "npc_class": "intimate|household|professional|institutional",
+  "traits": { "jealousy":50,"honesty":50,"patience":50,"warmth":50,"ambition":50,"impulsivity":50,"dominance":50,"openness":50 },
+  "relationship_meter": 20,
+  "trust_meter": 10
+}
+
+If no clear third party is physically present and acting, return { "found": false }.`;
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 250,
+      }),
+    });
+    if (!res.ok) return null;
+    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return parsed.found ? parsed : null;
+  } catch { return null; }
 }

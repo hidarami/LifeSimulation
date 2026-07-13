@@ -104,8 +104,11 @@ Use player_raw_input to recover compound actions and scene context that the mech
 - If player_raw_input names a location ("outside", "bedroom", "bathroom") — the scene is there. The location field in the brief confirms it.
 - If the player did two things ("eat and jerk off", "go outside and smoke") — narrate both in sequence.
 
-If action_taken says "solo_masturbation — no established partner", no other person is present regardless of what player_raw_input says. Do not invent partners.
-Do not invent companions or bystanders not named in the turn brief.
+action_taken contains a partner tag that determines who is physically present:
+- Ends with "— described partner in scene": A third party IS in the scene. Use player_raw_input to recover exactly who they are (their relationship to the player, what they said, what they did, in what order). Narrate the encounter as the player described it. This person exists in the scene even if they have no NPC registry entry.
+- Ends with "— no established partner": The player is alone. Do not narrate another person regardless of what player_raw_input says.
+- No partner tag + npc_reactions populated: follow npc_reactions for registered NPCs.
+Do not invent companions or bystanders beyond what the partner tag and npc_reactions specify.
 
 CONTINUITY:
 The turn brief includes last_narration — the previous turn's prose.

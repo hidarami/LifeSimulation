@@ -41,10 +41,14 @@ export function classifyExplicitActivity(input) {
   if (/\b(fuck|intercourse|rail|pound|bang|screw|shag|bone|plow|ride|mount|straddle|cowgirl|missionary|doggy|thrust|penetrat|inside\s*her|inside\s*him)\b/.test(n)) return 'intercourse';
   if (/\b(blow|suck(ing)?\s*(his|him|cock|dick)|fellatio|go\s*down\s*on\s*him|give\s*(him|a)\s*(head|blowjob))\b/.test(n)) return 'oral_giving';
   if (/\b(eat\s*(her|out|pussy)|cunnilingus|go\s*down\s*on\s*her|lick\s*(her|pussy)|give\s*(her)\s*head)\b/.test(n)) return 'oral_giving';
-  if (/\b(get\s*(sucked|a\s*blowjob)|she\s*sucks|she\s*goes\s*down)\b/.test(n)) return 'oral_receiving';
-  if (/\b(he\s*goes\s*down|he\s*eats|get\s*eaten\s*out)\b/.test(n)) return 'oral_receiving';
+  if (/\b(get\s*(sucked|a\s*blowjob)|(he|she|they)\s*(sucks?|blows?|licks?|eats?))\b/i.test(n)) return 'oral_receiving';
+  if (/\b(he|she|they)\b.{0,40}\b(go(es)?\s*down|eat(s|ing)?(\s*out)?|lick(s|ing)?)\b/i.test(n)) return 'oral_receiving';
+  if (/\b(suck|lick|blow|eat)\b.{0,40}\b(your|my)\b.{0,20}\b(cock|dick|pussy|clit|ass)\b/i.test(n)) return 'oral_receiving';
   if (/\b(finger|jerk\s*(him|her)\s*off|handjob|stroke\s*(his|her)\s*(cock|dick|pussy|clit))\b/.test(n)) return 'manual_giving';
-  if (/\b(gets?\s*fingered|jerk\s*me\s*off|she\s*(fingers|strokes\s*my))\b/.test(n)) return 'manual_receiving';
+  if (/\b(gets?\s*fingered|(he|she|they)\s*(fingers|strokes?|jerks?|rubs?|squeez))\b/i.test(n)) return 'manual_receiving';
+  if (/\b(he|she|they)\b.{0,60}\b(jerk|stroke|rub|squeeze|wrap|grab)\b.{0,40}\b(your|my)\b.{0,20}\b(cock|dick|pussy|clit)\b/i.test(n)) return 'manual_receiving';
+  if (/\bwrap\b.{0,30}\b(his|her|their)\b.{0,20}\bhand\b.{0,50}\b(cock|dick|pussy|clit|it)\b/i.test(n)) return 'manual_receiving';
+  if (/\bjerk\b.{0,30}\b(it|you|him|her)\b.{0,10}\boff\b/i.test(n)) return 'manual_receiving';
   if (/\b(makeout|make\s*out|making\s*out|french\s*kiss)\b/.test(n)) return 'makeout';
   if (/\b(masturbat|touch\s*myself|jerk\s*off\s*alone|solo|rub\s*(one|myself))\b/.test(n)) return 'solo_masturbation';
   if (/\b(69|sixty.?nine|mutual|each\s*other)\b/.test(n)) return 'mutual_masturbation';
@@ -102,6 +106,23 @@ export function extractCompoundContext(input) {
     if (pattern.test(n)) { location_hint = location; break; }
   }
   return { ate, location_hint };
+}
+
+// ─── THIRD-PARTY PRESENCE DETECTION ──────────────────────────────────────────
+// Called only after isExplicit() confirms the input is explicit content.
+// Detects whether another person is physically described in the scene.
+export function hasThirdPartyPresence(input) {
+  const n = input.toLowerCase();
+  return (
+    // He/she/they performs a sexual or approach action
+    /\b(he|she|they)\b.{0,80}\b(suck|blow|jerk|stroke|grab|fuck|ride|finger|lick|eat|wrap|ask(s|ed)?|want(s|ed)?|offer(s|ed)?|come|sit|enter|approach|touch|kiss)\b/i.test(n)
+    // Their body part in contact
+    || /\b(his|her|their)\b.{0,30}\b(hand|mouth|lips|tongue|finger)\b.{0,60}\b(your|my|cock|dick|pussy|clit|it)\b/i.test(n)
+    // Named relationship doing something explicitly sexual or approaching
+    || /\b(brother|sister|friend|cousin|neighbor|roommate|classmate|coworker|boyfriend|girlfriend|guy|girl|man|woman)\b.{0,150}\b(suck|blow|jerk|stroke|fuck|finger|kiss|ask|want|offer|come|sit|enter|approach|touch)\b/i.test(n)
+    // Someone asking/offering sexual activity
+    || /\b(ask(s|ed)?|want(s|ed)?|offer(s|ed)?)\b.{0,80}\b(to\s+)?(suck|blow|jerk|stroke|fuck|have\s+sex)\b/i.test(n)
+  );
 }
 
 // ─── GEMINI CONTEXT STRIPPING ─────────────────────────────────────────────────
