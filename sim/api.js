@@ -21,6 +21,7 @@ function getKey(name) {
 // ─── GROK ─────────────────────────────────────────────────────────────────────
 const GROK_URL   = 'https://api.x.ai/v1/chat/completions';
 const GROK_MODEL = 'grok-4.3';
+let _convId = null;
 export function resetConvId() { _convId = null; }
 
 function buildGrokUserMessage(turnBrief, mode) {
@@ -95,7 +96,21 @@ async function geminiRaw(prompt, maxTokens = 400) {
   if (!res.ok) {
     const msg = await res.text();
     // Fix #4: surface rate-limit distinctly so callers can choose to skip, not swap model
-    if (res.status === 429) throw new Error('GEMINI_RATE_LIMIT');
+    if (res.status === 429) {
+    const groqKey = localStorage.getItem('GROQ_API_KEY');
+    if (groqKey) {
+      const gr = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+        body: JSON.stringify({ model: 'llama3-8b-8192', messages: [{ role: 'user', content: prompt }], temperature: 0.1, max_tokens: 400 }),
+      });
+      if (gr.ok) {
+        const text = (await gr.json()).choices[0].message.content;
+        try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch { return {}; }
+      }
+    }
+    throw new Error('GEMINI_RATE_LIMIT');
+  }
     throw new Error(`Gemini HTTP ${res.status}: ${msg}`);
   }
   const data = await res.json();

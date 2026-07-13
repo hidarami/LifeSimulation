@@ -171,6 +171,7 @@ main{display:flex;flex-direction:column;overflow:hidden}
     <div class="mrow"><label class="mlabel">Grok API Key</label><input class="minput" id="k-grok" type="password" placeholder="xai-..."></div>
     <div class="mrow"><label class="mlabel">Gemini API Key</label><input class="minput" id="k-gem" type="password" placeholder="AIza..."></div>
     <div class="mrow"><label class="mlabel">OpenRouter (fallback)</label><input class="minput" id="k-or" type="password" placeholder="sk-or-..."></div>
+    <div class="mrow"><label class="mlabel">Groq (Gemini fallback)</label><input class="minput" id="k-groq" type="password" placeholder="gsk_..."></div>
     <hr style="border-color:var(--bdr);margin:10px 0">
     <div class="mrow"><label class="mlabel">Supabase URL</label><input class="minput" id="k-sb-url" placeholder="https://xxx.supabase.co"></div>
     <div class="mrow"><label class="mlabel">Supabase Anon Key</label><input class="minput" id="k-sb-key" type="password" placeholder="eyJ..."></div>
@@ -443,6 +444,8 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   if (g)   localStorage.setItem('GROK_API_KEY', g);
   if (gm)  localStorage.setItem('GEMINI_API_KEY', gm);
   if (or_) localStorage.setItem('OPENROUTER_API_KEY', or_);
+  const groq = document.getElementById('k-groq').value.trim();
+  if (groq) localStorage.setItem('GROQ_API_KEY', groq);
   if (sbu) localStorage.setItem('SUPABASE_URL', sbu);
   if (sbk) localStorage.setItem('SUPABASE_ANON_KEY', sbk);
   if (sbu && sbk && window.supabase) {
