@@ -51,7 +51,10 @@ export async function callGrok(turnBrief, mode) {
   };
 
   try {
-    const res = await fetch(GROK_URL, { method: 'POST', headers, body: JSON.stringify(body) });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(GROK_URL, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) throw new Error(`Grok HTTP ${res.status}`);
     const data = await res.json();
     if (data.id && !_convId) _convId = data.id;
@@ -149,13 +152,16 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 async function callFallbackNarrator(systemPrompt, userMessage, mode) {
   const key = getKey('OPENROUTER_API_KEY');
   // Use a model with similar tone when possible; update as catalog evolves
-  const model = 'mistralai/mistral-7b-instruct';
+  const model = 'meta-llama/llama-3.1-8b-instruct:free';
+  const fbController = new AbortController();
+  const fbTimeout = setTimeout(() => fbController.abort(), 20000);
   const res = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${key}`,
     },
+    signal: fbController.signal,
     body: JSON.stringify({
       model,
       max_tokens: 600,
@@ -165,6 +171,7 @@ async function callFallbackNarrator(systemPrompt, userMessage, mode) {
       ],
     }),
   });
+  clearTimeout(fbTimeout);
   if (!res.ok) throw new Error(`Fallback narrator HTTP ${res.status}: ${await res.text()}`);
   const data = await res.json();
   return data.choices[0].message.content.trim();
