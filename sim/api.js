@@ -31,6 +31,7 @@ function buildGrokUserMessage(turnBrief, mode) {
     notable: 'Expand the scene. 2–4 paragraphs.',
     crisis:  'Write with urgency and weight. 3–5 paragraphs.',
     death:   'Write the death scene with gravity. 4–6 paragraphs.',
+    init:    'This is the opening scene of a new game. Establish the character in their immediate physical environment — body state, location, sensory details. Do not introduce NPCs unless the lorebook names them. End with: "What do you do?" 3–4 paragraphs.',
   }[mode] ?? '2–3 paragraphs.';
   return JSON.stringify({ ...turnBrief, narration_instruction: instruction });
 }

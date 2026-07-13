@@ -15,6 +15,11 @@ db.version(2).stores({
   events:  '++id, category, turn',
   actions: '++id, turn',
 });
+db.version(3).stores({
+  world:   '++id, timestamp',
+  events:  '++id, category, turn, saveId',
+  actions: '++id, turn, saveId',
+});
 
 // ─── INITIAL WORLD STATE ──────────────────────────────────────────────────────
 export function createInitialWorldState(playerName, startDate) {
@@ -74,18 +79,46 @@ export function createInitialWorldState(playerName, startDate) {
 // ─── PERSISTENCE ─────────────────────────────────────────────────────────────
 let _worldId = null;
 
-export async function loadWorldState() {
-  const all = await db.world.toArray();
+export async function loadWorldState(id = null) {
+  if (id) {
+    const item = await db.world.get(id);
+    if (item) {
+      _worldId = id;
+      return item.state;
+    }
+    return null;
+  }
+  // Load most recent save if no ID specified
+  const all = await db.world.orderBy('timestamp').reverse().toArray();
   if (!all.length) return null;
   _worldId = all[0].id;
   return all[0].state;
 }
 
 export async function saveWorldState(state) {
+  const timestamp = new Date().toISOString();
   if (_worldId !== null) {
-    await db.world.update(_worldId, { state });
+    await db.world.update(_worldId, { state, timestamp });
   } else {
-    _worldId = await db.world.add({ state });
+    _worldId = await db.world.add({ state, timestamp });
+  }
+}
+
+export async function createNewSaveSlot(state) {
+  _worldId = null; // Reset to force new save
+  return await saveWorldState(state);
+}
+
+export async function listSaves() {
+  return await db.world.orderBy('timestamp').reverse().toArray();
+}
+
+export async function deleteSave(id) {
+  await db.world.delete(id);
+  // Also delete associated events
+  const events = await db.events.where('saveId').equals(id).toArray();
+  for (const ev of events) {
+    await db.events.delete(ev.id);
   }
 }
 
@@ -141,6 +174,7 @@ export async function logEvent(event) {
     npc_id:      event.npc_id   ?? null,
     data:        event.data     ?? {},
     timestamp:   new Date().toISOString(),
+    saveId:      _worldId,
   });
 }
 
@@ -234,24 +268,29 @@ export async function saveNarration(turn, simTime, location, prose) {
     npc_id:      null,
     data:        { simTime, location },
     timestamp:   new Date().toISOString(),
+    saveId:      _worldId,
   });
 }
 
-export async function loadNarrations(limit = 50) {
-  const rows = await db.events
-    .where('category').equals('narration')
-    .reverse()
-    .limit(limit)
-    .toArray();
+export async function loadNarrations(limit = 50, saveId = null) {
+  let query = db.events.where('category').equals('narration');
+  if (saveId !== null) {
+    query = query.and(ev => ev.saveId === saveId);
+  }
+  const rows = await query.reverse().limit(limit).toArray();
   return rows.reverse(); // chronological order
 }
 
 // ─── ACTION LOG ────────────────────────────────────────────────────────────────
 export async function savePlayerAction(turn, simTime, input) {
-  await db.actions.add({ turn, input, timestamp: simTime });
+  await db.actions.add({ turn, input, timestamp: simTime, saveId: _worldId });
 }
 
-export async function loadPlayerActions(limit = 200) {
-  const rows = await db.actions.orderBy('turn').reverse().limit(limit).toArray();
+export async function loadPlayerActions(limit = 200, saveId = null) {
+  let query = db.actions.orderBy('turn').reverse();
+  if (saveId !== null) {
+    query = query.and(act => act.saveId === saveId);
+  }
+  const rows = await query.limit(limit).toArray();
   return rows.reverse();
 }
