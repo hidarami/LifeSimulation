@@ -20,7 +20,7 @@ function getKey(name) {
 
 // ─── GROK ─────────────────────────────────────────────────────────────────────
 const GROK_URL   = 'https://api.x.ai/v1/chat/completions';
-const GROK_MODEL = 'grok-2-1212';
+const GROK_MODEL = 'grok-4.20-0309-non-reasoning';
 let   _convId    = null;
 
 function buildGrokUserMessage(turnBrief, mode) {
@@ -70,7 +70,7 @@ export async function callGrok(turnBrief, mode) {
 }
 
 // ─── GEMINI ───────────────────────────────────────────────────────────────────
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 async function geminiRaw(prompt, maxTokens = 400) {
   const key = getKey('GEMINI_API_KEY');

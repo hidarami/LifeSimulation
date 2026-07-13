@@ -200,6 +200,7 @@ import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
          buildNpcContextForGemini, applyRelationshipDelta } from './npc.js';
 
 let WS = null;
+let _sbClient = null;
 
 function setStatus(msg, type='') {
   const el = document.getElementById('status');
@@ -385,11 +386,13 @@ async function boot() {
   const sbKey = localStorage.getItem('SUPABASE_ANON_KEY');
   let signedIn = false;
   if (sbUrl && sbKey && window.supabase) {
-    const client = window.supabase.createClient(sbUrl, sbKey);
-    setSupabaseClient(client);
-    await client.auth.getSession();
+    if (!_sbClient) {
+      _sbClient = window.supabase.createClient(sbUrl, sbKey);
+      setSupabaseClient(_sbClient);
+    }
+    await _sbClient.auth.getSession();
     window.history.replaceState(null, '', window.location.pathname);
-    const { data: { user } } = await client.auth.getUser();
+    const { data: { user } } = await _sbClient.auth.getUser();
     if (user) { signedIn = true; setStatus(`Signed in: ${user.email}`); }
   }
   WS = (await loadWorldStateCloud()) ?? (await loadWorldState());
@@ -443,7 +446,8 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   if (sbu) localStorage.setItem('SUPABASE_URL', sbu);
   if (sbk) localStorage.setItem('SUPABASE_ANON_KEY', sbk);
   if (sbu && sbk && window.supabase) {
-    setSupabaseClient(window.supabase.createClient(sbu, sbk));
+    _sbClient = window.supabase.createClient(sbu, sbk);
+    setSupabaseClient(_sbClient);
   }
   document.getElementById('modal').classList.remove('open');
   setStatus('Keys saved.');
@@ -469,9 +473,9 @@ document.getElementById('btn-login-link').addEventListener('click', async () => 
     status.textContent = 'Save Supabase URL + key first, then retry.';
     return;
   }
-  const client      = window.supabase.createClient(sbu, sbk);
+  if (!_sbClient) _sbClient = window.supabase.createClient(sbu, sbk);
   const redirectTo  = window.location.href.split('#')[0];
-  const { error }   = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
+  const { error }   = await _sbClient.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
   status.textContent = error ? `Error: ${error.message}` : `Link sent to ${email} — check inbox.`;
 });
 
