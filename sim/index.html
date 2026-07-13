@@ -461,6 +461,8 @@ document.getElementById('btn-new').addEventListener('click', () => {
   document.getElementById('feed').innerHTML = '';
   renderAll();
   setStatus(`New game — ${name}`);
+  // Reset Grok conversation ID so new game doesn't inherit stale conv
+  import('./api.js').then(m => m.resetConvId?.());
 });
 
 document.getElementById('btn-login-link').addEventListener('click', async () => {

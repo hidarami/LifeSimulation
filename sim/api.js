@@ -21,7 +21,7 @@ function getKey(name) {
 // ─── GROK ─────────────────────────────────────────────────────────────────────
 const GROK_URL   = 'https://api.x.ai/v1/chat/completions';
 const GROK_MODEL = 'grok-4.20-0309-non-reasoning';
-let   _convId    = null;
+export function resetConvId() { _convId = null; }
 
 function buildGrokUserMessage(turnBrief, mode) {
   const instruction = {
@@ -74,6 +74,8 @@ const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemi
 
 async function geminiRaw(prompt, maxTokens = 400) {
   const key = getKey('GEMINI_API_KEY');
+  //temporary log for debugging//
+  console.log('[gemini] key starts with:', key.slice(0, 8), 'length:', key.length);
   const res = await fetch(`${GEMINI_URL}?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -152,7 +154,7 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 async function callFallbackNarrator(systemPrompt, userMessage, mode) {
   const key = getKey('OPENROUTER_API_KEY');
   // Use a model with similar tone when possible; update as catalog evolves
-  const model = 'meta-llama/llama-3.1-8b-instruct:free';
+  const model = 'openai/gpt-oss-120b:free';
   const fbController = new AbortController();
   const fbTimeout = setTimeout(() => fbController.abort(), 20000);
   const res = await fetch(OPENROUTER_URL, {
