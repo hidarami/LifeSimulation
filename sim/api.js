@@ -20,7 +20,7 @@ function getKey(name) {
 
 // ─── GROK ─────────────────────────────────────────────────────────────────────
 const GROK_URL   = 'https://api.x.ai/v1/chat/completions';
-const GROK_MODEL = 'grok-4.20-0309-non-reasoning';
+const GROK_MODEL = 'grok-4.3';
 export function resetConvId() { _convId = null; }
 
 function buildGrokUserMessage(turnBrief, mode) {
@@ -60,17 +60,21 @@ export async function callGrok(turnBrief, mode) {
     if (data.id && !_convId) _convId = data.id;
     return data.choices[0].message.content.trim();
   } catch (err) {
-    // Fix #4: only fall back on genuine failure
-    if (FALLBACK_ON_OUTAGE_ONLY) {
+    const isOutage = !navigator.onLine
+      || err.message?.includes('502')
+      || err.message?.includes('503')
+      || err.message === 'Failed to fetch';
+    if (FALLBACK_ON_OUTAGE_ONLY && isOutage) {
       console.warn('[api] Grok outage — using fallback narrator:', err.message);
       return callFallbackNarrator(sys, usr, mode);
     }
-    throw err;
+    // Surface the real error so you can see what's actually wrong
+    throw new Error(`Grok failed (${err.message}) — check your API key and model name.`);
   }
 }
 
 // ─── GEMINI ───────────────────────────────────────────────────────────────────
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 async function geminiRaw(prompt, maxTokens = 400) {
   const key = getKey('GEMINI_API_KEY');
@@ -154,7 +158,7 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 async function callFallbackNarrator(systemPrompt, userMessage, mode) {
   const key = getKey('OPENROUTER_API_KEY');
   // Use a model with similar tone when possible; update as catalog evolves
-  const model = 'openai/gpt-oss-120b:free';
+  const model = 'meta-llama/llama-3.1-8b-instruct:free';
   const fbController = new AbortController();
   const fbTimeout = setTimeout(() => fbController.abort(), 20000);
   const res = await fetch(OPENROUTER_URL, {
