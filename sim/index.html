@@ -365,6 +365,35 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:3px}
 ::-webkit-scrollbar-thumb:hover{background:var(--dim)}
+
+/* ── CENTER STATS ────────────────────────────────────────────────────────── */
+#center-stats-wrap{background:var(--sur);border-bottom:1px solid var(--bdr);padding:8px 14px 6px;flex-shrink:0}
+#center-stats{display:grid;gap:2px 20px}
+.cstat-row{display:flex;align-items:center;gap:6px;padding:2px 0}
+.cstat-icon{width:14px;text-align:center;color:var(--dim);font-size:10px;flex-shrink:0}
+.cstat-label{width:48px;color:var(--dim);font-size:10px;letter-spacing:.02em;flex-shrink:0}
+.cstat-track{flex:1;height:4px;background:var(--bdr);border-radius:2px;overflow:hidden}
+.cstat-fill{height:100%;border-radius:2px;transition:width .4s,background .4s}
+.cstat-val{width:22px;text-align:right;color:var(--dim);font-size:10px;font-variant-numeric:tabular-nums;flex-shrink:0}
+
+/* ── DESKTOP THREE-COLUMN ────────────────────────────────────────────────── */
+@media (min-width:768px){
+  #panels-wrapper,
+  #panels-wrapper.show-left,
+  #panels-wrapper.show-center,
+  #panels-wrapper.show-right{
+    width:100%!important;
+    transform:none!important;
+    transition:none!important;
+  }
+  #panel-items{width:240px!important;flex-shrink:0!important;border-right:1px solid var(--bdr)}
+  #panel-main{flex:1!important;width:auto!important}
+  #panel-relationships{width:240px!important;flex-shrink:0!important;border-left:1px solid var(--bdr)}
+  #center-stats{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:767px){
+  #center-stats{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -374,18 +403,18 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 
   <!-- LEFT PANEL: Status/Stats/Job/Items/Log -->
   <div id="panel-items" class="panel">
-    <div class="panel-header"><button class="panel-back" data-target="center">←</button><span class="panel-title">Status</span></div>
+    <div class="panel-header"><button class="panel-back" data-target="center">←</button><span class="panel-title">Character</span></div>
     <div class="p-tabs">
-      <div class="p-tab on" data-p="stats">Stats</div>
-      <div class="p-tab" data-p="job">Job</div>
+      <div class="p-tab on" data-p="job">Job</div>
       <div class="p-tab" data-p="items">Items</div>
+      <div class="p-tab" data-p="schedule">Schedule</div>
       <div class="p-tab" data-p="log">Log</div>
     </div>
     <div class="panel-scroll">
-      <div id="p-stats" class="panel-section on"></div>
-      <div id="p-job"   class="panel-section"></div>
-      <div id="p-items" class="panel-section"></div>
-      <div id="p-log"   class="panel-section"></div>
+      <div id="p-job"      class="panel-section on"></div>
+      <div id="p-items"    class="panel-section"></div>
+      <div id="p-schedule" class="panel-section"></div>
+      <div id="p-log"      class="panel-section"></div>
     </div>
   </div>
 
@@ -405,14 +434,9 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
           <div class="menu-line"></div>
         </div>
       </div>
-      <div id="mini-stats">
-        <div class="mstat"><span class="mstat-label">H</span><div class="mstat-track"><div class="mstat-fill" id="ms-health" style="width:80%;background:var(--hi)"></div></div></div>
-        <div class="mstat"><span class="mstat-label">E</span><div class="mstat-track"><div class="mstat-fill" id="ms-energy" style="width:70%;background:var(--acc)"></div></div></div>
-        <div class="mstat"><span class="mstat-label">M</span><div class="mstat-track"><div class="mstat-fill" id="ms-mood"   style="width:60%;background:var(--acc)"></div></div></div>
-        <div class="mstat"><span class="mstat-label">🍚</span><div class="mstat-track"><div class="mstat-fill" id="ms-hunger" style="width:80%;background:var(--hi)"></div></div></div>
       </div>
-    </div>
     <div id="processing-bar"></div>
+    <div id="center-stats-wrap"><div id="center-stats"></div></div>
     <div id="feed">
       <div style="color:var(--dim);font-size:12px;padding:32px 0;text-align:center;line-height:2.2">
         Start a new game or load a save.<br>
@@ -572,7 +596,7 @@ The year is 2024. Hot season."></textarea>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script type="module">
-import { loadWorldState, saveWorldState, resetWorldState, createInitialWorldState,
+import { loadWorldState, saveWorldState, createInitialWorldState,
          createNewSaveSlot, listSaves, deleteSave,
          assembleTurnBrief, appendSignificantEvent, updateEventIndex, logEvent,
          saveNarration, loadNarrations, savePlayerAction, loadPlayerActions,
@@ -582,12 +606,12 @@ import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
 import { routeInput, isExplicit, classifyExplicitActivity,
          EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE } from './sanitizer.js';
 import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversationHistory,
-         callGeminiAutopilot, compressSessionContext } from './api.js';
-import { renderStatPanel, renderNpcPanel, renderJobPanel,
+         callGeminiAutopilot, compressSessionContext, parseLorebookToWorldState } from './api.js';
+import { renderNpcPanel, renderJobPanel,
          renderPossessionsPanel, renderNarration, renderTurnAnchor } from './renderer.js';
 import { checkWorldEvents, applyEventEffect } from './events.js';
 import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
-         buildNpcContextForGemini, applyRelationshipDelta } from './npc.js';
+         buildNpcContextForGemini, applyRelationshipDelta, createNpc } from './npc.js';
 
 let WS = null;
 let _sbClient = null;
@@ -661,29 +685,63 @@ function setProcessing(on) {
   }
 }
 
-// ── MINI STATS ────────────────────────────────────────────────────────────────
-function miniColor(v) { return v >= 60 ? 'var(--hi)' : v >= 40 ? 'var(--acc)' : v >= 20 ? 'var(--low)' : 'var(--crit)'; }
-function renderMiniStats(s) {
-  if (!s) return;
-  const set = (id, val) => { const el = document.getElementById(id); if (el) { el.style.width = val + '%'; el.style.background = miniColor(val); } };
-  set('ms-health', s.health); set('ms-energy', s.energy); set('ms-mood', s.mood);
-  set('ms-hunger', 100 - (s.hunger ?? 0)); // invert: 0=full=good
+// ── CENTER STATS ──────────────────────────────────────────────────────────────
+const CSTAT_META = {
+  health:     { label: 'Health',  icon: '♥',  invert: false },
+  energy:     { label: 'Energy',  icon: '⚡', invert: false },
+  hunger:     { label: 'Hunger',  icon: '🍽', invert: true  },
+  hygiene:    { label: 'Hygiene', icon: '◈',  invert: false },
+  mood:       { label: 'Mood',    icon: '◉',  invert: false },
+  social:     { label: 'Social',  icon: '◎',  invert: false },
+  reputation: { label: 'Rep',     icon: '★',  invert: false },
+};
+function cstatColor(v) {
+  return v <= 20 ? 'sc-crit' : v <= 40 ? 'sc-low' : v >= 80 ? 'sc-high' : 'sc-norm';
+}
+function renderCenterStats(stats) {
+  const c = document.getElementById('center-stats');
+  if (!c || !stats) return;
+  c.innerHTML = '';
+  for (const [key, meta] of Object.entries(CSTAT_META)) {
+    if (!(key in stats)) continue;
+    if (key === 'arousal' && stats[key] === 0) continue;
+    const val  = Math.round(stats[key]);
+    const fill = meta.invert ? 100 - val : val;
+    const row  = document.createElement('div');
+    row.className = 'cstat-row';
+    row.innerHTML = `<span class="cstat-icon">${meta.icon}</span><span class="cstat-label">${meta.label}</span><div class="cstat-track"><div class="cstat-fill ${cstatColor(fill)}" style="width:${fill}%"></div></div><span class="cstat-val">${val}</span>`;
+    c.appendChild(row);
+  }
+}
+function renderSchedulePanel(job, container) {
+  if (!container) return;
+  container.innerHTML = '';
+  if (!job) { container.innerHTML = '<p class="empty">No current schedule.</p>'; return; }
+  container.innerHTML = `
+    <div class="job-entry">
+      <div class="j-emp">${job.employer}</div>
+      <div class="j-pos">${job.position}</div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-top:10px">Work Schedule</div>
+      <div style="font-size:12px;margin-top:3px">${job.schedule || 'Not specified'}</div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-top:10px">Days Employed</div>
+      <div style="font-size:12px;margin-top:3px">${job.days_employed ?? 0}</div>
+    </div>`;
 }
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────────
 function renderAll() {
   if (!WS) return;
-  renderStatPanel(WS.player.stats, WS.player.cash, document.getElementById('p-stats'));
+  renderCenterStats(WS.player.stats);
   renderNpcPanel(WS.npcs, document.getElementById('npc-cards'), WS.sim_time);
   renderJobPanel(WS.job, document.getElementById('p-job'));
   renderPossessionsPanel(WS.player.possessions, WS.player.irreversible, document.getElementById('p-items'));
+  renderSchedulePanel(WS.job, document.getElementById('p-schedule'));
   const ts = formatTimestamp(WS.sim_time);
   document.getElementById('h-time').innerHTML = `${ts.time}<br><span style="font-size:10px">${ts.day}</span>`;
   document.getElementById('h-cash').textContent = `₱${WS.player.cash.toLocaleString()}`;
   const nm = WS.player.name || '—';
   document.getElementById('char-name').textContent = nm;
   document.getElementById('char-avatar').textContent = nm.charAt(0).toUpperCase();
-  renderMiniStats(WS.player.stats);
 }
 
 // ── ACTION LOG ────────────────────────────────────────────────────────────────
@@ -692,7 +750,7 @@ async function renderActionLog() {
   if (!c) return;
   c.innerHTML = '';
   try {
-    const actions = await loadPlayerActions(100, _worldId);
+    const actions = await loadPlayerActions(100);
     if (!actions.length) { c.innerHTML = '<p class="empty">No actions yet.</p>'; return; }
     for (const a of actions) {
       const el = document.createElement('div');
@@ -819,33 +877,66 @@ async function startNewGame() {
   showWizardStep(3);
   initInProgress = true;
   document.getElementById('wizard-footer').style.display = 'none';
-
   if (lorebook) localStorage.setItem('LOREBOOK', lorebook);
 
   let ws = createInitialWorldState(name, new Date().toISOString());
   ws.player.age = age; ws.player.sex = sex; ws.player.birthday = birthday;
-  await createNewSaveSlot(ws);
-  WS = ws;
   resetConvId();
   document.getElementById('feed').innerHTML = '';
 
-  const stages = ['Setting up your character','Building your world','Placing you in the scene','Writing your first scene'];
-  let si = 0;
   const pfill   = document.getElementById('init-pfill');
   const stageEl = document.getElementById('init-stage-text');
-  stageEl.textContent = stages[0] + '...'; pfill.style.width = '8%';
-  const timer = setInterval(() => {
-    si = Math.min(si + 1, stages.length - 1);
-    stageEl.textContent = stages[si] + '...';
-    pfill.style.width = Math.min(15 + si * 18, 78) + '%';
-  }, 1300);
+  const subEl   = document.getElementById('init-sub-text');
+  const setStage = (text, sub, pct) => {
+    stageEl.textContent = text;
+    if (subEl) subEl.textContent = sub;
+    pfill.style.width = pct + '%';
+  };
 
   try {
+    // Stage 1: Parse lorebook with Gemini
+    if (lorebook) {
+      setStage('Parsing your world...', 'AI is reading your lorebook...', 10);
+      const parsed = await parseLorebookToWorldState(lorebook).catch(() => null);
+      if (parsed) {
+        setStage('Building world state...', 'Initializing characters and relationships...', 32);
+        if (parsed.player?.location) ws.player.location = parsed.player.location;
+        if (parsed.player?.cash != null && !isNaN(Number(parsed.player.cash))) {
+          ws.player.cash = Number(parsed.player.cash);
+        }
+        if (parsed.job && typeof parsed.job === 'object') {
+          ws.job = { performance_flags: [], days_employed: 0, ...parsed.job };
+        }
+        if (Array.isArray(parsed.npcs)) {
+          for (const nd of parsed.npcs) {
+            if (!nd.id || !nd.name) continue;
+            const npc = createNpc({
+              id: nd.id, name: nd.name, age: nd.age || 25,
+              npc_class: nd.npc_class || 'household', traits: nd.traits || {},
+            });
+            npc.relationship_meter = Math.max(-100, Math.min(100, Number(nd.relationship_meter) || 0));
+            npc.trust_meter = Math.max(-100, Math.min(100, Number(nd.trust_meter) || 0));
+            npc.significance = 2;
+            if (nd.note) npc.recent_interactions = [nd.note];
+            ws.npcs[nd.id] = npc;
+          }
+        }
+        if (Array.isArray(parsed.possessions)) ws.player.possessions = parsed.possessions;
+      }
+    }
+
+    // Stage 2: Save
+    setStage('Saving world state...', 'Writing to storage...', 54);
+    await createNewSaveSlot(ws);
+    WS = ws;
+
+    // Stage 3: First scene
+    setStage('Writing your opening scene...', 'Grok is composing your world...', 72);
     const simTime = ws.sim_time;
     const _td = new Date(simTime);
     const sim_time_formatted =
-      _td.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' }) + ' · ' +
-      _td.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+      _td.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + ' · ' +
+      _td.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
     const initBrief = {
       turn: 1, sim_time: simTime, sim_time_formatted,
@@ -859,9 +950,8 @@ async function startNewGame() {
     };
 
     const prose = await callGrok(initBrief, 'init');
-    clearInterval(timer);
     pfill.style.width = '100%';
-    await new Promise(r => setTimeout(r, 350));
+    await new Promise(r => setTimeout(r, 300));
 
     ws.turn = 1; ws.last_narration_prose = prose;
     await saveWorldState(ws); WS = ws;
@@ -878,11 +968,10 @@ async function startNewGame() {
     setStatus(`Game started · ${name}`);
 
   } catch (err) {
-    clearInterval(timer);
     initInProgress = false;
     pfill.style.background = 'var(--crit)';
     stageEl.textContent = '⚠ Failed to start';
-    document.getElementById('init-sub-text').textContent = err.message;
+    if (subEl) subEl.textContent = err.message;
     document.getElementById('wizard-footer').style.display = 'flex';
     document.getElementById('btn-wizard-back').style.display = 'block';
     document.getElementById('btn-wizard-next').textContent = 'Retry';
@@ -1078,78 +1167,39 @@ document.getElementById('btn-load').addEventListener('click', async () => {
   document.getElementById('load-modal').classList.add('open');
   try {
     const saves = await listSaves();
-    let html = '';
-    if (saves.length === 0) {
-      html = '<p class="empty">No saves found. Start a new game first.</p>';
+    if (!saves.length) {
+      listEl.innerHTML = '<p class="empty">No saves found. Start a new game first.</p>';
       document.getElementById('btn-load-confirm').disabled = true;
     } else {
       document.getElementById('btn-load-confirm').disabled = false;
-      html = saves.map(s => {
+      listEl.innerHTML = saves.map(s => {
         const d = new Date(s.timestamp);
-        const timeStr = d.toLocaleString();
-        return `<div class="log-entry" data-id="${s.id}">
-          <span class="log-turn">T${s.state.turn}</span>
-          <span class="log-text">${s.state.player.name} — ${timeStr}</span>
-          <button class="btn-delete-save" data-id="${s.id}" style="margin-left:auto;padding:2px 6px;font-size:10px">✕</button>
-        </div>`;
+        return `<div class="log-entry" data-id="${s.id}"><span class="log-turn">T${s.state.turn}</span><span class="log-text">${s.state.player.name} — ${d.toLocaleString()}</span><button class="btn-delete-save" data-id="${s.id}" style="margin-left:auto;padding:2px 6px;font-size:10px;background:none;border:1px solid var(--bdr);color:var(--dim);cursor:pointer;border-radius:3px;flex-shrink:0">✕</button></div>`;
       }).join('');
-      listEl.innerHTML = html;
-      // Add click handlers for selection
       listEl.querySelectorAll('.log-entry').forEach(el => {
-        el.addEventListener('click', (e) => {
+        el.addEventListener('click', e => {
           if (e.target.classList.contains('btn-delete-save')) return;
-          listEl.querySelectorAll('.log-entry').forEach(e => e.style.background = '');
+          listEl.querySelectorAll('.log-entry').forEach(x => x.style.background = '');
           el.style.background = 'var(--sur2)';
           el.dataset.selected = 'true';
         });
       });
-      // Add click handlers for delete buttons
       listEl.querySelectorAll('.btn-delete-save').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
+        btn.addEventListener('click', async e => {
           e.stopPropagation();
-          const id = parseInt(btn.dataset.id);
-          if (!confirm('Delete this save? This cannot be undone.')) return;
-          try {
-            await deleteSave(id);
-            btn.parentElement.remove();
-            if (listEl.children.length === 0) {
-              listEl.innerHTML = '<p class="empty">No saves found.</p>';
-              document.getElementById('btn-load-confirm').disabled = true;
-            }
-            statusEl.textContent = 'Save deleted.';
-          } catch(err) {
-            statusEl.textContent = 'Error deleting save: ' + err.message;
+          if (!confirm('Delete this save? Cannot be undone.')) return;
+          await deleteSave(parseInt(btn.dataset.id)).catch(() => {});
+          btn.parentElement.remove();
+          if (!listEl.children.length) {
+            listEl.innerHTML = '<p class="empty">No saves found.</p>';
+            document.getElementById('btn-load-confirm').disabled = true;
           }
+          statusEl.textContent = 'Save deleted.';
         });
       });
+      statusEl.textContent = `${saves.length} save${saves.length > 1 ? 's' : ''} found.`;
     }
-    statusEl.textContent = saves.length ? `${saves.length} save${saves.length > 1 ? 's' : ''} found.` : 'No saves found.';
-  } catch(e) { statusEl.textContent='Error: '+e.message; }
-});
-[document.getElementById('btn-load-cancel'), document.getElementById('btn-load-cancel2')].forEach(b => b?.addEventListener('click', () => document.getElementById('load-modal').classList.remove('open')));
-document.getElementById('load-modal').addEventListener('click', e => { if (e.target===e.currentTarget) e.currentTarget.classList.remove('open'); });
-document.getElementById('btn-load-confirm').addEventListener('click', async () => {
-  const sel = document.querySelector('#save-list .log-entry[data-selected="true"]');
-  if (!sel) { alert('Select a save first.'); return; }
-  const saveId = parseInt(sel.dataset.id);
-  document.getElementById('load-modal').classList.remove('open');
-  setStatus('Loading…', 'load'); setProcessing(true);
-  try {
-    const ws = await loadWorldState(saveId);
-    if (!ws) throw new Error('Save not found');
-    WS = ws; renderAll();
-    const saved = await loadNarrations(50, saveId);
-    const feed  = document.getElementById('feed'); feed.innerHTML = '';
-    if (saved.length) {
-      for (const n of saved) { const a=renderTurnAnchor(n.turn,n.data?.simTime??n.timestamp,n.data?.location??''); renderNarration(n.description,a,feed,n.turn); }
-      feed.scrollTop = feed.scrollHeight;
-      const history = [];
-      for (const n of saved.slice(-3)) { history.push({role:'user',content:`[turn ${n.turn} restored]`}); history.push({role:'assistant',content:n.description}); }
-      setConversationHistory(history);
-    } else { feed.innerHTML='<div style="color:var(--dim);font-size:12px;padding:30px;text-align:center">Save loaded. What do you do?</div>'; }
-    setStatus(`Turn ${ws.turn} · ${ws.player.name}`);
-  } catch(e) { setStatus('Load failed: '+e.message,'err'); console.error('[load]',e); }
-  finally { setProcessing(false); }
+  } catch(e) { statusEl.textContent = 'Error: ' + e.message; }
 });
 
 // ── SUPABASE AUTH ──────────────────────────────────────────────────────────────

@@ -220,3 +220,62 @@ async function callFallbackNarrator(systemPrompt, userMessage, mode) {
   const data = await res.json();
   return data.choices[0].message.content.trim();
 }
+
+// ─── LOREBOOK PARSER ──────────────────────────────────────────────────────────
+export async function parseLorebookToWorldState(lorebook) {
+  const key = localStorage.getItem('GEMINI_API_KEY');
+  if (!key) return null;
+  const prompt = `Parse this lorebook for a life simulation game. Return ONLY valid JSON, no prose, no markdown fences.
+
+Lorebook:
+"""
+${lorebook}
+"""
+
+Return exactly this shape:
+{
+  "player": { "location": "string or null", "cash": number_or_null },
+  "job": null,
+  "npcs": [],
+  "possessions": []
+}
+
+If employed, job shape:
+{ "employer": "string", "position": "string", "salary_per_cycle": number, "pay_cycle": "daily|weekly|monthly", "schedule": "e.g. Mon-Fri 8AM-5PM" }
+
+Each NPC shape:
+{
+  "id": "lowercase_first_name_underscore_last",
+  "name": "Full Name",
+  "age": number,
+  "npc_class": "intimate|household|professional|institutional",
+  "relationship_meter": number -100 to 100,
+  "trust_meter": number -100 to 100,
+  "traits": { "jealousy":50,"honesty":50,"patience":50,"warmth":50,"ambition":50,"impulsivity":50,"dominance":50,"openness":50 },
+  "note": "one sentence about the relationship with the player"
+}
+
+Each possession shape: { "name": "string", "note": "string or null" }
+
+NPC class rules: intimate=family/romantic/bestfriend, household=roommates/neighbors, professional=boss/coworker/teacher, institutional=gov/police/medical.
+Relationship meter: close family/romantic=70, good friend=50, acquaintance=20, stranger=0, rival=-40, enemy=-70.
+Traits default 50 if personality not described. Extract EVERY named person mentioned.`;
+
+  try {
+    const res = await fetch(`${GEMINI_URL}?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 1200, response_mime_type: 'application/json' },
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+    return JSON.parse(text);
+  } catch (e) {
+    console.warn('[lorebook] parse failed:', e.message);
+    return null;
+  }
+}
