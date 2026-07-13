@@ -20,9 +20,10 @@ function getKey(name) {
 
 // ─── GROK ─────────────────────────────────────────────────────────────────────
 const GROK_URL   = 'https://api.x.ai/v1/chat/completions';
-const GROK_MODEL = 'grok-beta';
+const GROK_MODEL = 'grok-4.3';
 let _convId = null;
-export function resetConvId() { _convId = null; }
+let _conversationHistory = []; // Store last 5 turns for narrative continuity
+export function resetConvId() { _convId = null; _conversationHistory = []; }
 
 function buildGrokUserMessage(turnBrief, mode) {
   const instruction = {
@@ -36,30 +37,49 @@ function buildGrokUserMessage(turnBrief, mode) {
 export async function callGrok(turnBrief, mode) {
   const sys = buildGrokNarrationPrompt();
   const usr = buildGrokUserMessage(turnBrief, mode);
+  const grokKey = getKey('GROK_API_KEY');
+  console.log('[Grok Debug] Key starts with:', grokKey.slice(0, 8), 'length:', grokKey.length);
+  console.log('[Grok Debug] Model:', GROK_MODEL);
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${getKey('GROK_API_KEY')}`,
+    'Authorization': `Bearer ${grokKey}`,
   };
   if (_convId) headers['x-grok-conv-id'] = _convId;
+
+  // Build messages with conversation history for narrative continuity
+  const messages = [
+    { role: 'system', content: sys },
+    ..._conversationHistory.slice(-4), // Last 4 turns for context
+    { role: 'user', content: usr },
+  ];
 
   const body = {
     model: GROK_MODEL,
     max_tokens: 600,
-    messages: [
-      { role: 'system', content: sys },
-      { role: 'user',   content: usr },
-    ],
+    messages,
+    stream: false,
   };
+  console.log('[Grok Debug] Request body:', JSON.stringify(body).slice(0, 300) + '...');
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 30000); // Increased to 30s for conversation history
     const res = await fetch(GROK_URL, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
     clearTimeout(timeout);
-    if (!res.ok) throw new Error(`Grok HTTP ${res.status}`);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[Grok API Error]', res.status, errText);
+      throw new Error(`Grok HTTP ${res.status}: ${errText}`);
+    }
     const data = await res.json();
     if (data.id && !_convId) _convId = data.id;
-    return data.choices[0].message.content.trim();
+    const prose = data.choices[0].message.content.trim();
+    
+    // Add this turn to conversation history for continuity
+    _conversationHistory.push({ role: 'user', content: usr });
+    _conversationHistory.push({ role: 'assistant', content: prose });
+    
+    return prose;
   } catch (err) {
     const isOutage = !navigator.onLine
       || err.message?.includes('502')

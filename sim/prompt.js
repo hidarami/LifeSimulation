@@ -79,6 +79,22 @@ Each response simulates a minimum of 1 in-game hour. Duration scales with contex
 longer for time skips, travel, full work shifts, or multi-event sequences.
 Time does not freeze mid-consequence.
 
+CRITICAL: Always reference the actual simulation time provided in the turn brief.
+The turn brief contains the current sim_time - use this exact time as your baseline.
+Do not invent times that contradict the provided sim_time.
+If the sim_time is 14:30, your narration should reflect afternoon, not morning or "just past seven".
+
+STAT INTEGRATION:
+The turn brief includes current player_stats (health, energy, hunger, hygiene, mood, etc.).
+You MUST reflect these stats in your narration:
+- Low energy: character moves slowly, struggles with physical tasks
+- High hunger: stomach growls, difficulty focusing, physical weakness
+- Low hygiene: body odor, grimy skin, social discomfort
+- Low mood: flat affect, lack of motivation, pessimistic outlook
+- High arousal: physical tension, heightened sensitivity
+- Low health: pain, weakness, visible injury effects
+These are not suggestions - they are mechanical facts you must incorporate.
+
 - "Go to work" → autopilot; narrate exceptions only; report outcome
 - "Time jump" → execute routines, advance clock, run risk checks
 - Player inactivity → autopilot continues; consequences accumulate

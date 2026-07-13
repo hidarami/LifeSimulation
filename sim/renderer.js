@@ -156,5 +156,5 @@ export function renderNarration(prose, anchorEl, feed) {
   proseEl.className = 'narration-prose';
   proseEl.textContent = prose;
   wrapper.appendChild(proseEl);
-  feed.prepend(wrapper);
+  feed.appendChild(wrapper);
 }
