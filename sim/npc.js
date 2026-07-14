@@ -65,9 +65,10 @@ export function getNpcCurrentTask(npc, currentDate) {
 }
 
 // ─── NPC FACTORY ─────────────────────────────────────────────────────────────
-export function createNpc({ id, name, age, npc_class, traits = {}, schedule = null }) {
+export function createNpc({ id, name, age, npc_class, relationship_type = null, traits = {}, schedule = null }) {
   return {
     id, name, age, npc_class,
+    relationship_type: relationship_type ?? npc_class,
     status: 'active',
     traits: {
       jealousy:    traits.jealousy    ?? 30,
@@ -136,6 +137,7 @@ export function buildNpcContextForGemini(npc, currentDate) {
     name:                npc.name,
     age:                 npc.age,
     npc_class:           npc.npc_class,
+    relationship_type:   npc.relationship_type ?? npc.npc_class,
     traits:              npc.traits,
     relationship_meter:  npc.relationship_meter,
     trust_meter:         npc.trust_meter,

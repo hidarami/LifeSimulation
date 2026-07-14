@@ -319,6 +319,7 @@ Each NPC shape:
   "name": "Full Name",
   "age": number,
   "npc_class": "intimate|household|professional|institutional",
+  "relationship_type": "one of: brother|sister|mother|father|uncle|aunt|cousin|friend|best_friend|boyfriend|girlfriend|roommate|neighbor|classmate|boss|coworker|teacher|mentor|enemy|rival — use the most specific label that fits",
   "relationship_meter": number -100 to 100,
   "trust_meter": number -100 to 100,
   "traits": { "jealousy":50,"honesty":50,"patience":50,"warmth":50,"ambition":50,"impulsivity":50,"dominance":50,"openness":50 },
@@ -330,7 +331,8 @@ Each possession shape: { "name": "string", "note": "string or null" }
 NPC class rules: intimate=family/romantic/bestfriend, household=roommates/neighbors, professional=boss/coworker/teacher, institutional=gov/police/medical.
 Relationship meter: close family/romantic=70, good friend=50, acquaintance=20, stranger=0, rival=-40, enemy=-70.
 Traits default 50 if personality not described. Extract EVERY named person mentioned.
-CRITICAL: Also extract clearly implied household members or close relationships even if only partially named. Examples: "I live with my two brothers Jay and Ray (20,21)" → extract Jay AND Ray as separate NPCs. "my parents" → extract as father/mother with ids parent_father/parent_mother. "my best friend Marco" → extract Marco. "my girlfriend" → extract with id girlfriend_unnamed and name "Girlfriend". Do not leave anyone the player clearly lives with or is emotionally close to unextracted.`;
+CRITICAL: Also extract clearly implied household members or close relationships even if only partially named. Examples: "I live with my two brothers Jay and Ray (20,21)" → extract Jay AND Ray as separate NPCs. "my parents" → extract as father/mother with ids parent_father/parent_mother. "my best friend Marco" → extract Marco. "my girlfriend" → extract with id girlfriend_unnamed and name "Girlfriend". Do not leave anyone the player clearly lives with or is emotionally close to unextracted.
+CRITICAL: Do NOT extract the player character themselves (the "you" / protagonist / main character) as an NPC. Only extract OTHER people.`;
 
   // Try Gemini first
   try {
@@ -553,4 +555,77 @@ If no clear third party is physically present and acting, return { "found": fals
     const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
     return parsed.found ? parsed : null;
   } catch { return null; }
+}
+
+// ─── WORLD ENRICHMENT ─────────────────────────────────────────────────────────
+// Fills in creative details the lorebook omitted: town name, school, job specifics,
+// and starting possessions. Called once during init after lorebook parsing.
+
+export async function enrichWorldDetails(lorebook, ws) {
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (!groqKey) return null;
+
+  const npcNames = Object.values(ws.npcs ?? {}).map(n => `${n.name} (${n.relationship_type ?? n.npc_class})`).join(', ') || 'none';
+  const startYear = ws.sim_time ? new Date(ws.sim_time).getFullYear() : new Date().getFullYear();
+
+  const prompt = `You are world-building for a life simulation set in the Philippines. Generate specific creative details that the lorebook didn't explicitly state. Be realistic and culturally accurate.
+
+Lorebook: """${lorebook.slice(0, 1500)}"""
+
+Known context:
+- Player age: ${ws.player?.age ?? 18}, Start year: ${startYear}
+- Location type: ${ws.player?.location ?? 'unknown'}
+- Known NPCs: ${npcNames}
+- Has parsed job: ${ws.job ? 'yes (' + (ws.job.position ?? 'unknown') + ')' : 'no'}
+
+Return ONLY valid JSON (no markdown fences):
+{
+  "location_name": "specific Filipino location — Brgy. [name], [Municipality], [Province]. Match lorebook geography clues.",
+  "school": {
+    "name": "realistic school name for a rural Philippine community",
+    "grade_level": "e.g. Grade 12 - HUMSS Strand",
+    "schedule": "e.g. Mon–Fri 6:30 AM – 4:00 PM",
+    "status": "active"
+  },
+  "job_enrichment": {
+    "platform_or_employer": "specific platform or employer name",
+    "description": "1–2 sentences describing the actual day-to-day work",
+    "schedule": "e.g. Flexible, 2–3 evenings per week when not in school",
+    "earnings": "e.g. ₱150–₱400 per stream session, tips-based",
+    "days_active": 45
+  },
+  "starting_possessions": [
+    { "name": "item name", "note": "its purpose or current condition", "value_peso": 800 }
+  ]
+}
+
+Rules:
+- location_name: if lorebook says "rural Cavite" → generate a real-sounding barangay in Cavite
+- school: include ONLY if player is clearly a student. SHS Grade 12 = 17–18 yrs old in 2018.
+- job_enrichment: include ONLY if lorebook mentions a job or income. Return null if none.
+- days_active: AGE-REALISTIC. A 17-yr-old in 2018 cannot have 3 years of adult streaming history. Max ~200 days.
+- starting_possessions: 4–6 items matching the character's economic class. Rural poor = basic cracked phone, worn clothes, sleeping mat, etc.
+- Return null for school if player is NOT described as a student.
+- Return null for job_enrichment if player has NO mentioned income source.`;
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 900,
+      }),
+    });
+    if (!res.ok) return null;
+    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    console.log('[enrich] location:', parsed.location_name, '| school:', parsed.school?.name, '| possessions:', parsed.starting_possessions?.length);
+    return parsed;
+  } catch (e) {
+    console.warn('[enrich] failed:', e.message);
+    return null;
+  }
 }

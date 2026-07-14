@@ -228,9 +228,14 @@ Return exactly this JSON shape:
 
 Rules:
 - relationship_delta and trust_delta: integers between -20 and +20
-- reaction_summary: one sentence, observable behavioral description only — not internal labels
-- flags_to_add: only flags that genuinely apply to this specific interaction
-- NPC traits are hard constraints: patience < 30 means the NPC does not tolerate repeated interruptions; jealousy > 70 means the NPC reacts strongly to perceived competition`;
+- Calibration: ±1–3 = minor moment; ±5–8 = notable shift; ±10–15 = serious conflict or deep bond; ±20 = life-altering event. A family member being mildly annoyed by a phone call = −1 to −2 at most.
+- reaction_summary: one sentence, observable behavior only — no internal state labels, no emotion words
+- flags_to_add: flags are for SIGNIFICANT, PERSISTENT behavioral states only. The bar is high.
+  "resentment" requires repeated mistreatment across multiple turns. A single inconvenient request does NOT trigger it.
+  "jealousy_triggered" requires the NPC to directly witness competition.
+  Daily friction between people who live together is normal life — it produces NO flag whatsoever.
+  When uncertain, return an empty array. Calibrate toward fewer flags, not more.
+- NPC traits are hard constraints: patience < 30 reacts sharply to repeated interruptions; jealousy > 70 reacts strongly to witnessed competition`;
 }
 
 // ─── GEMINI: AUTOPILOT NARRATION ─────────────────────────────────────────────

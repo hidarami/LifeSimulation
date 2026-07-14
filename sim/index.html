@@ -394,6 +394,49 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 @media (max-width:767px){
   #center-stats{grid-template-columns:1fr}
 }
+
+/* ── NPC CARDS COLLAPSIBLE ──────────────────────────────────────── */
+.npc-card{padding:0!important;overflow:hidden;cursor:default}
+.npc-collapsed{display:flex;align-items:center;gap:6px;padding:9px 10px;cursor:pointer;user-select:none}
+.npc-collapsed:active{background:var(--sur2)}
+.npc-col-main{display:flex;align-items:baseline;gap:5px;flex:1;min-width:0;overflow:hidden}
+.npc-col-meta{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.npc-rel-label{font-size:10px;color:var(--dim);background:var(--sur2);padding:1px 5px;border-radius:3px;white-space:nowrap;text-transform:capitalize;max-width:80px;overflow:hidden;text-overflow:ellipsis}
+.npc-task-pill{font-size:9px;padding:2px 5px;border-radius:3px;white-space:nowrap}
+.npc-task-pill.avail{background:#1a3a1a;color:var(--pos)}
+.npc-task-pill.busy{background:#3a1010;color:var(--neg)}
+.npc-rel-num{font-size:11px;font-weight:700;min-width:30px;text-align:right}
+.npc-rel-num.mp{color:var(--pos)}.npc-rel-num.mn{color:var(--neg)}.npc-rel-num.mz{color:var(--neu)}
+.npc-expand-icon{font-size:9px;color:var(--dim);margin-left:2px;transition:transform .2s;flex-shrink:0}
+.npc-card[data-expanded="true"] .npc-expand-icon{transform:rotate(90deg)}
+.npc-details{padding:6px 10px 10px;border-top:1px solid var(--bdr)}
+.npc-detail-btn{font-size:10px;color:var(--acc);background:none;border:1px solid var(--acc2);border-radius:3px;padding:3px 8px;cursor:pointer;margin-top:8px;font-family:var(--f);transition:background .15s}
+.npc-detail-btn:hover{background:var(--acc2)}
+.tr-v{font-size:10px;color:var(--dim);width:20px;text-align:right;flex-shrink:0}
+.nflag-timer{font-size:9px;color:var(--dim);opacity:.6;margin-left:2px}
+
+/* ── JOB PANEL ──────────────────────────────────────────────────── */
+.j-label{font-size:9px;color:var(--acc);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;opacity:.8}
+.j-desc{font-size:11px;color:var(--dim);margin:2px 0 4px;line-height:1.5}
+.j-earn{font-size:11px;color:var(--norm);margin-top:2px}
+.j-flag-good{font-size:10px;color:var(--pos);margin-top:4px}
+.job-section{margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--bdr)}
+.job-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+
+/* ── POSSESSIONS EXPANDABLE ─────────────────────────────────────── */
+.poss-item{border-bottom:1px solid var(--bdr)}.poss-item:last-child{border-bottom:none}
+.poss-header{display:flex;align-items:center;justify-content:space-between;padding:6px 0;cursor:pointer}
+.poss-header:hover .poss-name{color:var(--acc)}
+.poss-icon{font-size:9px;color:var(--dim);flex-shrink:0;transition:transform .2s}
+.poss-body{font-size:11px;color:var(--dim);padding:2px 0 8px;line-height:1.6}
+.poss-val{color:var(--acc);font-size:11px;margin-top:2px}
+
+/* ── LOG IMPROVEMENTS ───────────────────────────────────────────── */
+.log-entry-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bdr);cursor:pointer}
+.log-entry-row:hover .log-text{color:var(--txt)}
+.log-jump{font-size:10px;color:var(--acc);background:none;border:1px solid var(--acc2);border-radius:3px;padding:1px 6px;cursor:pointer;font-family:var(--f);flex-shrink:0;margin-left:auto}
+.log-full-text{font-size:11px;color:var(--txt);padding:4px 0 8px 28px;line-height:1.6;white-space:pre-wrap;display:none;border-bottom:1px solid var(--bdr)}
+.log-entry.open .log-full-text{display:block}
 </style>
 </head>
 <body>
@@ -608,7 +651,8 @@ import { routeInput, isExplicit, classifyExplicitActivity,
          hasThirdPartyPresence } from './sanitizer.js';
 import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversationHistory,
          callGeminiAutopilot, compressSessionContext, parseLorebookToWorldState,
-         buildWorldWithMultipleAIs, checkNpcInitiative, evaluateDescribedNpc } from './api.js';
+         buildWorldWithMultipleAIs, checkNpcInitiative, evaluateDescribedNpc,
+         enrichWorldDetails } from './api.js';
 import { renderNpcPanel, renderJobPanel,
          renderPossessionsPanel, renderNarration, renderTurnAnchor } from './renderer.js';
 import { checkWorldEvents, applyEventEffect } from './events.js';
@@ -720,29 +764,31 @@ function renderCenterStats(stats) {
     c.appendChild(row);
   }
 }
-function renderSchedulePanel(job, container) {
+function renderSchedulePanel(job, school, container) {
   if (!container) return;
   container.innerHTML = '';
-  if (!job) { container.innerHTML = '<p class="empty">No current schedule.</p>'; return; }
-  container.innerHTML = `
-    <div class="job-entry">
-      <div class="j-emp">${job.employer}</div>
-      <div class="j-pos">${job.position}</div>
-      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-top:10px">Work Schedule</div>
-      <div style="font-size:12px;margin-top:3px">${job.schedule || 'Not specified'}</div>
-      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-top:10px">Days Employed</div>
-      <div style="font-size:12px;margin-top:3px">${job.days_employed ?? 0}</div>
-    </div>`;
+  if (!job && !school) { container.innerHTML = '<p class="empty">No current schedule.</p>'; return; }
+  if (school?.schedule) {
+    container.innerHTML += `<div class="psub">School</div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:3px">${school.name ?? ''}</div>
+      <div style="font-size:12px;color:var(--dim)">${school.schedule}</div>`;
+  }
+  if (job?.schedule && job.schedule !== 'null' && job.schedule !== 'undefined') {
+    container.innerHTML += `<div class="psub" style="margin-top:12px">Work</div>
+      <div style="font-size:12px;color:var(--dim)">${job.schedule}</div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-top:10px">Days Active</div>
+      <div style="font-size:12px;margin-top:3px">${job.days_employed ?? 0}</div>`;
+  }
 }
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────────
 function renderAll() {
   if (!WS) return;
   renderCenterStats(WS.player.stats);
-  renderNpcPanel(WS.npcs, document.getElementById('npc-cards'), WS.sim_time);
-  renderJobPanel(WS.job, document.getElementById('p-job'));
+  renderNpcPanel(WS.npcs, document.getElementById('npc-cards'), WS.sim_time, WS.player.name);
+  renderJobPanel(WS.job, WS.school ?? null, document.getElementById('p-job'));
   renderPossessionsPanel(WS.player.possessions, WS.player.irreversible, document.getElementById('p-items'));
-  renderSchedulePanel(WS.job, document.getElementById('p-schedule'));
+  renderSchedulePanel(WS.job, WS.school ?? null, document.getElementById('p-schedule'));
   const ts = formatTimestamp(WS.sim_time);
   document.getElementById('h-time').innerHTML = `${ts.time}<br><span style="font-size:10px">${ts.day}</span>`;
   document.getElementById('h-cash').textContent = `₱${WS.player.cash.toLocaleString()}`;
@@ -762,8 +808,20 @@ async function renderActionLog() {
     for (const a of actions) {
       const el = document.createElement('div');
       el.className = 'log-entry';
-      el.innerHTML = `<span class="log-turn">T${a.turn}</span><span class="log-text">${a.input.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
-      el.addEventListener('click', e => {
+
+      const preview = a.input.length > 55 ? a.input.slice(0, 55) + '…' : a.input;
+      const row = document.createElement('div');
+      row.className = 'log-entry-row';
+      row.innerHTML = `
+        <span class="log-turn">T${a.turn}</span>
+        <span class="log-text" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">${preview.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>
+        <button class="log-jump" title="Jump to response">→</button>`;
+
+      const full = document.createElement('div');
+      full.className = 'log-full-text';
+      full.textContent = a.input;
+
+      row.querySelector('.log-jump').addEventListener('click', e => {
         e.stopPropagation();
         showPanel('center');
         setTimeout(() => {
@@ -771,6 +829,14 @@ async function renderActionLog() {
           if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 350);
       });
+
+      row.addEventListener('click', e => {
+        if (e.target.classList.contains('log-jump')) return;
+        el.classList.toggle('open');
+      });
+
+      el.appendChild(row);
+      el.appendChild(full);
       c.appendChild(el);
     }
   } catch { c.innerHTML = '<p class="empty">Log unavailable.</p>'; }
@@ -825,7 +891,10 @@ function openNpcModal(npcId) {
   `;
   document.getElementById('modal-npc').classList.add('open');
 }
-document.getElementById('npc-cards').addEventListener('click', e => { const c = e.target.closest('.npc-card'); if (c && WS) openNpcModal(c.dataset.id); });
+document.getElementById('npc-cards').addEventListener('click', e => {
+  const btn = e.target.closest('.npc-detail-btn');
+  if (btn && WS) openNpcModal(btn.dataset.id);
+});
 document.getElementById('btn-npc-close').addEventListener('click', () => document.getElementById('modal-npc').classList.remove('open'));
 document.getElementById('modal-npc').addEventListener('click', e => { if (e.target===e.currentTarget) e.currentTarget.classList.remove('open'); });
 
@@ -920,7 +989,9 @@ async function startNewGame() {
             if (!nd.id || !nd.name) continue;
             const npc = createNpc({
               id: nd.id, name: nd.name, age: nd.age || 25,
-              npc_class: nd.npc_class || 'household', traits: nd.traits || {},
+              npc_class: nd.npc_class || 'household',
+              relationship_type: nd.relationship_type || null,
+              traits: nd.traits || {},
             });
             npc.relationship_meter = Math.max(-100, Math.min(100, Number(nd.relationship_meter) || 0));
             npc.trust_meter = Math.max(-100, Math.min(100, Number(nd.trust_meter) || 0));
@@ -938,6 +1009,39 @@ async function startNewGame() {
           ws.sim_time = new Date(yr, mo, 15, 8, 0, 0).toISOString();
           ws.player.birthday = String(yr - age);
           console.log('[init] start date from lorebook:', yr, 'month', mo + 1);
+        }
+      }
+    }
+
+    // Stage 1.5: AI enrichment — creative detail fill-in
+    if (lorebook) {
+      setStage('Imagining your world...', 'Filling in missing details...', 48);
+      const enriched = await enrichWorldDetails(lorebook, ws).catch(() => null);
+      if (enriched) {
+        if (enriched.location_name) ws.player.location = enriched.location_name;
+        if (enriched.school?.name)  ws.school = enriched.school;
+        if (enriched.job_enrichment) {
+          if (ws.job) {
+            if (!ws.job.description)              ws.job.description    = enriched.job_enrichment.description;
+            if (!ws.job.schedule || ws.job.schedule === 'null') ws.job.schedule = enriched.job_enrichment.schedule;
+            ws.job.earnings_note  = enriched.job_enrichment.earnings;
+            ws.job.employer       = ws.job.employer || enriched.job_enrichment.platform_or_employer;
+            ws.job.days_employed  = enriched.job_enrichment.days_active ?? ws.job.days_employed ?? 0;
+          } else {
+            ws.job = {
+              employer: enriched.job_enrichment.platform_or_employer,
+              position: 'Part-time Streamer',
+              description: enriched.job_enrichment.description,
+              salary_per_cycle: null, pay_cycle: null,
+              schedule: enriched.job_enrichment.schedule,
+              earnings_note: enriched.job_enrichment.earnings,
+              days_employed: enriched.job_enrichment.days_active ?? 0,
+              performance_flags: [],
+            };
+          }
+        }
+        if (enriched.starting_possessions?.length && !ws.player.possessions?.length) {
+          ws.player.possessions = enriched.starting_possessions;
         }
       }
     }
@@ -1063,8 +1167,12 @@ async function processTurn(input) {
         ws.npcs[npcId] = applyRelationshipDelta(ws.npcs[npcId], rxn.relationship_delta??0, rxn.trust_delta??null);
         for (const f of rxn.flags_to_add??[]) ws.npcs[npcId] = addFlag(ws.npcs[npcId], f.flag, FLAG_DECAY[f.decay_rate]??FLAG_DECAY.medium);
         ws.npcs[npcId] = incrementSignificance(ws.npcs[npcId]);
-        relDeltas[npcId]=rxn.relationship_delta??0;
-        npcReactions.push({npc_id:npcId, summary:rxn.reaction_summary});
+        relDeltas[npcId] = rxn.relationship_delta ?? 0;
+        npcReactions.push({ npc_id: npcId, summary: rxn.reaction_summary });
+        if (rxn.reaction_summary) {
+          const ri = ws.npcs[npcId].recent_interactions ?? [];
+          ws.npcs[npcId].recent_interactions = [...ri, rxn.reaction_summary].slice(-5);
+        }
       }
     }
     else { timeCost=autopilotHours(input); statDeltas=autopilotDeltas(input,timeCost); actionDesc='[autopilot]'; }

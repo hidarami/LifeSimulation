@@ -48,6 +48,7 @@ export function createInitialWorldState(playerName, startDate) {
     active_dynamics: [],
     consequences:    [],
     job:             null,
+    school:          null,
 
     // Fix #1: structured history index — AI queries these directly.
     // These are the "chapters" of the character's life; no summarization needed.
