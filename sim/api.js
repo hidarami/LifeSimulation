@@ -77,11 +77,32 @@ export async function callGrok(turnBrief, mode) {
     const data = await res.json();
     if (data.id && !_convId) _convId = data.id;
     const prose = data.choices[0].message.content.trim();
-    
+    // Detect Grok refusal — reroute to fallback narrator
+    const _rc = prose.toLowerCase();
+    const _refused = prose.length < 90 || [
+      "i can't assist","i cannot assist","i'm unable to","i am unable to",
+      "i can't help","i cannot help","i don't feel comfortable","not able to",
+      "against my","my guidelines","my policy","safety guidelines","content policy"
+    ].some(p => _rc.includes(p));
+    if (_refused) {
+      console.warn('[Grok] Refusal detected — routing to fallback narrator');
+      try {
+        const _orKey = typeof localStorage !== 'undefined' ? localStorage.getItem('OPENROUTER_API_KEY') : null;
+        if (_orKey) {
+          const _fbProse = await callFallbackNarrator(sys, usr, mode);
+          if (_fbProse && _fbProse.length > 80) {
+            _conversationHistory.push({ role: 'user', content: usr });
+            _conversationHistory.push({ role: 'assistant', content: _fbProse });
+            return _fbProse;
+          }
+        }
+      } catch (_fe) { console.warn('[Grok] Fallback also failed:', _fe.message); }
+    }
+
     // Add this turn to conversation history for continuity
     _conversationHistory.push({ role: 'user', content: usr });
     _conversationHistory.push({ role: 'assistant', content: prose });
-    
+
     return prose;
   } catch (err) {
     const isOutage = !navigator.onLine
@@ -257,35 +278,41 @@ export async function compressSessionContext(last10Events) {
 }
 
 // ─── FALLBACK NARRATOR ────────────────────────────────────────────────────────
-// Fix #4: only reached on genuine Grok outage, not routine switching
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+// Tried in order — prefers models with fewer content restrictions
+const FALLBACK_NARRATOR_MODELS = [
+  'nousresearch/hermes-3-llama-3.1-405b:free',
+  'mistralai/mistral-7b-instruct:free',
+  'openchat/openchat-7b:free',
+  'meta-llama/llama-3.1-8b-instruct:free',
+];
 
 async function callFallbackNarrator(systemPrompt, userMessage, mode) {
   const key = getKey('OPENROUTER_API_KEY');
-  // Use a model with similar tone when possible; update as catalog evolves
-  const model = 'meta-llama/llama-3.1-8b-instruct:free';
-  const fbController = new AbortController();
-  const fbTimeout = setTimeout(() => fbController.abort(), 20000);
-  const res = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${key}`,
-    },
-    signal: fbController.signal,
-    body: JSON.stringify({
-      model,
-      max_tokens: 600,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user',   content: userMessage  },
-      ],
-    }),
-  });
-  clearTimeout(fbTimeout);
-  if (!res.ok) throw new Error(`Fallback narrator HTTP ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.choices[0].message.content.trim();
+  for (const model of FALLBACK_NARRATOR_MODELS) {
+    try {
+      const fbController = new AbortController();
+      const fbTimeout = setTimeout(() => fbController.abort(), 22000);
+      const res = await fetch(OPENROUTER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        signal: fbController.signal,
+        body: JSON.stringify({
+          model, max_tokens: 600,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user',   content: userMessage  },
+          ],
+        }),
+      });
+      clearTimeout(fbTimeout);
+      if (!res.ok) { console.warn('[fallback] model', model, 'HTTP', res.status); continue; }
+      const data = await res.json();
+      const text = data.choices?.[0]?.message?.content?.trim();
+      if (text && text.length > 60) { console.log('[fallback] succeeded with:', model); return text; }
+    } catch (e) { console.warn('[fallback] model', model, 'failed:', e.message); }
+  }
+  throw new Error('All fallback narrators exhausted. Check OpenRouter API key and quota.');
 }
 
 // ─── LOREBOOK PARSER ──────────────────────────────────────────────────────────
@@ -329,8 +356,11 @@ Each NPC shape:
 Each possession shape: { "name": "string", "note": "string or null" }
 
 NPC class rules: intimate=family/romantic/bestfriend, household=roommates/neighbors, professional=boss/coworker/teacher, institutional=gov/police/medical.
-Relationship meter: close family/romantic=70, good friend=50, acquaintance=20, stranger=0, rival=-40, enemy=-70.
-Traits default 50 if personality not described. Extract EVERY named person mentioned.
+Relationship meter — use ranges, NOT fixed values. ALWAYS vary between NPCs:
+  Parent positive: 55–80 | Sibling: 35–75 | Romantic: 65–90 | Close friend: 45–70 | Acquaintance: 10–30 | Stranger: 0–15 | Rival: -40 to -70
+DO NOT assign the same relationship_meter to multiple NPCs. Vary based on any context clue, even small ones (older/younger, closer/distant, mentioned positively/negatively).
+Traits: NEVER return all-50 traits for any NPC. Vary each meaningfully — infer from age, role, implied personality. An older brother ≠ a younger one. A mother ≠ a father. Each trait must differ across NPCs.
+Extract EVERY named person mentioned.
 CRITICAL: Also extract clearly implied household members or close relationships even if only partially named. Examples: "I live with my two brothers Jay and Ray (20,21)" → extract Jay AND Ray as separate NPCs. "my parents" → extract as father/mother with ids parent_father/parent_mother. "my best friend Marco" → extract Marco. "my girlfriend" → extract with id girlfriend_unnamed and name "Girlfriend". Do not leave anyone the player clearly lives with or is emotionally close to unextracted.
 CRITICAL: Do NOT extract the player character themselves (the "you" / protagonist / main character) as an NPC. Only extract OTHER people.`;
 
@@ -417,7 +447,7 @@ Return ONLY valid JSON, no markdown:
   }
 }
 
-Use the person's first name in lowercase as the key. Infer traits from described personality and behavior. Default 50 if not described.`;
+Use the person's first name in lowercase as the key. Infer traits CREATIVELY — never return all-50 for any NPC. Even without explicit personality clues, infer from age (younger = higher impulsivity), role (older sibling = higher dominance/ambition), relationship dynamics (close but tense = lower patience), and implied character. Each NPC must be meaningfully different from all others in at least 3 traits.`;
 
   try {
     const res = await fetch(GROQ_URL, {
@@ -478,12 +508,17 @@ NPCs: ${JSON.stringify(npcContextArray.slice(0, 5), null, 2)}
 Player mood: ${playerStats?.mood ?? 50}, social: ${playerStats?.social ?? 50}
 Turn: ${turnNumber}
 
-Rules:
-- Only trigger if relationship_meter > 20 OR a special circumstance warrants it
-- NPC must be available OR reaching out remotely (text, call) is plausible given their schedule
-- Maximum 1 NPC may initiate per call
-- Must be natural, in-character, specific to this NPC's traits and relationship
-- Do NOT trigger for NPCs with relationship_meter < 0
+HARD GATES — return has_initiative:false if ANY apply:
+- NPC's current_task is "sleeping" or "morning_prep" — they are asleep, cannot message
+- NPC's available is false AND interruptible is false — they are occupied
+- NPC's relationship_meter is below 20
+- The player and NPC are in the same physical location (they interact in person, not by message)
+
+Soft rules (only if hard gates all pass):
+- Default to has_initiative:false — most turns no NPC initiates
+- Remote contact (text/call) only if current_task is "leisure" or "winding_down"
+- The brief must be specific to THIS NPC's personality and relationship — NEVER generic ("hey just checking in", "what's up" = forbidden)
+- A concrete, scene-grounded reason must exist for the NPC to reach out NOW specifically
 
 Return ONLY valid JSON:
 {

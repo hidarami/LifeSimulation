@@ -79,7 +79,7 @@ export function renderNpcPanel(npcs, container, currentDate, playerName) {
 
 function getNpcEmotionLabel(npc) {
   const flags = npc.active_flags ?? [];
-  const MAP = { resentment:'Resentful', jealousy_triggered:'Jealous', angry:'Angry', worried:'Worried', hurt:'Hurt', happy:'Happy', grateful:'Grateful', suspicious:'Suspicious', distant:'Distant', uncomfortable:'Uncomfortable', mistreated_recently:'Hurt', deepening_bond:'Close' };
+  const MAP = { resentment:'Resentful', jealousy_triggered:'Jealous', angry:'Angry', worried:'Worried', hurt:'Hurt', happy:'Happy', grateful:'Grateful', suspicious:'Suspicious', distant:'Distant', uncomfortable:'Uncomfortable', mistreated_recently:'Hurt', deepening_bond:'Close', aroused:'Aroused', post_first_sexual_encounter:'Flustered', mutual_unspoken_tension:'Tense', concealing_true_feeling:'Guarded', betrayed:'Shaken', comfortable_intimacy:'Comfortable' };
   const e = [];
   for (const [flag, label] of Object.entries(MAP)) { if (flags.includes(flag)) e.push(label); }
   if (!e.length) {
@@ -127,12 +127,6 @@ function buildNpcCard(npc, currentDate) {
     `<div class="tr-row"><span class="tr-k">${k}</span><div class="tr-t"><div class="tr-f" style="width:${v}%"></div></div><span class="tr-v">${v}</span></div>`
   ).join('');
 
-  const recentArr = npc.recent_interactions ?? [];
-  const recentDefault = (npc.relationship_meter !== 0 || npc.trust_meter !== 0)
-    ? `<li>Relationship established prior to game start${npc.relationship_type ? ' — ' + npc.relationship_type.replace(/_/g,' ') : ''}.</li>`
-    : '<li>No meaningful interaction yet.</li>';
-  const recent = recentArr.slice(-3).map(i => `<li>${i}</li>`).join('') || recentDefault;
-
   const flags = (npc.active_flags ?? []).map(f => {
     const timer = npc.flag_timers?.[f];
     return `<span class="nflag">${f.replace(/_/g,' ')}${timer != null ? `<span class="nflag-timer"> ${timer}t</span>` : ''}</span>`;
@@ -147,7 +141,6 @@ function buildNpcCard(npc, currentDate) {
       ${buildMeter(npc.trust_meter, 'Trust')}
     </div>
     <div class="npc-traits" style="margin-top:6px">${traitBars}</div>
-    <ul class="npc-recent" style="margin-top:4px">${recent}</ul>
     ${flags ? `<div class="npc-flags" style="margin-top:4px">${flags}</div>` : ''}
     <button class="npc-detail-btn" data-id="${npc.id}">Full Details ↗</button>`;
 

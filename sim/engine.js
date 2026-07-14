@@ -186,27 +186,32 @@ export function applyCascadingEffects(stats) {
 // ─── EMOTION COMPUTATION ──────────────────────────────────────────────────────
 export function computeCharacterEmotions(stats, consequences = []) {
   const e = [];
-  if (stats.hunger >= 80)       e.push({ label: 'Starving',  cause: 'Hasn\'t eaten in hours' });
-  else if (stats.hunger >= 60)  e.push({ label: 'Hungry',    cause: 'Stomach is growling' });
-  if (stats.health <= 20)       e.push({ label: 'Sick',      cause: 'Body is failing' });
-  else if (stats.health <= 40)  e.push({ label: 'Unwell',    cause: 'Not feeling right' });
-  if (stats.energy <= 10)       e.push({ label: 'Exhausted', cause: 'Running on empty' });
-  else if (stats.energy <= 25)  e.push({ label: 'Tired',     cause: 'Low on energy' });
-  if (stats.hygiene <= 15)      e.push({ label: 'Grimy',     cause: 'Badly needs a wash' });
-  if (stats.mood <= 15)         e.push({ label: 'Depressed', cause: 'Mood has bottomed out' });
-  else if (stats.mood <= 30)    e.push({ label: 'Down',      cause: 'Feeling low' });
-  else if (stats.mood >= 80)    e.push({ label: 'Upbeat',    cause: 'In good spirits' });
-  if (stats.social <= 15)       e.push({ label: 'Isolated',  cause: 'Disconnected from everyone' });
-  if (stats.arousal >= 70)      e.push({ label: 'Tense',     cause: 'Pent-up tension' });
+  if (stats.hunger >= 80)       e.push({ label: 'Starving',   cause: 'Hasn\'t eaten in hours' });
+  else if (stats.hunger >= 60)  e.push({ label: 'Hungry',     cause: 'Stomach is growling' });
+  if (stats.health <= 20)       e.push({ label: 'Sick',       cause: 'Body is failing' });
+  else if (stats.health <= 40)  e.push({ label: 'Unwell',     cause: 'Not feeling right' });
+  if (stats.energy <= 10)       e.push({ label: 'Exhausted',  cause: 'Running on empty' });
+  else if (stats.energy <= 25)  e.push({ label: 'Tired',      cause: 'Low on energy' });
+  if (stats.hygiene <= 15)      e.push({ label: 'Grimy',      cause: 'Badly needs a shower' });
+  else if (stats.hygiene <= 30) e.push({ label: 'Unkempt',    cause: 'Could use a wash' });
+  if (stats.mood <= 15)         e.push({ label: 'Depressed',  cause: 'Mood has bottomed out' });
+  else if (stats.mood <= 30)    e.push({ label: 'Down',       cause: 'Feeling low' });
+  else if (stats.mood >= 88)    e.push({ label: 'Elated',     cause: 'Riding high right now' });
+  else if (stats.mood >= 75)    e.push({ label: 'Upbeat',     cause: 'In good spirits' });
+  if (stats.social <= 15)       e.push({ label: 'Isolated',   cause: 'Disconnected from everyone' });
+  else if (stats.social >= 80)  e.push({ label: 'Connected',  cause: 'Present and social' });
+  if (stats.arousal >= 80)      e.push({ label: 'Aroused',    cause: 'Strong physical need' });
+  else if (stats.arousal >= 65) e.push({ label: 'Restless',   cause: 'Pent-up tension' });
   const ill = consequences.find(c => c.type === 'illness' || c.type === 'hospitalization');
-  if (ill) e.push({ label: 'Ill', cause: `${ill.type.replace(/_/g,' ')} — ${ill.duration}t left` });
+  if (ill)   e.push({ label: 'Ill',      cause: `${ill.type.replace(/_/g,' ')} — ${ill.duration}t left` });
   const unemp = consequences.find(c => c.type === 'unemployment');
   if (unemp) e.push({ label: 'Stressed', cause: 'Out of work' });
-  if (!e.length) {
-    e.push(stats.mood >= 65 && stats.health >= 65 && stats.energy >= 55
-      ? { label: 'Fine',    cause: 'Everything\'s okay' }
-      : { label: 'Neutral', cause: 'Coasting' });
+  // Add positive filler only if nothing else qualifies and stats are decent
+  if (e.length < 2 && stats.mood >= 65 && stats.health >= 65 && stats.energy >= 55) {
+    if (!e.find(em => ['Upbeat','Elated','Connected'].includes(em.label)))
+      e.push({ label: 'Fine', cause: 'Everything\'s holding together' });
   }
+  if (!e.length) e.push({ label: 'Neutral', cause: 'Coasting through the day' });
   return e.slice(0, 3);
 }
 

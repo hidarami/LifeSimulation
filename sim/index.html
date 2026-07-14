@@ -367,8 +367,9 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 /* ── EMOTION STATUS ──────────────────────────────────────────────────────── */
 #char-status{display:flex;flex-wrap:wrap;gap:4px;min-height:0}
 .emotion-badge{
-  font-size:10px;padding:2px 7px;border-radius:10px;cursor:help;position:relative;
+  font-size:9px;padding:1px 5px;border-radius:8px;cursor:help;position:relative;
   background:var(--sur2);border:1px solid var(--bdr);color:var(--dim);
+  white-space:nowrap;flex-shrink:0;
 }
 .emotion-badge.neg{border-color:#7a2020;background:#2a0f0f;color:#d07070}
 .emotion-badge.pos{border-color:#1a4a1a;background:#0f230f;color:#70c070}
@@ -511,7 +512,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
       <div id="char-header-row1">
         <div id="char-avatar" title="Character sheet">?</div>
         <div id="char-info">
-          <div id="char-name">—</div>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0;overflow:hidden">
+            <div id="char-name">—</div>
+            <div id="char-status" style="display:flex;flex-wrap:wrap;gap:3px;min-height:0"></div>
+          </div>
           <div id="h-cash">₱0</div>
         </div>
         <div id="h-time"></div>
@@ -521,8 +525,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
           <div class="menu-line"></div>
         </div>
       </div>
-      <div id="char-status" style="padding:0 14px 6px;display:flex;flex-wrap:wrap;gap:4px;min-height:0"></div>
-      </div>
+    </div>
     <div id="processing-bar"></div>
     <div id="center-stats-wrap"><div id="center-stats"></div></div>
     <div id="feed">
@@ -1201,10 +1204,15 @@ async function startNewGame() {
           }
         }
         if (enriched.starting_possessions?.length) {
-          // Always prefer enriched (more detailed) — keep lorebook items not duplicated by name
-          const enrichedNames = new Set(enriched.starting_possessions.map(p => p.name?.toLowerCase()));
-          const lorebook_extras = (ws.player.possessions ?? []).filter(p => !enrichedNames.has(p.name?.toLowerCase()));
-          ws.player.possessions = [...enriched.starting_possessions, ...lorebook_extras];
+          // Merge with strict name dedup — enriched takes priority, lorebook fills gaps
+          const _seenPoss = new Set();
+          const _allPoss = [...enriched.starting_possessions, ...(ws.player.possessions ?? [])];
+          ws.player.possessions = _allPoss.filter(p => {
+            const _k = (p.name ?? '').toLowerCase().trim();
+            if (!_k || _seenPoss.has(_k)) return false;
+            _seenPoss.add(_k);
+            return true;
+          });
         }
       }
     }
@@ -1306,6 +1314,7 @@ async function processTurn(input) {
     let statDeltas={}, relDeltas={}, timeCost=0.25, locationChange=null, npcReactions=[];
     let riskResult={roll:100,severity:null,event:null}, consequenceUpd=null;
     let actionDesc = input;
+    let _mentionedNpc = null; // NPC explicitly named in player input — set in PATH_1 block
     const route = routeInput(input);
 
     if (route === ROUTE.PATH_1_EXPLICIT) {
@@ -1319,14 +1328,20 @@ async function processTurn(input) {
       if (compound.ate) { statDeltas.hunger=(statDeltas.hunger??0)-30; statDeltas.mood=(statDeltas.mood??0)+5; }
       if (compound.location_hint) locationChange = compound.location_hint;
       timeCost = 0.5;
+      _mentionedNpc = Object.values(ws.npcs).find(n =>
+        n.status === 'active' && n.name && input.toLowerCase().includes(n.name.toLowerCase())
+      );
       const partnerTag = (thirdParty && NEEDS_PARTNER.includes(type))
-        ? ' — described partner in scene'
+        ? ` — described partner in scene${_mentionedNpc ? ': ' + _mentionedNpc.name : ''}`
         : (!hasActiveNpc && !thirdParty ? ' — no established partner' : '');
       actionDesc = `[explicit: ${type}${partnerTag}]` + (compound.ate ? ' + ate' : '');
       // Auto-register described third party via Groq (async, non-blocking)
       if (thirdParty && !hasActiveNpc && NEEDS_PARTNER.includes(type)) {
         evaluateDescribedNpc(input).then(nd => {
-          if (nd?.id && !WS?.npcs?.[nd.id]) {
+          const _p1NpcNameExists = Object.values(WS?.npcs ?? {}).some(n =>
+            n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim()
+          );
+          if (nd?.id && !WS?.npcs?.[nd.id] && !_p1NpcNameExists) {
             const newNpc = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} });
             newNpc.relationship_meter = nd.relationship_meter ?? 20;
             newNpc.trust_meter = nd.trust_meter ?? 10;
@@ -1369,18 +1384,43 @@ async function processTurn(input) {
     }
     else { timeCost=autopilotHours(input); statDeltas=autopilotDeltas(input,timeCost); actionDesc='[autopilot]'; }
 
-    // Track explicit encounter in NPC recent_interactions
+    // Evaluate NPC reaction for explicit turns — gives Grok reaction context + enforces gating
     if (route === ROUTE.PATH_1_EXPLICIT) {
-      const NEEDS_PARTNER = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
-      const explicitType = actionDesc.match(/\[explicit:\s*([^\s\]]+)/)?.[1] ?? '';
-      if (NEEDS_PARTNER.includes(explicitType) && !actionDesc.includes('no established partner')) {
-        const inputLower = input.toLowerCase();
-        const namedNpc = Object.values(ws.npcs).find(n =>
-          n.status === 'active' && n.significance >= 1 && n.name && inputLower.includes(n.name.toLowerCase())
-        ) ?? Object.values(ws.npcs).find(n => n.status === 'active' && n.significance >= 1);
-        if (namedNpc) {
-          const ri = ws.npcs[namedNpc.id].recent_interactions ?? [];
-          ws.npcs[namedNpc.id] = { ...ws.npcs[namedNpc.id], recent_interactions: [...ri, `Intimate encounter — turn ${ws.turn + 1}`].slice(-5) };
+      const _EXP_PARTNER_TYPES = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
+      const _explicitType = actionDesc.match(/\[explicit:\s*(\w+)/)?.[1] ?? '';
+      if (_EXP_PARTNER_TYPES.includes(_explicitType) && !actionDesc.includes('no established partner')) {
+        const _targetNpc = _mentionedNpc
+          ?? Object.values(ws.npcs).find(n => n.status === 'active' && n.significance >= 1);
+        if (_targetNpc && ws.npcs[_targetNpc.id]) {
+          try {
+            const _expCtx = buildNpcContextForGemini(_targetNpc, ws.sim_time);
+            const _expRxn = await evaluateNpcReaction(
+              _expCtx,
+              `[explicit: ${_explicitType}] — player performs this with ${_targetNpc.name}`,
+              ws.player.stats
+            );
+            if (_expRxn) {
+              ws.npcs[_targetNpc.id] = applyRelationshipDelta(ws.npcs[_targetNpc.id], _expRxn.relationship_delta ?? 0, _expRxn.trust_delta ?? null);
+              for (const f of _expRxn.flags_to_add ?? [])
+                ws.npcs[_targetNpc.id] = addFlag(ws.npcs[_targetNpc.id], f.flag, FLAG_DECAY[f.decay_rate] ?? FLAG_DECAY.medium);
+              ws.npcs[_targetNpc.id] = incrementSignificance(ws.npcs[_targetNpc.id]);
+              relDeltas[_targetNpc.id] = _expRxn.relationship_delta ?? 0;
+              if (_expRxn.reaction_summary) {
+                npcReactions.push({ npc_id: _targetNpc.id, summary: _expRxn.reaction_summary });
+                const _ri = ws.npcs[_targetNpc.id].recent_interactions ?? [];
+                ws.npcs[_targetNpc.id].recent_interactions = [..._ri, _expRxn.reaction_summary].slice(-5);
+              }
+              if ((_expRxn.relationship_delta ?? 0) <= -5)
+                ws.npcs[_targetNpc.id] = driftTraits(ws.npcs[_targetNpc.id], { mistreated: true });
+              else if ((_expRxn.trust_delta ?? 0) >= 6)
+                ws.npcs[_targetNpc.id] = driftTraits(ws.npcs[_targetNpc.id], { deepTrust: true });
+            }
+          } catch (_npcErr) {
+            // Fallback: just log the interaction without Gemini evaluation
+            const _ri = ws.npcs[_targetNpc.id].recent_interactions ?? [];
+            ws.npcs[_targetNpc.id] = { ...ws.npcs[_targetNpc.id],
+              recent_interactions: [..._ri, `Intimate encounter — turn ${ws.turn + 1}`].slice(-5) };
+          }
         }
       }
     }
@@ -1435,7 +1475,10 @@ async function processTurn(input) {
         .find((n, i, arr) => arr.indexOf(n) === i);
       if (_newName) {
         evaluateDescribedNpc(prose.slice(0, 500)).then(nd => {
-          if (nd?.id && nd?.name && WS && !WS.npcs?.[nd.id]) {
+          const _proseNpcExists = Object.values(WS?.npcs ?? {}).some(n =>
+            n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim()
+          );
+          if (nd?.id && nd?.name && WS && !WS.npcs?.[nd.id] && !_proseNpcExists) {
             const _nn = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} });
             _nn.relationship_meter = nd.relationship_meter ?? 10;
             _nn.trust_meter = nd.trust_meter ?? 5;
@@ -1465,7 +1508,12 @@ async function processTurn(input) {
 
     // NPC initiative — async, non-blocking, every 3rd turn
     if (ws.turn % 3 === 0) {
-      const activeNpcs = Object.values(ws.npcs).filter(n => n.status === 'active' && n.significance >= 1);
+      const activeNpcs = Object.values(ws.npcs).filter(n => {
+        if (n.status !== 'active' || n.significance < 1 || n.relationship_meter < 20) return false;
+        const _nTask = getNpcCurrentTask(n, ws.sim_time);
+        // Hard-gate: sleeping NPCs NEVER initiate
+        return _nTask.task !== 'sleeping' && _nTask.task !== 'morning_prep' && _nTask.available;
+      });
       if (activeNpcs.length) {
         const npcCtxs = activeNpcs.map(n => buildNpcContextForGemini(n, ws.sim_time));
         checkNpcInitiative(npcCtxs, ws.player.stats, ws.turn).then(inits => {

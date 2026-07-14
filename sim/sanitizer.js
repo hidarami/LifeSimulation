@@ -52,6 +52,13 @@ export function classifyExplicitActivity(input) {
   if (/\b(makeout|make\s*out|making\s*out|french\s*kiss)\b/.test(n)) return 'makeout';
   if (/\b(masturbat|touch\s*myself|jerk\s*off\s*alone|solo|rub\s*(one|myself))\b/.test(n)) return 'solo_masturbation';
   if (/\b(69|sixty.?nine|mutual|each\s*other)\b/.test(n)) return 'mutual_masturbation';
+  if (/\b(doggy(\s*style)?|missionary|cowgirl|reverse\s*cowgirl|69\b|sixty.?nine)\b/.test(n)) return 'mutual_masturbation';
+  // Catch loose patterns missed above
+  if (/\bsuck(ing)?\s+(it|him|them|that|his)\b/i.test(n)) return 'oral_giving';
+  if (/\bblow(ing)?\s+(it|him|them)\b/i.test(n)) return 'oral_giving';
+  if (/\bjerk\s+it\s+off\b/i.test(n)) return 'manual_giving';
+  if (/\bstroke\s+(it|him|them)\b/i.test(n)) return 'manual_giving';
+  if (/\bsuck(ing)?\b.{0,60}\bcum\b/i.test(n)) return 'oral_giving';
   return 'intercourse'; // ambiguous explicit default
 }
 
