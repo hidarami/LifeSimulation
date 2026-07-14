@@ -70,10 +70,8 @@ export function createInitialWorldState(playerName, startDate) {
 
     // Last Grok prose — for narrative continuity across turns and page reloads
     last_narration_prose: '',
-
-    // Session flavor — OPTIONAL; not required for continuity.
-    // Grok can use it or ignore it. Never the sole source of context.
     session_context_flavor: '',
+    setting_description: '',
   };
 }
 

@@ -613,21 +613,21 @@ export async function enrichWorldDetails(lorebook, ws) {
   const npcNames = Object.values(ws.npcs ?? {}).map(n => `${n.name} (${n.relationship_type ?? n.npc_class})`).join(', ') || 'none';
   const startYear = ws.sim_time ? new Date(ws.sim_time).getFullYear() : new Date().getFullYear();
 
-  const prompt = `You are world-building for a life simulation. Generate specific creative details the lorebook didn't explicitly state. Be realistic and culturally accurate to the setting's country and culture.
+  const prompt = `You are world-building for a life simulation. Generate creative, specific details the lorebook didn't state. Match the setting's actual country, culture, and economic class accurately.
 
 Lorebook: """${lorebook.slice(0, 1500)}"""
 
 Known context:
 - Player age: ${ws.player?.age ?? 18}, Start year: ${startYear}
-- Location type: ${ws.player?.location ?? 'unknown'}
 - Known NPCs: ${npcNames}
 - Has parsed job: ${ws.job ? 'yes (' + (ws.job.position ?? 'unknown') + ')' : 'no'}
 
 Return ONLY valid JSON (no markdown fences):
 {
-  "location_name": "specific Filipino location — Brgy. [name], [Municipality], [Province]. Match lorebook geography clues.",
+  "location_name": "full specific address — sitio/street, barangay, municipality, province (or equivalent for non-PH settings)",
+  "setting_description": "3–4 sentences describing the character's home with physical, sensory detail. Include layout, sounds, smells, economic class markers. Present tense, as if standing there now.",
   "school": {
-    "name": "realistic school name for a rural Philippine community",
+    "name": "realistic school name matching the setting's country and region",
     "grade_level": "e.g. Grade 12 - HUMSS Strand",
     "schedule": "e.g. Mon–Fri 6:30 AM – 4:00 PM",
     "status": "active"
@@ -640,18 +640,21 @@ Return ONLY valid JSON (no markdown fences):
     "days_active": 45
   },
   "starting_possessions": [
-    { "name": "short item name", "condition": "one phrase for current physical state", "note": "what it is used for or its story", "value_peso": 800_or_null, "acquired_method": "bought|gifted|inherited|found" }
-  ]
+    { "name": "short item name", "condition": "one phrase for current physical state", "note": "what it is used for or its story", "value_peso": null, "acquired_method": "bought|gifted|inherited|found" }
+  ],
+  "npc_descriptions": {
+    "firstname_lowercase": "2–3 sentences: physical appearance, a typical mannerism or habit, and their specific role in the character's life. Reference their age and relationship. Be concrete — no generic filler."
+  }
 }
 
 Rules:
-- location_name: "specific location matching the lorebook's stated setting. If lorebook mentions a city/municipality, add street or barangay-level detail within that exact place. If no location is stated in the lorebook, infer from cultural context and generate an appropriate specific address. Do NOT default to any specific province unless the lorebook explicitly names it."
-- school: include ONLY if player is clearly a student. SHS Grade 12 = 17–18 yrs old in 2018.
+- location_name: CRITICAL — if the lorebook names a city, town, province, or barangay, stay within that EXACT geography and add street or sitio-level detail. If the lorebook says NOTHING about location, infer from character name, language, and cultural cues — do NOT default to any preset province. Generate a plausible specific address within the inferred country and region.
+- setting_description: describe only what lorebook implies or states. If it says "cramped apartment" describe that. If "province house" describe that. Fill visual gaps with class-appropriate sensory detail. Never contradict the lorebook.
+- school: include ONLY if player is clearly an enrolled student. SHS Grade 12 = 17–18 yrs in Philippine context. Return null if not a student.
 - job_enrichment: include ONLY if lorebook mentions a job or income. Return null if none.
-- days_active: AGE-REALISTIC. A 17-yr-old in 2018 cannot have 3 years of adult streaming history. Max ~200 days.
-- starting_possessions: 4–7 items matching the character's economic class and lifestyle. Infer from background even if lorebook doesn't list items. Do NOT return an empty array — always generate possessions.
-- Return null for school if player is NOT described as a student.
-- Return null for job_enrichment if player has NO mentioned income source.`;
+- days_active: AGE-REALISTIC. A 17-yr-old in 2018 cannot have years of adult work history. Max ~200 days.
+- starting_possessions: 4–7 items matching character's economic class and lifestyle. Always generate — never return empty array.
+- npc_descriptions: generate for EVERY named NPC in the lorebook. Use their first name in lowercase as the key. Each description must be specific to their age, role, and implied personality — not generic.`;
 
   try {
     const res = await fetch(GROQ_URL, {

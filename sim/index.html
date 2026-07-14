@@ -1007,6 +1007,7 @@ function openCharModal() {
     <div id="modal-char-avatar-lg">${(p.name||'?').charAt(0).toUpperCase()}</div>
     <div class="section-hdr">Identity</div>
     ${rows.map(([k,v])=>`<div class="char-row"><span class="char-key">${k}</span><span class="char-val">${v}</span></div>`).join('')}
+    ${WS.setting_description ? `<div class="section-hdr" style="margin-top:14px">Setting</div><div style="font-size:12px;color:var(--dim);line-height:1.75;font-family:var(--fs);padding:4px 0 2px">${WS.setting_description}</div>` : ''}
     ${p.habits?.length ? `<div class="section-hdr" style="margin-top:14px">Habits</div>${p.habits.map(h=>`<div class="poss">${h}</div>`).join('')}` : ''}
     ${p.irreversible?.length ? `<div class="section-hdr" style="margin-top:14px">Permanent</div>${p.irreversible.map(i=>`<div class="irrev">${i}</div>`).join('')}` : ''}
   `;
@@ -1069,6 +1070,8 @@ function openNpcModal(npcId) {
     <div id="npc-detail-avatar">${(npc.name||'?').charAt(0).toUpperCase()}</div>
     <div style="text-align:center;margin-bottom:4px;font-size:13px;font-weight:700;color:var(--txt)">${npc.name}</div>
     <div style="text-align:center;margin-bottom:14px;font-size:11px;color:var(--dim)">${(npc.relationship_type??npc.npc_class??'').replace(/_/g,' ')} · Age ${npc.age} · ${npc.npc_class}</div>
+
+    ${npc.bio ? `<div class="npc-d-section"><div class="npc-d-title">About</div><div style="font-size:12px;color:var(--txt);line-height:1.75;font-family:var(--fs);padding:2px 0">${npc.bio}</div></div>` : ''}
 
     ${taskHtml}
 
@@ -1241,6 +1244,15 @@ async function startNewGame() {
       const enriched = await enrichWorldDetails(lorebook, ws).catch(() => null);
       if (enriched) {
         if (enriched.location_name) ws.player.location = enriched.location_name;
+        if (enriched.setting_description) ws.setting_description = enriched.setting_description;
+        if (enriched.npc_descriptions && typeof enriched.npc_descriptions === 'object') {
+          for (const [key, bio] of Object.entries(enriched.npc_descriptions)) {
+            const _bioNpc = Object.values(ws.npcs).find(n =>
+              n.name?.toLowerCase().split(/\s+/)[0] === key.toLowerCase()
+            );
+            if (_bioNpc && ws.npcs[_bioNpc.id]) ws.npcs[_bioNpc.id].bio = bio;
+          }
+        }
         if (enriched.school?.name)  ws.school = enriched.school;
         if (enriched.job_enrichment) {
           if (ws.job) {

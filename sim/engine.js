@@ -182,8 +182,8 @@ export function applyCascadingEffects(stats) {
   else if (s.hunger >= 65)  { c.energy = -7;  c.mood = -5;  c.social = -4; }
   else if (s.hunger >= 45)  { c.energy = -2;  c.mood = -1; }
   // Low energy → mood, hygiene
-  if (s.energy <= 10)       { c.mood = (c.mood ?? 0) - 10; c.hygiene = (c.hygiene ?? 0) - 4; }
-  else if (s.energy <= 25)  { c.mood = (c.mood ?? 0) - 4; }
+  if (s.energy <= 10)       { c.mood = (c.mood ?? 0) - 6; c.hygiene = (c.hygiene ?? 0) - 2; }
+  else if (s.energy <= 25)  { c.mood = (c.mood ?? 0) - 3; }
   // Low mood → social, energy
   if (s.mood <= 15)         { c.social = (c.social ?? 0) - 12; c.energy = (c.energy ?? 0) - 5; }
   else if (s.mood <= 30)    { c.social = (c.social ?? 0) - 5; }
