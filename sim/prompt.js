@@ -78,10 +78,17 @@ PROHIBITED:
 - Authorial guidance, therapeutic language, or foreshadowing
 - Any translation of Tagalog
 
-AUTOPILOT (no input or "continue normally"):
-Priority order: Survival → Commitments → Habits → Risk avoidance
-- Execute routines, advance time, NPCs pursue independent goals
-- Opportunities may expire; risk checks roll proportionally
+AUTOPILOT (action_taken is "[autopilot]"):
+The elapsed period is COMPLETE. Do NOT continue the previous scene — write a retrospective summary of what already happened over the full duration.
+MANDATORY:
+- Past tense throughout the elapsed period
+- Summarize the block as a FINISHED UNIT: what occurred, how it concluded
+- End the narration at the END of the activity — do NOT describe waking up, arriving, or anything that happens after the block
+- OVERRIDE CONTINUITY: do not extend from the last narration's final moment; that scene is closed
+- If nothing noteworthy happened: one spare factual sentence is sufficient
+- If something noteworthy occurred during the period: 2–3 sentences, still all past tense, still retrospective
+- NPCs pursued their own schedules independently during this time
+- Risks rolled and consequences accumulated in the background without the player's attention
 
 TIME ADVANCEMENT:
 Each response simulates a minimum of 1 in-game hour. Duration scales with context:
@@ -92,6 +99,12 @@ CRITICAL: Use ONLY sim_time_formatted from the turn brief for all time reference
 It is a pre-formatted local time string e.g. "09:45 PM · Mon, Jul 13, 2026".
 Never parse or interpret raw ISO timestamps. Never invent or approximate times.
 If sim_time_formatted says 09:45 PM, the scene is late evening — period.
+
+UPCOMING SCHEDULE:
+If the turn brief includes upcoming_schedule (a list of commitments starting within the next 2 in-game hours), weave one indirect casual mention into the narration — as the character's own ambient awareness, not an author's heads-up.
+Express it through physical behavior: a glance at a phone, an alarm already set, clothes prepared the night before, a thought that surfaces briefly and passes.
+One mention maximum per narration. Skip entirely if the scene has no natural opening for it.
+Never say "you should get ready," "you have class soon," or anything that sounds like a reminder from outside the character's head.
 
 WORLD AMBIENT:
 The world has its own rhythm independent of the player. Use time-of-day to add grounding to scene-setting.
@@ -155,6 +168,7 @@ CONTINUITY:
 The turn brief includes last_narration — the previous turn's prose.
 Maintain the same location, characters present, and scene state.
 Do not re-introduce NPCs or settings already established. Continue the thread; do not restart it.
+AUTOPILOT EXCEPTION: When action_taken is "[autopilot]", the previous scene is closed. Do NOT continue from its final moment. Write the retrospective completed-time summary described in the AUTOPILOT section above. The prior prose is background context only, not a thread to extend.
 
 - "Go to work" → autopilot; narrate exceptions only; report outcome
 - "Time jump" → execute routines, advance clock, run risk checks
@@ -307,6 +321,7 @@ Rules:
   Daily friction between people who live together is normal life — it produces NO flag whatsoever.
   When uncertain, return an empty array. Calibrate toward fewer flags, not more.
 - Sexual/intimate context flags (only when action is explicitly sexual): "aroused" (NPC is physically responding — short duration), "post_first_sexual_encounter" (after a first sexual act with this NPC — decay slow), "mutual_unspoken_tension" (after intimate contact that changes the social dynamic — decay medium), "comfortable_intimacy" (established physical familiarity — decay slow), "uncomfortable" (NPC did not want this — required if gating thresholds not met).
+- SCHEDULE CONFLICT: If current_task is "work", "school", or "morning_prep" AND the player's action would require the NPC to leave or abandon that task: the NPC must make a real decision. Resolution is driven by traits and relationship — high ambition or dominance with a non-urgent request → decline and offer an alternative time; high warmth + relationship_meter above 50 + urgent situation → may comply but the reaction_summary must note it costs them something; if interruptible is false → the NPC physically cannot comply regardless of warmth. relationship_delta reflects whether the player respected or pressured the NPC's existing commitment.
 - NPC traits are HARD behavioral constraints — enforce strictly, no exceptions:
   * openness < 30: refuses all intimate contact unless trust_meter >= 60 AND relationship_meter >= 40 — return relationship_delta -5 to -15 if pushed
   * openness 30–50 AND relationship_meter < 20: no romantic or sexual contact — return relationship_delta -3 to -8 and flag "uncomfortable"
@@ -335,29 +350,30 @@ Rules:
 // Includes concrete examples of correct and incorrect register.
 
 export function buildGeminiAutopilotPrompt(sanitizedState, hours, activityLabel) {
-  return `You are a narration engine for a life simulation. Write one short paragraph narrating a mundane time-skip.
+  const hrLabel = hours >= 1 ? `${hours} hour${hours !== 1 ? 's' : ''}` : `${Math.round(hours * 60)} minutes`;
+  return `Write a COMPLETED TIME-SKIP SUMMARY for a life simulation. The time has already elapsed. This is NOT a continuation of the current scene — it is a retrospective account of a finished period.
 
-STYLE GUIDE — match this register exactly:
-- Spare and direct. Short sentences. No flowery language.
-- Past tense. Third person.
-- No drama. No emotional commentary. No reflection.
-- Do NOT begin with the character's name.
-
-Correct register examples:
-  "The commute was the same as every other. Forty minutes of fluorescent light and strangers."
-  "Sleep came without ceremony. Eight hours. The alarm did its job."
-  "The shift passed. Counters wiped, orders filled, the same four walls."
-
-Incorrect register (do not write like this):
-  "Sunlight poured like honey through the blinds, wrapping the morning in gold..." — too flowery
-  "He reflected on his choices as the bus hummed beneath him..." — no reflection
-  "It was a long and exhausting commute that tested his resolve..." — no drama
-
-Time skipped: ${hours} hour${hours !== 1 ? 's' : ''}
-Activity: ${activityLabel ?? 'routine activity'}
+WHAT ALREADY HAPPENED:
+Activity: ${activityLabel}
+Duration: ${hrLabel}
 Location: ${sanitizedState.player?.location ?? 'unknown'}
 
-Write the narration paragraph only. No TURN ANCHOR. No stat values. No character name as the first word.`;
+ALL RULES ARE MANDATORY:
+- Second person (you/your). Past tense throughout.
+- 2–4 sentences maximum.
+- Summarize the ENTIRE completed activity — do not stop mid-period or narrate from the middle of it
+- END the narration at the conclusion of the activity. Do not describe what happens immediately after.
+- No drama, no internal reflection, no emotional labels. Spare and factual.
+- Do NOT start with the character's name
+- Do NOT open with present-tense continuation phrasing: "You wake", "You arrive", "You begin", "You find yourself", "As you...", "You start to..."
+- One grounded sensory detail is permitted only if it marks something that changed during the period
+- Do not narrate what the character does NEXT after the activity ends
+
+Style benchmark (tone only):
+- Correct: past-tense, matter-of-fact, closes at the end of the activity
+- Incorrect: present-tense continuation, flowery prose, dramatic framing, internal monologue
+
+Write only the 2–4 sentence summary. No turn markers. No stat values.`;
 }
 
 // ─── GEMINI: NPC AUTOPILOT FLAG CHECK ────────────────────────────────────────

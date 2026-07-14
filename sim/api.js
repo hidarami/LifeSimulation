@@ -568,34 +568,54 @@ export async function evaluateDescribedNpc(playerInput) {
   const groqKey = localStorage.getItem('GROQ_API_KEY');
   if (!groqKey) return null;
 
-  const prompt = `From this player action, extract the described third party person.
+  const prompt = `Analyze this text and determine whether a specific human person had a meaningful interaction worth tracking as an ongoing character.
 
-Player action: "${playerInput.slice(0, 300)}"
+Text: "${playerInput.slice(0, 400)}"
 
-Return ONLY valid JSON:
+SIGNIFICANCE LEVELS — assign one:
+"significant" — Had real back-and-forth conversation, physical contact, emotional exchange, or will clearly appear again. Worth creating an ongoing record.
+"passing" — Was briefly present, said hello, walked by, or was mentioned without direct sustained interaction.
+"none" — No distinct person, or the entity is non-human.
+
+HARD FILTERS — return found:false immediately if any apply:
+- Animals of any kind (insects, pets, wildlife — including flies, mosquitoes, dogs, cats)
+- Objects, furniture, appliances, fixtures, or any inanimate thing
+- An unnamed crowd, group, or collection of people without individual distinction
+- A person only seen or mentioned without any interaction beyond a glance or passing
+
+FAMILY TERMS always refer to humans — extract mother, father, brother, sister, etc. even if lowercase.
+
+Return ONLY valid JSON, no markdown:
 {
   "found": boolean,
-  "id": "lowercase_descriptor e.g. brothers_friend or jay or maria",
-  "name": "descriptive name if none given e.g. \"Brother's Friend\", otherwise their name",
-  "age": estimated_age_as_number,
+  "significance": "significant" | "passing" | "none",
+  "id": "unique lowercase identifier using name or specific role",
+  "name": "their name if given, otherwise their specific role — never a generic label",
+  "age": estimated_number_or_null,
   "npc_class": "intimate|household|professional|institutional",
-  "traits": { "jealousy":50,"honesty":50,"patience":50,"warmth":50,"ambition":50,"impulsivity":50,"dominance":50,"openness":50 },
-  "relationship_meter": 20,
-  "trust_meter": 10
+  "traits": {
+    "jealousy": number,
+    "honesty": number,
+    "patience": number,
+    "warmth": number,
+    "ambition": number,
+    "impulsivity": number,
+    "dominance": number,
+    "openness": number
+  },
+  "relationship_meter": number,
+  "trust_meter": number
 }
 
-CRITICAL: Only extract HUMAN persons. DO NOT extract:
-- Animals, insects, pets (dog, cat, fly, mosquito, bird, etc.)
-- Objects, vehicles, inanimate things
-- Abstract concepts or weather phenomena
+TRAIT RULES — inference only, no defaults or templates:
+- Each trait must be inferred independently from how the person spoke, acted, or was described
+- Age, role, and the tone of the interaction all imply different trait values — use them
+- Every trait must fall between 10 and 90; values outside that range only when context is extreme
+- At least four traits must differ from each other by more than 15 points — if they all look similar, you have not inferred enough
+- relationship_meter: infer from the interaction's emotional tone — fresh stranger contacts near 0, warmly received interactions toward low positives, hostile toward negatives
+- trust_meter: typically slightly lower than relationship_meter for new contacts
 
-FAMILY MEMBERS: ALWAYS extract family members mentioned as people:
-- mother, father, mom, dad, brother, sister, aunt, uncle, cousin, grandmother, grandfather
-- Even if mentioned in lowercase, these are ALWAYS human persons
-- Set npc_class to "household" for family members
-
-If the described entity is non-human, return { "found": false }.
-If no clear third party is physically present and acting, return { "found": false }.`;
+If significance is not "significant", return found:false rather than creating a low-value record.`;
 
   try {
     const res = await fetch(GROQ_URL, {

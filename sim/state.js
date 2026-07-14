@@ -201,6 +201,25 @@ export function updateEventIndex(worldState, key, description, turn) {
   };
 }
 
+// ─── SCHEDULE HELPERS ─────────────────────────────────────────────────────────
+function _parseScheduleStartHour(schedStr) {
+  if (!schedStr || typeof schedStr !== 'string') return null;
+  // Try "7:30 AM", "07:00 AM", "7AM" patterns
+  const m12 = schedStr.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+  if (m12) {
+    let h = parseInt(m12[1]);
+    const mn = m12[2] ? parseInt(m12[2]) : 0;
+    const ap = m12[3].toUpperCase();
+    if (ap === 'PM' && h < 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+    return h + mn / 60;
+  }
+  // Try 24h: "07:30", "7:00"
+  const m24 = schedStr.match(/\b(\d{1,2}):(\d{2})\b/);
+  if (m24) return parseInt(m24[1]) + parseInt(m24[2]) / 60;
+  return null;
+}
+
 // ─── TURN BRIEF ASSEMBLY ──────────────────────────────────────────────────────
 // Fix #1: turn brief draws from structured event_index, not a narrative summary.
 // session_context_flavor is included as optional flavor — not required continuity.
@@ -229,6 +248,23 @@ export function assembleTurnBrief(worldState, turnData) {
     ' · ' +
     _td.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
+  // Upcoming schedule — commitments starting within 2 in-game hours
+  const _nowH = _td.getHours() + _td.getMinutes() / 60;
+  const _isWkday = _td.getDay() >= 1 && _td.getDay() <= 5;
+  const _upSched = [];
+  if (worldState.school?.status === 'active' && _isWkday) {
+    const _sh = _parseScheduleStartHour(worldState.school.schedule);
+    if (_sh !== null && _sh > _nowH && _sh - _nowH <= 2) {
+      _upSched.push({ type: 'school', name: worldState.school.name ?? 'school', in_hours: Math.round((_sh - _nowH) * 10) / 10 });
+    }
+  }
+  if (worldState.job?.employer && _isWkday) {
+    const _jh = _parseScheduleStartHour(worldState.job.schedule);
+    if (_jh !== null && _jh > _nowH && _jh - _nowH <= 2) {
+      _upSched.push({ type: 'work', employer: worldState.job.employer, in_hours: Math.round((_jh - _nowH) * 10) / 10 });
+    }
+  }
+
   return {
     turn:               turnNumber,
     sim_time:           simTime,
@@ -254,6 +290,8 @@ export function assembleTurnBrief(worldState, turnData) {
     last_narration:     worldState.last_narration_prose || null,
     // Raw player input — Grok uses this to honor location hints and compound actions
     player_raw_input:   rawInput || null,
+    // Upcoming schedule commitments within 2 hours
+    upcoming_schedule:  _upSched.length ? _upSched : null,
   };
 }
 
