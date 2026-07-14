@@ -59,6 +59,26 @@ export function applySleepRecovery(stats, hoursSlept) {
   return s;
 }
 
+// ─── CIRCADIAN RHYTHM ─────────────────────────────────────────────────────────
+export function getCircadianModifiers(simTimeIso) {
+  const h = new Date(simTimeIso).getHours() + new Date(simTimeIso).getMinutes() / 60;
+  if (h >= 6  && h < 10) return { energy:  3, mood:  2 }; // morning clarity
+  if (h >= 10 && h < 13) return { energy:  1, mood:  1 }; // late morning
+  if (h >= 13 && h < 15) return { energy: -3, mood: -2 }; // post-lunch dip
+  if (h >= 15 && h < 19) return { energy:  0, mood:  0 }; // afternoon flat
+  if (h >= 19 && h < 22) return { energy: -2, mood: -1 }; // evening fade
+  if (h >= 22 || h < 2)  return { energy: -6, mood: -3 }; // late night
+  return                         { energy:-10, mood: -5 }; // deep night 2–6 AM
+}
+
+export function getSleepEfficiency(startHour) {
+  if (startHour >= 21 || startHour < 1) return 1.3;  // prime window
+  if (startHour >= 1  && startHour < 5) return 0.85; // early morning
+  if (startHour >= 5  && startHour < 13) return 0.60; // daytime
+  if (startHour >= 13 && startHour < 20) return 0.75; // afternoon nap
+  return 1.0;
+}
+
 // ─── TIME ─────────────────────────────────────────────────────────────────────
 export function advanceTime(currentTime, hoursElapsed) {
   const d = new Date(currentTime);
@@ -324,11 +344,12 @@ export function computeCharacterEmotions(stats, consequences = [], npcContext = 
   else if (stats.energy <= 25)  e.push({ label: 'Tired',      cause: 'Low on energy' });
   if (stats.hygiene <= 15)      e.push({ label: 'Grimy',      cause: 'Badly needs a shower' });
   else if (stats.hygiene <= 30) e.push({ label: 'Unkempt',    cause: 'Could use a wash' });
-  // Mood - allow coexistence with other emotions
-  if (stats.mood <= 15)         e.push({ label: 'Depressed',  cause: 'Mood has bottomed out' });
-  else if (stats.mood <= 30)    e.push({ label: 'Down',       cause: 'Feeling low' });
-  else if (stats.mood >= 88)    e.push({ label: 'Elated',     cause: 'Riding high right now' });
-  else if (stats.mood >= 75)    e.push({ label: 'Upbeat',     cause: 'In good spirits' });
+  // Mood — suppress positive labels when situational emotions (Embarrassed/Panicked) are active
+  const _hasSituational = e.some(em => ['Embarrassed','Panicked'].includes(em.label));
+  if (stats.mood <= 15)                              e.push({ label: 'Depressed', cause: 'Mood has bottomed out' });
+  else if (stats.mood <= 30)                         e.push({ label: 'Down',      cause: 'Feeling low' });
+  else if (!_hasSituational && stats.mood >= 88)     e.push({ label: 'Elated',   cause: 'Riding high right now' });
+  else if (!_hasSituational && stats.mood >= 75)     e.push({ label: 'Upbeat',   cause: 'In good spirits' });
   // Social - allow coexistence
   if (stats.social <= 15)       e.push({ label: 'Isolated',   cause: 'Disconnected from everyone' });
   else if (stats.social >= 80)  e.push({ label: 'Connected', cause: 'Present and social' });

@@ -120,10 +120,11 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 #feed{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:20px}
 .narration-entry{border-left:2px solid var(--bdr);padding-left:12px;animation:fadeUp .3s ease}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.turn-anchor{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em}
-.ta-num{color:var(--acc);font-weight:700}
-.ta-time{flex:1}
-.ta-loc{text-align:right;font-size:10px}
+.turn-anchor{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.ta-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em}
+.ta-num{color:var(--acc);font-weight:700;flex-shrink:0}
+.ta-time{color:var(--dim);font-size:10px;flex:1}
+.ta-loc{font-size:9px;color:var(--dim);opacity:.5;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .narration-prose{font-family:var(--fs);font-size:15px;line-height:1.9;color:var(--txt)}
 
 /* ── INPUT ───────────────────────────────────────────────────────────────── */
@@ -448,7 +449,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
   #center-stats{grid-template-columns:repeat(2,1fr)}
 }
 @media (max-width:767px){
-  #center-stats{grid-template-columns:1fr}
+  #center-stats{grid-template-columns:1fr 1fr;gap:0 8px}
+  .cstat-label{width:36px;font-size:9px}
+  .cstat-val{font-size:9px;width:16px}
+  .cstat-icon{width:12px;font-size:10px}
 }
 
 /* ── NPC CARDS COLLAPSIBLE ──────────────────────────────────────── */
@@ -530,11 +534,11 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
       <div id="char-header-row1">
         <div id="char-avatar" title="Character sheet">?</div>
         <div id="char-info">
-          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden">
             <div id="char-name">—</div>
-            <div id="char-status" style="display:flex;flex-direction:column;gap:3px;min-height:0"></div>
+            <div id="h-cash">₱0</div>
           </div>
-          <div id="h-cash">₱0</div>
+          <div id="char-status" style="display:flex;flex-direction:row;flex-wrap:wrap;gap:3px;margin-top:3px;min-height:0"></div>
         </div>
         <div id="h-time"></div>
         <div id="menu-btn" title="Menu">
@@ -543,7 +547,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
           <div class="menu-line"></div>
         </div>
       </div>
-      <div id="char-overview" style="text-align:center;font-size:10px;color:var(--dim);padding:4px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+      <div id="char-overview" style="font-size:10px;color:var(--dim);padding:2px 6px 4px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.5"></div>
     </div>
     <div id="processing-bar"></div>
     <div id="center-stats-wrap"><div id="center-stats"></div></div>
@@ -713,13 +717,14 @@ import { loadWorldState, saveWorldState, createInitialWorldState,
          getCurrentSaveId } from './state.js';
 import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
          rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION,
-         applyCascadingEffects, computeCharacterEmotions, applyCascadeEffectsToExternal } from './engine.js';
+         applyCascadingEffects, computeCharacterEmotions, applyCascadeEffectsToExternal,
+         getCircadianModifiers, getSleepEfficiency } from './engine.js';
 import { routeInput, isExplicit, classifyExplicitActivity,
          EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE,
          hasThirdPartyPresence } from './sanitizer.js';
 import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversationHistory,
          callGeminiAutopilot, compressSessionContext, parseLorebookToWorldState,
-         buildWorldWithMultipleAIs, checkNpcInitiative, evaluateDescribedNpc,
+         buildWorldWithMultipleAIs, evaluateDescribedNpc,
          enrichWorldDetails } from './api.js';
 import { renderNpcPanel, renderJobPanel,
          renderPossessionsPanel, renderNarration, renderTurnAnchor } from './renderer.js';
@@ -808,7 +813,7 @@ function setProcessing(on) {
 const CSTAT_META = {
   health:     { label: 'Health',   icon: '♥',  invert: false },
   energy:     { label: 'Energy',   icon: '⚡', invert: false },
-  hunger:     { label: 'Hunger',   icon: '🍽', invert: true  },
+  hunger:     { label: 'Satiety',  icon: '🍽', invert: true  },
   hygiene:    { label: 'Hygiene',  icon: '◈',  invert: false },
   mood:       { label: 'Mood',     icon: '◉',  invert: false },
   arousal:    { label: 'Arousal',  icon: '◈',  invert: false },
@@ -827,9 +832,10 @@ function renderCenterStats(stats) {
     if (key === 'arousal' && stats[key] === 0) continue;
     const val  = Math.round(stats[key]);
     const fill = meta.invert ? 100 - val : val;
+    const disp = meta.invert ? (100 - val) : val;
     const row  = document.createElement('div');
     row.className = 'cstat-row';
-    row.innerHTML = `<span class="cstat-icon">${meta.icon}</span><span class="cstat-label">${meta.label}</span><div class="cstat-track"><div class="cstat-fill ${cstatColor(fill)}" style="width:${fill}%"></div></div><span class="cstat-val">${val}</span>`;
+    row.innerHTML = `<span class="cstat-icon">${meta.icon}</span><span class="cstat-label">${meta.label}</span><div class="cstat-track"><div class="cstat-fill ${cstatColor(fill)}" style="width:${fill}%"></div></div><span class="cstat-val">${disp}</span>`;
     c.appendChild(row);
   }
 }
@@ -1427,7 +1433,9 @@ async function processTurn(input) {
           const _p1NpcNameExists = Object.values(WS?.npcs ?? {}).some(n =>
             n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim()
           );
-          if (nd?.id && !WS?.npcs?.[nd.id] && !_p1NpcNameExists) {
+          const _p1NH = ['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf'];
+          const _p1Human = nd?.name && /^[A-Z]/.test(nd.name) && nd.name.split(/\s+/).length <= 3 && nd.name.length <= 28 && !_p1NH.some(w => nd.name.toLowerCase().includes(w));
+          if (nd?.id && !WS?.npcs?.[nd.id] && !_p1NpcNameExists && _p1Human) {
             const newNpc = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} });
             newNpc.relationship_meter = nd.relationship_meter ?? 20;
             newNpc.trust_meter = nd.trust_meter ?? 10;
@@ -1512,8 +1520,21 @@ async function processTurn(input) {
     }
 
     const prevSimTime = ws.sim_time;
+    // Circadian-aware sleep: better recovery at night, worse during daytime
+    if (route === ROUTE.PATH_3_AUTOPILOT && /sleep|nap/i.test(input)) {
+      const _sH  = new Date(prevSimTime).getHours();
+      const _eff = getSleepEfficiency(_sH);
+      statDeltas.energy = Math.round(Math.min(timeCost * 9 * _eff, 90));
+      statDeltas.mood   = Math.round(Math.min(timeCost * 3 * _eff, 35));
+      statDeltas.health = (statDeltas.health ?? 0) + Math.round(timeCost * 0.4 * _eff);
+    }
     ws.sim_time       = advanceTime(ws.sim_time, timeCost).toISOString();
     ws.player.stats   = applyDecay(ws.player.stats, timeCost);
+    // Circadian modifiers: time-of-day energy and mood drift
+    const _circ   = getCircadianModifiers(ws.sim_time);
+    const _cScale = Math.min(timeCost, 3) * 0.25;
+    ws.player.stats.energy = Math.max(0, Math.min(100, ws.player.stats.energy + _circ.energy * _cScale));
+    ws.player.stats.mood   = Math.max(0, Math.min(100, ws.player.stats.mood   + _circ.mood   * _cScale));
 
     // Schedule miss consequences
     const missedSchedule = detectScheduleMiss(prevSimTime, ws.sim_time, input, ws);
@@ -1530,28 +1551,14 @@ async function processTurn(input) {
     ws.player.stats = applyDeltas(ws.player.stats, statDeltas);
     ws.player.stats = applyCascadingEffects(ws.player.stats);
     
-    // Apply cascade effects to job/school/relationships
+    // Cascade effects: clear dynamic flags each turn then re-evaluate — prevents accumulation
+    const _CASC = new Set(['too_sick_to_work','too_sick_to_attend','reduced_performance_health','exhausted_at_work','exhausted_at_school','low_energy_performance','severely_depressed','depressed_performance','excellent_mood','poor_hygiene','below_average_hygiene','poor_reputation','excellent_reputation']);
+    if (ws.job)    ws.job.performance_flags    = (ws.job.performance_flags    || []).filter(f => !_CASC.has(f));
+    if (ws.school) ws.school.performance_flags = (ws.school.performance_flags || []).filter(f => !_CASC.has(f));
     const cascadeEffects = applyCascadeEffectsToExternal(ws.player.stats, ws.job, ws.school, ws.npcs);
-    
-    // Apply job performance effects
-    if (ws.job && cascadeEffects.jobPerformance.length > 0) {
-      ws.job.performance_flags = [...(ws.job.performance_flags || []), ...cascadeEffects.jobPerformance];
-      // Remove duplicates
-      ws.job.performance_flags = [...new Set(ws.job.performance_flags)];
-    }
-    
-    // Apply school performance effects
-    if (ws.school && cascadeEffects.schoolPerformance.length > 0) {
-      ws.school.performance_flags = [...(ws.school.performance_flags || []), ...cascadeEffects.schoolPerformance];
-      ws.school.performance_flags = [...new Set(ws.school.performance_flags)];
-    }
-    
-    // Apply relationship modifiers from cascades
-    for (const [npcId, modifier] of Object.entries(cascadeEffects.relationshipModifiers)) {
-      if (ws.npcs[npcId]) {
-        ws.npcs[npcId] = applyRelationshipDelta(ws.npcs[npcId], modifier, null);
-      }
-    }
+    if (ws.job    && cascadeEffects.jobPerformance.length   > 0) ws.job.performance_flags    = [...new Set([...(ws.job.performance_flags    || []), ...cascadeEffects.jobPerformance])];
+    if (ws.school && cascadeEffects.schoolPerformance.length > 0) ws.school.performance_flags = [...new Set([...(ws.school.performance_flags || []), ...cascadeEffects.schoolPerformance])];
+    // Relationship cascade removed — Gemini NPC evaluations handle relationship impact
     
     if (locationChange) ws.player.location = locationChange;
 
@@ -1580,10 +1587,10 @@ async function processTurn(input) {
     if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
       const _knownNames = new Set(Object.values(ws.npcs).map(n => n.name?.toLowerCase()).filter(Boolean));
       const _skip = new Set(['The','You','Your','She','He','They','His','Her','Their','What','This','That','Then','Turn','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','January','February','March','April','May','June','July','August','September','October','November','December']);
-      // Also check for common relationship terms regardless of capitalization
+      const _objWords = ['holder','curtain','table','chair','door','wall','bed','floor','ceiling','window','lamp','sink','toilet','shower','stove','fan','rod','rack','post','knob','handle','frame','stool','barrel'];
       const _relTerms = ['mother','father','brother','sister','aunt','uncle','cousin','grandmother','grandfather','mom','dad'];
       const _newName = (prose.match(/\b([A-Z][a-z]{1,14})\b/g) ?? [])
-        .filter(n => !_skip.has(n) && !_knownNames.has(n.toLowerCase()))
+        .filter(n => !_skip.has(n) && !_knownNames.has(n.toLowerCase()) && !_objWords.some(w => n.toLowerCase().includes(w)))
         .find((n, i, arr) => arr.indexOf(n) === i);
       // If no capitalized name found, check for relationship terms in lowercase
       const _relTerm = !_newName ? _relTerms.find(term => 
@@ -1595,7 +1602,9 @@ async function processTurn(input) {
           const _proseNpcExists = Object.values(WS?.npcs ?? {}).some(n =>
             n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim()
           );
-          if (nd?.id && nd?.name && WS && !WS.npcs?.[nd.id] && !_proseNpcExists) {
+          const _prNH = ['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf','barrel','pillar','post'];
+          const _prHuman = nd?.name && /^[A-Z]/.test(nd.name) && nd.name.split(/\s+/).length <= 3 && nd.name.length <= 28 && !_prNH.some(w => nd.name.toLowerCase().includes(w));
+          if (nd?.id && nd?.name && WS && !WS.npcs?.[nd.id] && !_proseNpcExists && _prHuman) {
             const _nn = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} });
             _nn.relationship_meter = nd.relationship_meter ?? 10;
             _nn.trust_meter = nd.trust_meter ?? 5;
@@ -1624,37 +1633,6 @@ async function processTurn(input) {
     setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
     // Auto-refresh log tab if currently open
     if (document.querySelector('.p-tab[data-p="log"]')?.classList.contains('on')) renderActionLog();
-
-    // NPC initiative — async, non-blocking, every 3rd turn
-    if (ws.turn % 3 === 0) {
-      const activeNpcs = Object.values(ws.npcs).filter(n => {
-        if (n.status !== 'active' || n.significance < 1 || n.relationship_meter < 20) return false;
-        const _nTask = getNpcCurrentTask(n, ws.sim_time);
-        // Hard-gate: sleeping NPCs NEVER initiate
-        return _nTask.task !== 'sleeping' && _nTask.task !== 'morning_prep' && _nTask.available;
-      });
-      if (activeNpcs.length) {
-        const npcCtxs = activeNpcs.map(n => buildNpcContextForGemini(n, ws.sim_time));
-        checkNpcInitiative(npcCtxs, ws.player.stats, ws.turn).then(inits => {
-          for (const init of inits) {
-            const npc = WS?.npcs?.[init.npc_id];
-            if (!npc) continue;
-            const notif = document.createElement('div');
-            notif.className = 'narration-entry';
-            notif.style.cssText = 'border-left-color:var(--acc);opacity:.9';
-            notif.innerHTML = `<div class="turn-anchor"><span class="ta-num" style="color:var(--pos)">${(init.type||'msg').toUpperCase()}</span><span class="ta-time" style="color:var(--acc)">${npc.name}</span></div><div class="narration-prose" style="font-size:13px;font-family:var(--f);color:var(--dim);line-height:1.6">${init.brief}</div>`;
-            document.getElementById('feed').appendChild(notif);
-            document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior: 'smooth' });
-            if (WS?.npcs?.[init.npc_id]) {
-              const ri = WS.npcs[init.npc_id].recent_interactions ?? [];
-              WS.npcs[init.npc_id].recent_interactions = [...ri, init.brief].slice(-5);
-              saveWorldState(WS).catch(() => {});
-              renderAll();
-            }
-          }
-        }).catch(() => {});
-      }
-    }
 
     if (turnClass === TURN_CLASSIFICATION.DEATH) {
       setStatus('☠ Character has died.', 'err');

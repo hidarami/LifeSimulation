@@ -614,7 +614,7 @@ export async function enrichWorldDetails(lorebook, ws) {
   const npcNames = Object.values(ws.npcs ?? {}).map(n => `${n.name} (${n.relationship_type ?? n.npc_class})`).join(', ') || 'none';
   const startYear = ws.sim_time ? new Date(ws.sim_time).getFullYear() : new Date().getFullYear();
 
-  const prompt = `You are world-building for a life simulation set in the Philippines. Generate specific creative details that the lorebook didn't explicitly state. Be realistic and culturally accurate.
+  const prompt = `You are world-building for a life simulation. Generate specific creative details the lorebook didn't explicitly state. Be realistic and culturally accurate to the setting's country and culture.
 
 Lorebook: """${lorebook.slice(0, 1500)}"""
 
@@ -646,7 +646,7 @@ Return ONLY valid JSON (no markdown fences):
 }
 
 Rules:
-- location_name: if lorebook says "rural Cavite" → generate a real-sounding barangay in Cavite
+- location_name: "specific location matching the lorebook's stated setting. If lorebook mentions a city/municipality, add street or barangay-level detail within that exact place. If no location is stated in the lorebook, infer from cultural context and generate an appropriate specific address. Do NOT default to any specific province unless the lorebook explicitly names it."
 - school: include ONLY if player is clearly a student. SHS Grade 12 = 17–18 yrs old in 2018.
 - job_enrichment: include ONLY if lorebook mentions a job or income. Return null if none.
 - days_active: AGE-REALISTIC. A 17-yr-old in 2018 cannot have 3 years of adult streaming history. Max ~200 days.

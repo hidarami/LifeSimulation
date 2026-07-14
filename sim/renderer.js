@@ -13,16 +13,22 @@ export function renderTurnAnchor(turn, simTime, location) {
   const date = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   const el   = document.createElement('div');
   el.className = 'turn-anchor';
-  el.innerHTML = `<span class="ta-num">TURN ${turn}</span><span class="ta-time">${time} · ${date}</span><span class="ta-loc">${location ?? ''}</span>`;
+  const locStr = location ? location.toUpperCase() : '';
+  el.innerHTML = `
+    <div class="ta-row">
+      <span class="ta-num">TURN ${turn}</span>
+      <span class="ta-time">${time} · ${date}</span>
+    </div>
+    ${locStr ? `<div class="ta-loc">${locStr}</div>` : ''}`;
   return el;
 }
 
 // ─── STAT PANEL ───────────────────────────────────────────────────────────────
 const STAT_META = {
-  health:     { label: 'Health',  icon: '♥',  invert: false },
-  energy:     { label: 'Energy',  icon: '⚡', invert: false },
-  hunger:     { label: 'Hunger',  icon: '▲',  invert: false }, // 0 = full (not hungry), 100 = empty (starving)
-  hygiene:    { label: 'Hygiene', icon: '◈',  invert: false },
+  health:     { label: 'Health',   icon: '♥',  invert: false },
+  energy:     { label: 'Energy',   icon: '⚡', invert: false },
+  hunger:     { label: 'Satiety',  icon: '▲', invert: true  }, // 0=starving(displayed 0%), 100=full(displayed 100%)
+  hygiene:    { label: 'Hygiene',  icon: '◈',  invert: false },
   mood:       { label: 'Mood',    icon: '◉',  invert: false },
   arousal:    { label: 'Arousal', icon: '◈',  invert: false },
   social:     { label: 'Social',  icon: '◎',  invert: false },
@@ -51,13 +57,14 @@ export function renderStatPanel(stats, cash, container) {
     const val  = Math.round(stats[key]);
     const fill = meta.invert ? 100 - val : val;
     const cc   = statColorClass(val, meta.invert);
+    const disp = meta.invert ? (100 - val) : val;
     const row  = document.createElement('div');
     row.className = 'stat-row';
     row.innerHTML = `
       <span class="si">${meta.icon}</span>
       <span class="sl">${meta.label}</span>
       <div class="sbt"><div class="sbf ${cc}" style="width:${fill}%"></div></div>
-      <span class="sv">${val}</span>`;
+      <span class="sv">${disp}</span>`;
     container.appendChild(row);
   }
 }
@@ -107,7 +114,9 @@ function buildNpcCard(npc, currentDate) {
   const relClass  = npc.relationship_meter >= 30 ? 'mp' : npc.relationship_meter <= -30 ? 'mn' : 'mz';
 
   // ── Collapsed header (always visible) ────────────────────────────────────
-  const npcEmos = getNpcEmotionLabel(npc);
+  // Only show flag-derived emotions; suppress generic relationship-state labels
+  const _GENERIC_EMOS = new Set(['Warm','Friendly','Neutral','Cold','Tense','Comfortable']);
+  const npcEmos = getNpcEmotionLabel(npc).filter(e => !_GENERIC_EMOS.has(e));
   const header = document.createElement('div');
   header.className = 'npc-collapsed';
   header.innerHTML = `

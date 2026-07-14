@@ -31,6 +31,43 @@ const DEFAULT_WEEKEND = [
   { start_hour: 22, end_hour: 24, task: 'winding_down', interruptible: true  },
 ];
 
+const PARENT_WEEKDAY = [
+  { start_hour:  0, end_hour:  5, task: 'sleeping',     interruptible: false },
+  { start_hour:  5, end_hour:  7, task: 'morning_prep', interruptible: true  },
+  { start_hour:  7, end_hour: 17, task: 'work',         interruptible: false },
+  { start_hour: 17, end_hour: 19, task: 'errands',      interruptible: true  },
+  { start_hour: 19, end_hour: 22, task: 'leisure',      interruptible: true  },
+  { start_hour: 22, end_hour: 24, task: 'sleeping',     interruptible: false },
+];
+
+const STUDENT_WEEKDAY = [
+  { start_hour:  0, end_hour:  6, task: 'sleeping',     interruptible: false },
+  { start_hour:  6, end_hour:  7, task: 'morning_prep', interruptible: false },
+  { start_hour:  7, end_hour: 16, task: 'school',       interruptible: false },
+  { start_hour: 16, end_hour: 18, task: 'commuting',    interruptible: false },
+  { start_hour: 18, end_hour: 22, task: 'leisure',      interruptible: true  },
+  { start_hour: 22, end_hour: 24, task: 'winding_down', interruptible: true  },
+];
+
+const HOUSEHOLD_WEEKDAY = [
+  { start_hour:  0, end_hour:  9, task: 'sleeping',     interruptible: false },
+  { start_hour:  9, end_hour: 11, task: 'morning_prep', interruptible: true  },
+  { start_hour: 11, end_hour: 14, task: 'errands',      interruptible: true  },
+  { start_hour: 14, end_hour: 17, task: 'leisure',      interruptible: true  },
+  { start_hour: 17, end_hour: 20, task: 'errands',      interruptible: true  },
+  { start_hour: 20, end_hour: 23, task: 'leisure',      interruptible: true  },
+  { start_hour: 23, end_hour: 24, task: 'winding_down', interruptible: true  },
+];
+
+function _pickSchedule(relationship_type, npc_class, age) {
+  const rt = (relationship_type ?? '').toLowerCase();
+  if (rt === 'mother' || rt === 'father')                                               return PARENT_WEEKDAY;
+  if ((rt === 'brother' || rt === 'sister' || rt === 'classmate') && age && age < 23)  return STUDENT_WEEKDAY;
+  if (npc_class === 'professional')                                                     return DEFAULT_WEEKDAY;
+  if (npc_class === 'household' || npc_class === 'intimate')                           return HOUSEHOLD_WEEKDAY;
+  return DEFAULT_WEEKDAY;
+}
+
 // ─── SCHEDULER ────────────────────────────────────────────────────────────────
 export function getNpcCurrentTask(npc, currentDate) {
   const d          = new Date(currentDate);
@@ -87,7 +124,7 @@ export function createNpc({ id, name, age, npc_class, relationship_type = null, 
     recent_interactions: [],
     significance:        0,
     schedule: schedule ?? {
-      weekday_routine: DEFAULT_WEEKDAY,
+      weekday_routine: _pickSchedule(relationship_type, npc_class, age),
       weekend_routine: DEFAULT_WEEKEND,
       interruptions:   [],
     },
