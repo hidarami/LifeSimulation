@@ -15,48 +15,48 @@ export const FLAG_DECAY = { slow: 20, medium: 8, fast: 3 };
 
 // ─── DEFAULT SCHEDULES ────────────────────────────────────────────────────────
 const DEFAULT_WEEKDAY = [
-  { start_hour:  0, end_hour:  7, task: 'sleeping',     interruptible: false },
-  { start_hour:  7, end_hour:  8, task: 'morning_prep', interruptible: false },
-  { start_hour:  8, end_hour: 17, task: 'work',         interruptible: false },
-  { start_hour: 17, end_hour: 19, task: 'commuting',    interruptible: false },
-  { start_hour: 19, end_hour: 22, task: 'leisure',      interruptible: true  },
-  { start_hour: 22, end_hour: 24, task: 'winding_down', interruptible: true  },
+  { start_hour:  0, end_hour:  5, task: 'sleeping',     interruptible: false, location: 'home'      },
+  { start_hour:  5, end_hour:  7, task: 'morning_prep', interruptible: false, location: 'home'      },
+  { start_hour:  7, end_hour: 17, task: 'work',         interruptible: false, location: 'workplace' },
+  { start_hour: 17, end_hour: 19, task: 'commuting',    interruptible: false, location: 'transit'   },
+  { start_hour: 19, end_hour: 22, task: 'leisure',      interruptible: true,  location: 'home'      },
+  { start_hour: 22, end_hour: 24, task: 'winding_down', interruptible: true,  location: 'home'      },
 ];
 
 const DEFAULT_WEEKEND = [
-  { start_hour:  0, end_hour:  9, task: 'sleeping',     interruptible: false },
-  { start_hour:  9, end_hour: 12, task: 'leisure',      interruptible: true  },
-  { start_hour: 12, end_hour: 14, task: 'errands',      interruptible: true  },
-  { start_hour: 14, end_hour: 22, task: 'leisure',      interruptible: true  },
-  { start_hour: 22, end_hour: 24, task: 'winding_down', interruptible: true  },
+  { start_hour:  0, end_hour:  8, task: 'sleeping',     interruptible: false, location: 'home'    },
+  { start_hour:  8, end_hour: 11, task: 'leisure',      interruptible: true,  location: 'home'    },
+  { start_hour: 11, end_hour: 14, task: 'errands',      interruptible: true,  location: 'outside' },
+  { start_hour: 14, end_hour: 21, task: 'leisure',      interruptible: true,  location: 'home'    },
+  { start_hour: 21, end_hour: 24, task: 'winding_down', interruptible: true,  location: 'home'    },
 ];
 
 const PARENT_WEEKDAY = [
-  { start_hour:  0, end_hour:  5, task: 'sleeping',     interruptible: false },
-  { start_hour:  5, end_hour:  7, task: 'morning_prep', interruptible: true  },
-  { start_hour:  7, end_hour: 17, task: 'work',         interruptible: false },
-  { start_hour: 17, end_hour: 19, task: 'errands',      interruptible: true  },
-  { start_hour: 19, end_hour: 22, task: 'leisure',      interruptible: true  },
-  { start_hour: 22, end_hour: 24, task: 'sleeping',     interruptible: false },
+  { start_hour:  0, end_hour:  5, task: 'sleeping',     interruptible: false, location: 'home'      },
+  { start_hour:  5, end_hour:  6, task: 'morning_prep', interruptible: true,  location: 'home'      },
+  { start_hour:  6, end_hour: 17, task: 'work',         interruptible: false, location: 'workplace' },
+  { start_hour: 17, end_hour: 18, task: 'commuting',    interruptible: false, location: 'transit'   },
+  { start_hour: 18, end_hour: 21, task: 'leisure',      interruptible: true,  location: 'home'      },
+  { start_hour: 21, end_hour: 24, task: 'sleeping',     interruptible: false, location: 'home'      },
 ];
 
 const STUDENT_WEEKDAY = [
-  { start_hour:  0, end_hour:  6, task: 'sleeping',     interruptible: false },
-  { start_hour:  6, end_hour:  7, task: 'morning_prep', interruptible: false },
-  { start_hour:  7, end_hour: 16, task: 'school',       interruptible: false },
-  { start_hour: 16, end_hour: 18, task: 'commuting',    interruptible: false },
-  { start_hour: 18, end_hour: 22, task: 'leisure',      interruptible: true  },
-  { start_hour: 22, end_hour: 24, task: 'winding_down', interruptible: true  },
+  { start_hour:  0, end_hour:  5, task: 'sleeping',     interruptible: false, location: 'home'    },
+  { start_hour:  5, end_hour:  7, task: 'morning_prep', interruptible: false, location: 'home'    },
+  { start_hour:  7, end_hour: 16, task: 'school',       interruptible: false, location: 'school'  },
+  { start_hour: 16, end_hour: 18, task: 'commuting',    interruptible: false, location: 'transit' },
+  { start_hour: 18, end_hour: 22, task: 'leisure',      interruptible: true,  location: 'home'    },
+  { start_hour: 22, end_hour: 24, task: 'winding_down', interruptible: true,  location: 'home'    },
 ];
 
 const HOUSEHOLD_WEEKDAY = [
-  { start_hour:  0, end_hour:  9, task: 'sleeping',     interruptible: false },
-  { start_hour:  9, end_hour: 11, task: 'morning_prep', interruptible: true  },
-  { start_hour: 11, end_hour: 14, task: 'errands',      interruptible: true  },
-  { start_hour: 14, end_hour: 17, task: 'leisure',      interruptible: true  },
-  { start_hour: 17, end_hour: 20, task: 'errands',      interruptible: true  },
-  { start_hour: 20, end_hour: 23, task: 'leisure',      interruptible: true  },
-  { start_hour: 23, end_hour: 24, task: 'winding_down', interruptible: true  },
+  { start_hour:  0, end_hour:  6, task: 'sleeping',     interruptible: false, location: 'home'    },
+  { start_hour:  6, end_hour:  8, task: 'morning_prep', interruptible: true,  location: 'home'    },
+  { start_hour:  8, end_hour: 12, task: 'errands',      interruptible: true,  location: 'outside' },
+  { start_hour: 12, end_hour: 15, task: 'leisure',      interruptible: true,  location: 'home'    },
+  { start_hour: 15, end_hour: 18, task: 'errands',      interruptible: true,  location: 'outside' },
+  { start_hour: 18, end_hour: 22, task: 'leisure',      interruptible: true,  location: 'home'    },
+  { start_hour: 22, end_hour: 24, task: 'winding_down', interruptible: true,  location: 'home'    },
 ];
 
 function _pickSchedule(relationship_type, npc_class, age) {
@@ -83,20 +83,27 @@ export function getNpcCurrentTask(npc, currentDate) {
     return d >= s && d <= e;
   });
   if (interruption) {
+    const _intLoc     = interruption.location ?? 'home';
+    const _intPresent = !['workplace', 'school', 'transit'].includes(_intLoc);
     return {
       task:          interruption.task,
       interruptible: interruption.interruptible ?? true,
-      available:     interruption.available     ?? false,
-      note:          interruption.note           ?? null,
+      available:     (interruption.available ?? false) && _intPresent,
+      present:       _intPresent,
+      location:      _intLoc,
+      note:          interruption.note ?? null,
     };
   }
 
   const block = routine.find(b => hour >= b.start_hour && hour < b.end_hour);
-  if (!block) return { task: 'unknown', interruptible: true, available: true };
+  if (!block) return { task: 'unknown', interruptible: true, available: true, present: true, location: 'home' };
+  const _present = !['workplace', 'school', 'transit'].includes(block.location ?? 'home');
   return {
     task:          block.task,
     interruptible: block.interruptible,
-    available:     block.interruptible,
+    available:     block.interruptible && _present,
+    present:       _present,
+    location:      block.location ?? 'home',
     note:          null,
   };
 }
@@ -207,6 +214,8 @@ export function buildNpcContextForGemini(npc, currentDate) {
     trust_meter:         npc.trust_meter,
     active_flags:        npc.active_flags,
     current_task:        task.task,
+    current_location:    task.location ?? 'home',
+    present_at_home:     task.present !== false,
     available:           task.available,
     interruptible:       task.interruptible,
     recent_interactions: npc.recent_interactions.slice(-3),

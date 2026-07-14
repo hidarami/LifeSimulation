@@ -1030,11 +1030,18 @@ function openNpcModal(npcId) {
 
   // Current schedule status
   const task = WS.sim_time ? getNpcCurrentTask(npc, WS.sim_time) : null;
+  const _mAwayMap = { workplace: 'At work', school: 'At school', transit: 'In transit', outside: 'Out' };
+  const _mPresent = task ? (task.present !== false) : true;
+  const _mTaskLabel = task ? (!_mPresent ? (_mAwayMap[task.location] ?? 'Away') : task.task.replace(/_/g,' ')) : '';
+  const _mAvail = task ? (task.available && _mPresent) : false;
   const taskHtml = task ? `<div class="npc-d-section"><div class="npc-d-title">Right Now</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-      <span class="npc-task-pill ${task.available ? 'avail' : 'busy'}" style="font-size:11px;padding:3px 9px">${task.task.replace(/_/g,' ')}</span>
-      <span style="font-size:11px;color:var(--dim)">${task.available ? '— available to interact' : '— may not respond'}</span>
+      <span class="npc-task-pill ${_mAvail ? 'avail' : 'busy'}" style="font-size:11px;padding:3px 9px">${_mTaskLabel}</span>
+      <span style="font-size:11px;color:var(--dim)">${_mPresent ? (_mAvail ? '— available to interact' : '— busy') : `— not present (${task.location})`}</span>
     </div></div>` : '';
+  const _npcSchedBlocks = npc.schedule?.weekday_routine ?? [];
+  const schedHtml = _npcSchedBlocks.length ? `<div class="npc-d-section"><div class="npc-d-title">Weekday Schedule</div>
+    <div style="font-size:11px;line-height:2.1">${_npcSchedBlocks.map(b => `<div style="display:flex;gap:8px"><span style="width:96px;color:var(--acc);font-size:10px;flex-shrink:0">${String(b.start_hour).padStart(2,'0')}:00–${String(b.end_hour).padStart(2,'0')}:00</span><span style="color:${['workplace','school','transit'].includes(b.location??'') ? 'var(--low)' : 'var(--txt)'}">${b.task.replace(/_/g,' ')}${b.location && b.location !== 'home' ? `<span style="color:var(--dim);margin-left:4px">(${b.location})</span>` : ''}</span></div>`).join('')}</div></div>` : '';
 
   // Personality breakdown with plain-text interpretation
   const TI = {
@@ -1074,6 +1081,7 @@ function openNpcModal(npcId) {
     ${npc.bio ? `<div class="npc-d-section"><div class="npc-d-title">About</div><div style="font-size:12px;color:var(--txt);line-height:1.75;font-family:var(--fs);padding:2px 0">${npc.bio}</div></div>` : ''}
 
     ${taskHtml}
+    ${schedHtml}
 
     <div class="npc-d-section">
       <div class="npc-d-title">Relationship</div>
@@ -1463,7 +1471,7 @@ async function processTurn(input) {
     else if (route === ROUTE.PATH_2_NOVEL) {
       const safe = sanitizeStateForGemini(ws);
       const cls  = await classifyAction(input, safe);
-      statDeltas=cls.stat_deltas??{}; timeCost=cls.time_cost_hours??0.5;
+      statDeltas=cls.stat_deltas??{}; timeCost=Math.min(Math.max(cls.time_cost_hours??0.25, 0.08), 4.0);
       locationChange=cls.location_change??null; actionDesc=`[${cls.action_type??'action'}]`;
       riskResult=rollRisk(cls.risk_class??'none', ws.player.stats);
       for (const npcId of (cls.npc_ids_involved??[])) {
@@ -1591,6 +1599,12 @@ async function processTurn(input) {
       prose = await callGeminiAutopilot(sanitizeStateForGemini(ws), timeCost, input).catch(() => `${timeCost}h passed.`);
     } else {
       const brief = assembleTurnBrief(ws, { turnNumber:ws.turn, simTime:ws.sim_time, location:ws.player.location, actionDescription:actionDesc, statDeltas, riskResult, consequenceUpdate:consequenceUpd, npcReactions, turnClass, isExplicit:route===ROUTE.PATH_1_EXPLICIT, rawInput:input });
+      brief.npc_locations = {};
+      for (const [_nlId, _nlNpc] of Object.entries(ws.npcs)) {
+        if (_nlNpc.status !== 'active') continue;
+        const _nlTask = getNpcCurrentTask(_nlNpc, ws.sim_time);
+        brief.npc_locations[_nlId] = { name: _nlNpc.name, task: _nlTask.task, location: _nlTask.location ?? 'home', present: _nlTask.present !== false };
+      }
       const mode = { [TURN_CLASSIFICATION.ROUTINE]:'notable', [TURN_CLASSIFICATION.NOTABLE]:'notable', [TURN_CLASSIFICATION.CRISIS]:'crisis', [TURN_CLASSIFICATION.DEATH]:'death' }[turnClass] ?? 'notable';
       prose = await callGrok(brief, mode);
     }

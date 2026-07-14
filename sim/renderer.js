@@ -102,8 +102,11 @@ function buildNpcCard(npc, currentDate) {
   card.dataset.id      = npc.id;
   card.dataset.expanded = 'false';
 
-  const task      = getNpcCurrentTask(npc, currentDate);
-  const taskClass = task.available ? 'avail' : 'busy';
+  const task        = getNpcCurrentTask(npc, currentDate);
+  const _npcPresent = task.present !== false;
+  const _awayMap    = { workplace: 'At work', school: 'At school', transit: 'In transit', outside: 'Out' };
+  const taskDisplay = !_npcPresent ? (_awayMap[task.location] ?? 'Away') : task.task.replace(/_/g, ' ');
+  const taskClass   = _npcPresent && task.available ? 'avail' : 'busy';
   const rawLabel  = npc.relationship_type ?? npc.npc_class ?? '';
   const relLabel  = (
     npc.relationship_meter === 0 && npc.trust_meter === 0 && !['brother','sister','mother','father','uncle','aunt','cousin','friend','best_friend','boyfriend','girlfriend'].includes(rawLabel)
@@ -127,7 +130,7 @@ function buildNpcCard(npc, currentDate) {
     </div>
     <div class="npc-col-bottom">
       <span class="npc-age-rel">Age ${npc.age} · <em>${relLabel}</em></span>
-      <span class="npc-task-pill ${taskClass}">${task.task.replace(/_/g,' ')}</span>
+      <span class="npc-task-pill ${taskClass}">${taskDisplay}</span>
     </div>
     ${npcEmos.length ? `<div class="npc-emotions">${npcEmos.map(em => `<span class="npc-emo-pill">${em}</span>`).join('')}</div>` : ''}`;
 
