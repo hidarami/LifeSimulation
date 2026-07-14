@@ -77,6 +77,18 @@ export function renderNpcPanel(npcs, container, currentDate, playerName) {
   active.forEach(npc => container.appendChild(buildNpcCard(npc, currentDate)));
 }
 
+function getNpcEmotionLabel(npc) {
+  const flags = npc.active_flags ?? [];
+  const MAP = { resentment:'Resentful', jealousy_triggered:'Jealous', angry:'Angry', worried:'Worried', hurt:'Hurt', happy:'Happy', grateful:'Grateful', suspicious:'Suspicious', distant:'Distant', uncomfortable:'Uncomfortable', mistreated_recently:'Hurt', deepening_bond:'Close' };
+  const e = [];
+  for (const [flag, label] of Object.entries(MAP)) { if (flags.includes(flag)) e.push(label); }
+  if (!e.length) {
+    const r = npc.relationship_meter;
+    e.push(r >= 60 ? 'Warm' : r >= 30 ? 'Friendly' : r <= -40 ? 'Cold' : r <= -20 ? 'Tense' : 'Neutral');
+  }
+  return e.slice(0, 2);
+}
+
 function buildNpcCard(npc, currentDate) {
   const card = document.createElement('div');
   card.className       = 'npc-card';
@@ -95,6 +107,7 @@ function buildNpcCard(npc, currentDate) {
   const relClass  = npc.relationship_meter >= 30 ? 'mp' : npc.relationship_meter <= -30 ? 'mn' : 'mz';
 
   // ── Collapsed header (always visible) ────────────────────────────────────
+  const npcEmos = getNpcEmotionLabel(npc);
   const header = document.createElement('div');
   header.className = 'npc-collapsed';
   header.innerHTML = `
@@ -106,7 +119,8 @@ function buildNpcCard(npc, currentDate) {
     <div class="npc-col-bottom">
       <span class="npc-age-rel">Age ${npc.age} · <em>${relLabel}</em></span>
       <span class="npc-task-pill ${taskClass}">${task.task.replace(/_/g,' ')}</span>
-    </div>`;
+    </div>
+    ${npcEmos.length ? `<div class="npc-emotions">${npcEmos.map(em => `<span class="npc-emo-pill">${em}</span>`).join('')}</div>` : ''}`;
 
   // ── Expanded details ──────────────────────────────────────────────────────
   const traitBars = Object.entries(npc.traits ?? {}).map(([k, v]) =>

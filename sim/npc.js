@@ -122,6 +122,33 @@ export function addFlag(npc, flag, decayTurns) {
   return { ...npc, active_flags: flags, flag_timers: timers };
 }
 
+// ─── TRAIT DRIFT ─────────────────────────────────────────────────────────────
+// Traits shift slowly based on repeated interactions. Max ±3 per call.
+export function driftTraits(npc, context = {}) {
+  const t = { ...(npc.traits ?? {}) };
+  if (context.mistreated) {
+    t.warmth      = Math.max(0,   (t.warmth      ?? 50) - 2);
+    t.impulsivity = Math.min(100, (t.impulsivity ?? 50) + 1);
+    t.jealousy    = Math.min(100, (t.jealousy    ?? 50) + 1);
+    t.openness    = Math.max(0,   (t.openness    ?? 50) - 1);
+  }
+  if (context.deepTrust && npc.trust_meter >= 55) {
+    t.openness  = Math.min(100, (t.openness  ?? 50) + 1);
+    t.jealousy  = Math.max(0,   (t.jealousy  ?? 50) - 1);
+    t.warmth    = Math.min(100, (t.warmth    ?? 50) + 1);
+  }
+  if (context.consistent_positive && npc.relationship_meter >= 35) {
+    t.warmth    = Math.min(100, (t.warmth    ?? 50) + 1);
+    t.patience  = Math.min(100, (t.patience  ?? 50) + 1);
+  }
+  if (context.betrayed) {
+    t.warmth      = Math.max(0,   (t.warmth    ?? 50) - 3);
+    t.openness    = Math.max(0,   (t.openness  ?? 50) - 2);
+    t.impulsivity = Math.min(100, (t.impulsivity ?? 50) + 2);
+  }
+  return { ...npc, traits: t };
+}
+
 export function incrementSignificance(npc) {
   return { ...npc, significance: npc.significance + 1 };
 }

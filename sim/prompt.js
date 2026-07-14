@@ -160,7 +160,6 @@ No predefined trajectory · Legal adulthood applies
 FIRST TURN PROCEDURE:
 1. Describe an ordinary morning with concrete physical specificity:
    body state, immediate location, sensory environment
-2. End with: "What do you do?"
 
 PRIORITY HIERARCHY — resolve all conflicts by higher rank:
 1. Mechanical triggers: thresholds, probability rolls, automatic consequences
@@ -235,7 +234,27 @@ Rules:
   "jealousy_triggered" requires the NPC to directly witness competition.
   Daily friction between people who live together is normal life — it produces NO flag whatsoever.
   When uncertain, return an empty array. Calibrate toward fewer flags, not more.
-- NPC traits are hard constraints: patience < 30 reacts sharply to repeated interruptions; jealousy > 70 reacts strongly to witnessed competition`;
+- NPC traits are HARD behavioral constraints — enforce strictly, no exceptions:
+  * openness < 30: refuses all intimate contact unless trust_meter >= 60 AND relationship_meter >= 40 — return relationship_delta -5 to -15 if pushed
+  * openness 30–50 AND relationship_meter < 20: no romantic or sexual contact — return relationship_delta -3 to -8 and flag "uncomfortable"
+  * openness >= 70: receptive to intimacy when mood and circumstances are right
+  * jealousy > 60: relationship_delta -8 to -15 if player has contact with rivals or other romantic interests, even indirectly mentioned
+  * jealousy > 80: may flag "jealousy_triggered" even without direct competition evidence
+  * patience < 30: any repeated interruption or demand triggers -3 to -8 delta; does not easily forgive
+  * dominance > 70: -3 to -5 if player gives directives without sufficient trust
+  * honesty < 30: NPC's reaction_summary may not reflect true feelings — add flag "concealing_true_feeling"
+  * warmth < 25 AND trust_meter < 20: cold, minimal. reaction_summary must convey emotional distance
+  * warmth > 75 AND relationship_meter > 50: proactively caring — may add "worried" or "grateful" flags
+  * impulsivity > 70: multiply relationship_delta magnitude by 1.5 (round to int)
+  * ambition > 70: dismissive if player's situation doesn't benefit them
+- Sexual gating (hard rules, non-negotiable):
+  * Light intimacy (kissing, makeout, manual): requires relationship_meter >= 15 AND trust_meter >= 10 OR npc_class "intimate"
+  * Full intimacy (oral, intercourse): requires relationship_meter >= 35 AND trust_meter >= 25 OR npc_class "intimate" with relationship_meter >= 0
+  * Violation of these thresholds → flags_to_add: [{"flag":"uncomfortable","decay_rate":"fast"}], relationship_delta -5 to -12
+- Trait drift markers (include in flags_to_add when relevant):
+  * Repeated mistreatment (delta <= -8): add flag "mistreated_recently" decay_rate "slow"
+  * Deep trust moment (trust_delta >= 8): add flag "deepening_bond" decay_rate "slow"
+  * Betrayal (relationship_delta <= -15): add flag "betrayed" decay_rate "slow"`;
 }
 
 // ─── GEMINI: AUTOPILOT NARRATION ─────────────────────────────────────────────

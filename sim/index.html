@@ -364,6 +364,39 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 /* ── EMPTY ───────────────────────────────────────────────────────────────── */
 .empty{color:var(--dim);font-size:12px;padding:16px 0}
 
+/* ── EMOTION STATUS ──────────────────────────────────────────────────────── */
+#char-status{display:flex;flex-wrap:wrap;gap:4px;min-height:0}
+.emotion-badge{
+  font-size:10px;padding:2px 7px;border-radius:10px;cursor:help;position:relative;
+  background:var(--sur2);border:1px solid var(--bdr);color:var(--dim);
+}
+.emotion-badge.neg{border-color:#7a2020;background:#2a0f0f;color:#d07070}
+.emotion-badge.pos{border-color:#1a4a1a;background:#0f230f;color:#70c070}
+.emotion-badge.warn{border-color:#4a3a10;background:#221a08;color:#c0952a}
+.emotion-cause{
+  display:none;position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);
+  white-space:nowrap;background:var(--sur);border:1px solid var(--bdr);
+  font-size:10px;color:var(--dim);padding:3px 8px;border-radius:3px;z-index:20;pointer-events:none;
+}
+.emotion-badge:hover .emotion-cause{display:block}
+.npc-emotions{display:flex;gap:3px;flex-wrap:wrap;padding:2px 0}
+.npc-emo-pill{font-size:9px;padding:1px 5px;border-radius:8px;background:var(--sur2);border:1px solid var(--bdr);color:var(--dim)}
+
+/* ── SCHEDULE PANEL ──────────────────────────────────────────────────────── */
+.sch-block{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--bdr)}
+.sch-block:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.sch-type-label{font-size:9px;color:var(--acc);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;opacity:.8}
+.sch-name{font-size:13px;font-weight:700;color:var(--txt);margin-bottom:2px}
+.sch-sub{font-size:11px;color:var(--dim);margin-bottom:5px}
+.sch-row{display:flex;align-items:baseline;gap:8px;margin:3px 0;font-size:11px}
+.sch-key{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;width:44px;flex-shrink:0}
+.sch-val{color:var(--txt);font-size:11px}
+.sch-pill{font-size:9px;padding:2px 6px;border-radius:3px;margin-top:5px;display:inline-block}
+.sch-pill.active{background:#1a3a1a;color:var(--pos)}
+.sch-pill.grad{background:#1a2a3a;color:#70a0d0}
+.sch-pill.out{background:#3a1a1a;color:var(--low)}
+.sch-pflag{font-size:9px;padding:2px 5px;background:#3a1010;color:var(--neg);border-radius:3px;margin-right:3px}
+
 /* ── SCROLLBAR ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -400,7 +433,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 }
 
 /* ── NPC CARDS COLLAPSIBLE ──────────────────────────────────────── */
-.npc-card{padding:0!important;overflow:hidden;cursor:default}
+.npc-card{padding:0!important;overflow:hidden;cursor:default;flex-shrink:0}
 .npc-collapsed{display:flex;flex-direction:column;gap:3px;padding:9px 10px;cursor:pointer;user-select:none}
 .npc-collapsed:active{background:var(--sur2)}
 .npc-col-top{display:flex;align-items:center;gap:5px}
@@ -488,6 +521,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
           <div class="menu-line"></div>
         </div>
       </div>
+      <div id="char-status" style="padding:0 14px 6px;display:flex;flex-wrap:wrap;gap:4px;min-height:0"></div>
       </div>
     <div id="processing-bar"></div>
     <div id="center-stats-wrap"><div id="center-stats"></div></div>
@@ -656,7 +690,8 @@ import { loadWorldState, saveWorldState, createInitialWorldState,
          setSupabaseClient, saveWorldStateCloud, loadWorldStateCloud,
          getCurrentSaveId } from './state.js';
 import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
-         rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION } from './engine.js';
+         rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION,
+         applyCascadingEffects, computeCharacterEmotions } from './engine.js';
 import { routeInput, isExplicit, classifyExplicitActivity,
          EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE,
          hasThirdPartyPresence } from './sanitizer.js';
@@ -668,7 +703,8 @@ import { renderNpcPanel, renderJobPanel,
          renderPossessionsPanel, renderNarration, renderTurnAnchor } from './renderer.js';
 import { checkWorldEvents, applyEventEffect } from './events.js';
 import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
-         buildNpcContextForGemini, applyRelationshipDelta, createNpc } from './npc.js';
+         buildNpcContextForGemini, applyRelationshipDelta, createNpc,
+         driftTraits, getNpcCurrentTask } from './npc.js';
 
 let WS = null;
 let _sbClient = null;
@@ -778,24 +814,64 @@ function renderCenterStats(stats) {
 function renderSchedulePanel(job, school, container) {
   if (!container) return;
   container.innerHTML = '';
-  if (!job && !school) { container.innerHTML = '<p class="empty">No current schedule.</p>'; return; }
-  if (school?.schedule) {
-    container.innerHTML += `<div class="psub">School</div>
-      <div style="font-size:12px;font-weight:700;margin-bottom:3px">${school.name ?? ''}</div>
-      <div style="font-size:12px;color:var(--dim)">${school.schedule}</div>`;
+  const isBad = v => !v || v === 'null' || v === 'undefined';
+  const blocks = [];
+
+  if (school) {
+    const st = school.status ?? 'active';
+    let html = `<div class="sch-block"><div class="sch-type-label">Education</div>`;
+    if (school.name) html += `<div class="sch-name">${school.name}</div>`;
+    if (school.grade_level) html += `<div class="sch-sub">${school.grade_level}</div>`;
+    if (st === 'active') {
+      if (!isBad(school.schedule)) html += `<div class="sch-row"><span class="sch-key">Hours</span><span class="sch-val">${school.schedule}</span></div>`;
+      if (school.absence_count) html += `<div class="sch-row"><span class="sch-key">Absences</span><span class="sch-val" style="color:var(--low)">${school.absence_count}</span></div>`;
+      html += `<span class="sch-pill active">Enrolled</span>`;
+    } else if (st === 'graduated') {
+      html += `<span class="sch-pill grad">✓ Graduated</span>`;
+    } else if (st === 'dropped_out') {
+      html += `<span class="sch-pill out">Dropped out</span>`;
+    } else if (st === 'vacation' || st === 'break') {
+      html += `<span class="sch-pill" style="background:#1a2a3a;color:#70a0d0">On break</span>`;
+    }
+    html += `</div>`;
+    blocks.push(html);
   }
-  if (job?.schedule && job.schedule !== 'null' && job.schedule !== 'undefined') {
-    container.innerHTML += `<div class="psub" style="margin-top:12px">Work</div>
-      <div style="font-size:12px;color:var(--dim)">${job.schedule}</div>
-      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-top:10px">Days Active</div>
-      <div style="font-size:12px;margin-top:3px">${job.days_employed ?? 0}</div>`;
+
+  if (job) {
+    const employer = isBad(job.employer) ? 'Freelance / Self-employed' : job.employer;
+    let html = `<div class="sch-block"><div class="sch-type-label">Work</div>
+      <div class="sch-name">${employer}</div>`;
+    if (!isBad(job.position)) html += `<div class="sch-sub">${job.position}</div>`;
+    if (job.description) html += `<div class="sch-sub" style="margin-top:4px;line-height:1.5">${job.description}</div>`;
+    if (!isBad(job.schedule)) html += `<div class="sch-row"><span class="sch-key">Hours</span><span class="sch-val">${job.schedule}</span></div>`;
+    const pay = job.earnings_note ?? (job.salary_per_cycle ? `₱${job.salary_per_cycle.toLocaleString()}/${job.pay_cycle ?? 'cycle'}` : null);
+    if (pay) html += `<div class="sch-row"><span class="sch-key">Pay</span><span class="sch-val" style="color:var(--norm)">${pay}</span></div>`;
+    html += `<div class="sch-row"><span class="sch-key">Days</span><span class="sch-val">${job.days_employed ?? 0}</span></div>`;
+    const pf = (job.performance_flags ?? []).map(f => `<span class="sch-pflag">${f}</span>`).join('');
+    if (pf) html += `<div style="margin-top:5px">${pf}</div>`;
+    html += `</div>`;
+    blocks.push(html);
   }
+
+  if (!blocks.length) { container.innerHTML = '<p class="empty">No current schedule.</p>'; return; }
+  container.innerHTML = blocks.join('');
 }
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────────
 function renderAll() {
   if (!WS) return;
   renderCenterStats(WS.player.stats);
+  // Character emotion status
+  const charStatusEl = document.getElementById('char-status');
+  if (charStatusEl) {
+    const NEG = new Set(['Starving','Hungry','Sick','Unwell','Exhausted','Tired','Grimy','Depressed','Down','Isolated','Ill','Stressed','Tense']);
+    const POS = new Set(['Upbeat','Fine','Social','Happy','Grateful']);
+    const emotions = computeCharacterEmotions(WS.player.stats, WS.consequences ?? []);
+    charStatusEl.innerHTML = emotions.map(em => {
+      const cls = NEG.has(em.label) ? 'neg' : POS.has(em.label) ? 'pos' : 'warn';
+      return `<span class="emotion-badge ${cls}">${em.label}<span class="emotion-cause">${em.cause}</span></span>`;
+    }).join('');
+  }
   renderNpcPanel(WS.npcs, document.getElementById('npc-cards'), WS.sim_time, WS.player.name);
   renderJobPanel(WS.job, WS.school ?? null, document.getElementById('p-job'));
   renderPossessionsPanel(WS.player.possessions, WS.player.irreversible, document.getElementById('p-items'));
@@ -883,22 +959,90 @@ function openNpcModal(npcId) {
   if (!WS?.npcs[npcId]) return;
   const npc = WS.npcs[npcId];
   document.getElementById('modal-npc-title').textContent = npc.name;
+
   const rF = (npc.relationship_meter + 100) / 2;
   const tF = (npc.trust_meter + 100) / 2;
   const rC = npc.relationship_meter >= 30 ? 'var(--pos)' : npc.relationship_meter <= -30 ? 'var(--neg)' : 'var(--neu)';
   const tC = npc.trust_meter >= 30 ? 'var(--pos)' : npc.trust_meter <= -30 ? 'var(--neg)' : 'var(--neu)';
+
+  // Current schedule status
+  const task = WS.sim_time ? getNpcCurrentTask(npc, WS.sim_time) : null;
+  const taskHtml = task ? `<div class="npc-d-section"><div class="npc-d-title">Right Now</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span class="npc-task-pill ${task.available ? 'avail' : 'busy'}" style="font-size:11px;padding:3px 9px">${task.task.replace(/_/g,' ')}</span>
+      <span style="font-size:11px;color:var(--dim)">${task.available ? '— available to interact' : '— may not respond'}</span>
+    </div></div>` : '';
+
+  // Personality breakdown with plain-text interpretation
+  const TI = {
+    jealousy:    v => v >= 70 ? '↑ Gets jealous easily' : v < 30 ? '↓ Not the jealous type' : '— Average',
+    honesty:     v => v >= 70 ? '↑ Straightforward' : v < 30 ? '↓ May mislead you' : '— Selective truth',
+    patience:    v => v >= 70 ? '↑ Won\'t rush you' : v < 30 ? '↓ Short fuse' : '— Average patience',
+    warmth:      v => v >= 70 ? '↑ Caring and affectionate' : v < 30 ? '↓ Cold, emotionally distant' : '— Neutral warmth',
+    ambition:    v => v >= 70 ? '↑ Goal-oriented, driven' : v < 30 ? '↓ Laid-back' : '— Moderate drive',
+    impulsivity: v => v >= 70 ? '↑ Acts before thinking' : v < 30 ? '↓ Measured and deliberate' : '— Moderate',
+    dominance:   v => v >= 70 ? '↑ Assertive, takes control' : v < 30 ? '↓ Deferential' : '— Balanced',
+    openness:    v => v >= 70 ? '↑ Open to new experiences and intimacy' : v < 30 ? '↓ Guarded — needs deep trust first' : '— Selective about closeness',
+  };
+
+  // Relationship context sentence
+  const relCtx = npc.relationship_meter >= 70 ? 'Close bond — they care about you deeply.'
+    : npc.relationship_meter >= 40 ? 'Positive — they like you.'
+    : npc.relationship_meter >= 10 ? 'Neutral-positive — still getting to know you.'
+    : npc.relationship_meter <= -50 ? 'Hostile — resentment has built up.'
+    : npc.relationship_meter <= -20 ? 'Strained — something went wrong.'
+    : 'Acquaintance — relationship is still developing.';
+
+  // Intimacy/openness gauge
+  const op = npc.traits?.openness ?? 50;
+  const intimacyNote = op < 30 && npc.trust_meter < 60
+    ? '🔴 Not open to intimacy — needs much more trust first.'
+    : op < 50 && npc.relationship_meter < 20
+    ? '🟡 Cautious — needs a stronger relationship before getting close.'
+    : op >= 70
+    ? '🟢 Open — receptive when the moment is right.'
+    : '🟡 Depends on how much trust and closeness exists.';
+
   document.getElementById('modal-npc-body').innerHTML = `
     <div id="npc-detail-avatar">${(npc.name||'?').charAt(0).toUpperCase()}</div>
-    <div style="text-align:center;margin-bottom:12px;font-size:12px;color:var(--dim)">${npc.npc_class} · Age ${npc.age}</div>
-    <div class="npc-d-section"><div class="npc-d-title">Relationship</div>
+    <div style="text-align:center;margin-bottom:4px;font-size:13px;font-weight:700;color:var(--txt)">${npc.name}</div>
+    <div style="text-align:center;margin-bottom:14px;font-size:11px;color:var(--dim)">${(npc.relationship_type??npc.npc_class??'').replace(/_/g,' ')} · Age ${npc.age} · ${npc.npc_class}</div>
+
+    ${taskHtml}
+
+    <div class="npc-d-section">
+      <div class="npc-d-title">Relationship</div>
       <div class="trait-row"><span class="trait-key">Rel</span><div class="trait-track"><div class="trait-fill" style="width:${rF}%;background:${rC}"></div></div><span style="font-size:10px;color:var(--dim);width:32px;text-align:right">${npc.relationship_meter>0?'+':''}${npc.relationship_meter}</span></div>
       <div class="trait-row"><span class="trait-key">Trust</span><div class="trait-track"><div class="trait-fill" style="width:${tF}%;background:${tC}"></div></div><span style="font-size:10px;color:var(--dim);width:32px;text-align:right">${npc.trust_meter>0?'+':''}${npc.trust_meter}</span></div>
+      <div style="font-size:11px;color:var(--dim);margin-top:7px;line-height:1.6">${relCtx}</div>
+      <div style="font-size:11px;margin-top:5px;line-height:1.6">${intimacyNote}</div>
     </div>
-    <div class="npc-d-section"><div class="npc-d-title">Traits</div>
-      ${Object.entries(npc.traits||{}).map(([k,v])=>`<div class="trait-row"><span class="trait-key">${k}</span><div class="trait-track"><div class="trait-fill" style="width:${v}%"></div></div><span style="font-size:10px;color:var(--dim);width:24px;text-align:right">${v}</span></div>`).join('')}
+
+    <div class="npc-d-section">
+      <div class="npc-d-title">Personality Breakdown</div>
+      ${Object.entries(npc.traits||{}).map(([k,v])=>`
+        <div style="margin-bottom:8px">
+          <div class="trait-row">
+            <span class="trait-key" style="width:78px">${k}</span>
+            <div class="trait-track"><div class="trait-fill" style="width:${v}%"></div></div>
+            <span style="font-size:10px;color:var(--dim);width:24px;text-align:right">${v}</span>
+          </div>
+          <div style="font-size:10px;color:var(--dim);padding-left:78px;margin-top:2px">${(TI[k]??(()=>''))(v)}</div>
+        </div>
+      `).join('')}
     </div>
-    ${npc.recent_interactions?.length ? `<div class="npc-d-section"><div class="npc-d-title">Recent</div><ul class="npc-recent-list">${npc.recent_interactions.slice(-5).map(i=>`<li>${i}</li>`).join('')}</ul></div>` : ''}
-    ${npc.active_flags?.length ? `<div class="npc-d-section"><div class="npc-d-title">Flags</div><div class="npc-flags">${npc.active_flags.map(f=>`<span class="nflag">${f.replace(/_/g,' ')}</span>`).join('')}</div></div>` : ''}
+
+    ${npc.active_flags?.length ? `
+    <div class="npc-d-section">
+      <div class="npc-d-title">Active States (${npc.active_flags.length})</div>
+      <div class="npc-flags">${npc.active_flags.map(f=>{const t=npc.flag_timers?.[f];return`<span class="nflag">${f.replace(/_/g,' ')}${t!=null?`<span class="nflag-timer"> ${t}t</span>`:''}</span>`}).join('')}</div>
+    </div>` : ''}
+
+    ${npc.recent_interactions?.length ? `
+    <div class="npc-d-section">
+      <div class="npc-d-title">Full Interaction History (${npc.recent_interactions.length})</div>
+      <ul class="npc-recent-list">${[...npc.recent_interactions].reverse().map(i=>`<li style="padding:5px 0;border-bottom:1px solid var(--bdr)">${i}</li>`).join('')}</ul>
+    </div>` : ''}
   `;
   document.getElementById('modal-npc').classList.add('open');
 }
@@ -1056,8 +1200,11 @@ async function startNewGame() {
             };
           }
         }
-        if (enriched.starting_possessions?.length && !ws.player.possessions?.length) {
-          ws.player.possessions = enriched.starting_possessions;
+        if (enriched.starting_possessions?.length) {
+          // Always prefer enriched (more detailed) — keep lorebook items not duplicated by name
+          const enrichedNames = new Set(enriched.starting_possessions.map(p => p.name?.toLowerCase()));
+          const lorebook_extras = (ws.player.possessions ?? []).filter(p => !enrichedNames.has(p.name?.toLowerCase()));
+          ws.player.possessions = [...enriched.starting_possessions, ...lorebook_extras];
         }
       }
     }
@@ -1208,6 +1355,12 @@ async function processTurn(input) {
         ws.npcs[npcId] = incrementSignificance(ws.npcs[npcId]);
         relDeltas[npcId] = rxn.relationship_delta ?? 0;
         npcReactions.push({ npc_id: npcId, summary: rxn.reaction_summary });
+        // Trait drift on significant events
+        const _rd = rxn.relationship_delta ?? 0, _td2 = rxn.trust_delta ?? 0;
+        if (_rd <= -8)  ws.npcs[npcId] = driftTraits(ws.npcs[npcId], { mistreated: true });
+        else if (_td2 >= 8) ws.npcs[npcId] = driftTraits(ws.npcs[npcId], { deepTrust: true });
+        else if (_rd >= 5 && ws.npcs[npcId].relationship_meter >= 35) ws.npcs[npcId] = driftTraits(ws.npcs[npcId], { consistent_positive: true });
+        if (_rd <= -15) ws.npcs[npcId] = driftTraits(ws.npcs[npcId], { betrayed: true });
         if (rxn.reaction_summary) {
           const ri = ws.npcs[npcId].recent_interactions ?? [];
           ws.npcs[npcId].recent_interactions = [...ri, rxn.reaction_summary].slice(-5);
@@ -1249,6 +1402,7 @@ async function processTurn(input) {
     }
 
     ws.player.stats = applyDeltas(ws.player.stats, statDeltas);
+    ws.player.stats = applyCascadingEffects(ws.player.stats);
     if (locationChange) ws.player.location = locationChange;
 
     for (const ev of checkWorldEvents(ws)) {
@@ -1270,6 +1424,29 @@ async function processTurn(input) {
       const brief = assembleTurnBrief(ws, { turnNumber:ws.turn, simTime:ws.sim_time, location:ws.player.location, actionDescription:actionDesc, statDeltas, riskResult, consequenceUpdate:consequenceUpd, npcReactions, turnClass, isExplicit:route===ROUTE.PATH_1_EXPLICIT, rawInput:input });
       const mode = { [TURN_CLASSIFICATION.ROUTINE]:'notable', [TURN_CLASSIFICATION.NOTABLE]:'notable', [TURN_CLASSIFICATION.CRISIS]:'crisis', [TURN_CLASSIFICATION.DEATH]:'death' }[turnClass] ?? 'notable';
       prose = await callGrok(brief, mode);
+    }
+
+    // Auto-create NPCs Grok introduces that aren't in the system yet
+    if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
+      const _knownNames = new Set(Object.values(ws.npcs).map(n => n.name?.toLowerCase()).filter(Boolean));
+      const _skip = new Set(['The','You','Your','She','He','They','His','Her','Their','What','This','That','Then','Turn','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','January','February','March','April','May','June','July','August','September','October','November','December']);
+      const _newName = (prose.match(/\b([A-Z][a-z]{1,14})\b/g) ?? [])
+        .filter(n => !_skip.has(n) && !_knownNames.has(n.toLowerCase()))
+        .find((n, i, arr) => arr.indexOf(n) === i);
+      if (_newName) {
+        evaluateDescribedNpc(prose.slice(0, 500)).then(nd => {
+          if (nd?.id && nd?.name && WS && !WS.npcs?.[nd.id]) {
+            const _nn = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} });
+            _nn.relationship_meter = nd.relationship_meter ?? 10;
+            _nn.trust_meter = nd.trust_meter ?? 5;
+            _nn.significance = 1;
+            _nn.recent_interactions = [`Appeared in scene — turn ${ws.turn}`];
+            WS.npcs[nd.id] = _nn;
+            saveWorldState(WS).catch(() => {});
+            renderAll();
+          }
+        }).catch(() => {});
+      }
     }
 
     if (turnClass !== TURN_CLASSIFICATION.ROUTINE) ws = appendSignificantEvent(ws, `Turn ${ws.turn}: ${actionDesc}`);
