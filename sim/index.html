@@ -166,7 +166,12 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 
 /* JOB */
 .job-entry{font-size:12px;line-height:2}
-.j-emp{font-weight:700;font-size:13px;margin-bottom:2px}
+.j-emp{font-weight:700;font-size:13px;color:var(--txt);margin-bottom:2px}
+.j-role{font-size:11px;color:var(--dim);margin-bottom:4px}
+.j-meta-row{display:flex;align-items:baseline;gap:8px;margin:3px 0}
+.j-meta-key{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;width:38px;flex-shrink:0;opacity:.8}
+.j-earn{font-size:11px;color:var(--norm);font-weight:600}
+.j-sch-val,.j-days-val{font-size:11px;color:var(--dim)}
 .j-flags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .jflag{font-size:9px;padding:2px 5px;background:#3a1010;color:var(--neg);border-radius:3px}
 
@@ -177,11 +182,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .pnote{color:var(--dim)}
 
 /* LOG */
-.log-entry{font-size:11px;padding:6px 0;border-bottom:1px solid var(--bdr);cursor:pointer;
-  color:var(--dim);display:flex;gap:6px;align-items:baseline;line-height:1.4;transition:color .15s}
-.log-entry:hover{color:var(--acc)}
+.log-entry{font-size:11px;border-bottom:1px solid var(--bdr);cursor:pointer;color:var(--dim);transition:color .15s}
+.log-entry:hover{color:var(--dim)}
 .log-turn{color:var(--acc);min-width:28px;flex-shrink:0;font-size:10px}
-.log-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.log-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
 
 /* ── RIGHT PANEL: RELATIONSHIPS ──────────────────────────────────────────── */
 #panel-relationships{background:var(--bg)}
@@ -397,17 +401,19 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 
 /* ── NPC CARDS COLLAPSIBLE ──────────────────────────────────────── */
 .npc-card{padding:0!important;overflow:hidden;cursor:default}
-.npc-collapsed{display:flex;align-items:center;gap:6px;padding:9px 10px;cursor:pointer;user-select:none}
+.npc-collapsed{display:flex;flex-direction:column;gap:3px;padding:9px 10px;cursor:pointer;user-select:none}
 .npc-collapsed:active{background:var(--sur2)}
-.npc-col-main{display:flex;align-items:baseline;gap:5px;flex:1;min-width:0;overflow:hidden}
-.npc-col-meta{display:flex;align-items:center;gap:5px;flex-shrink:0}
-.npc-rel-label{font-size:10px;color:var(--dim);background:var(--sur2);padding:1px 5px;border-radius:3px;white-space:nowrap;text-transform:capitalize;max-width:80px;overflow:hidden;text-overflow:ellipsis}
-.npc-task-pill{font-size:9px;padding:2px 5px;border-radius:3px;white-space:nowrap}
+.npc-col-top{display:flex;align-items:center;gap:5px}
+.npc-col-top .npc-name{flex:1;font-size:13px;font-weight:700;color:var(--txt)}
+.npc-col-bottom{display:flex;align-items:center;gap:5px;margin-top:1px}
+.npc-age-rel{flex:1;font-size:10px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.npc-age-rel em{font-style:normal;color:var(--acc);opacity:.85;text-transform:capitalize}
+.npc-task-pill{font-size:9px;padding:2px 5px;border-radius:3px;white-space:nowrap;flex-shrink:0}
 .npc-task-pill.avail{background:#1a3a1a;color:var(--pos)}
 .npc-task-pill.busy{background:#3a1010;color:var(--neg)}
-.npc-rel-num{font-size:11px;font-weight:700;min-width:30px;text-align:right}
+.npc-rel-num{font-size:11px;font-weight:700;flex-shrink:0}
 .npc-rel-num.mp{color:var(--pos)}.npc-rel-num.mn{color:var(--neg)}.npc-rel-num.mz{color:var(--neu)}
-.npc-expand-icon{font-size:9px;color:var(--dim);margin-left:2px;transition:transform .2s;flex-shrink:0}
+.npc-expand-icon{font-size:9px;color:var(--dim);flex-shrink:0;transition:transform .2s}
 .npc-card[data-expanded="true"] .npc-expand-icon{transform:rotate(90deg)}
 .npc-details{padding:6px 10px 10px;border-top:1px solid var(--bdr)}
 .npc-detail-btn{font-size:10px;color:var(--acc);background:none;border:1px solid var(--acc2);border-radius:3px;padding:3px 8px;cursor:pointer;margin-top:8px;font-family:var(--f);transition:background .15s}
@@ -416,26 +422,31 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .nflag-timer{font-size:9px;color:var(--dim);opacity:.6;margin-left:2px}
 
 /* ── JOB PANEL ──────────────────────────────────────────────────── */
-.j-label{font-size:9px;color:var(--acc);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;opacity:.8}
-.j-desc{font-size:11px;color:var(--dim);margin:2px 0 4px;line-height:1.5}
-.j-earn{font-size:11px;color:var(--norm);margin-top:2px}
-.j-flag-good{font-size:10px;color:var(--pos);margin-top:4px}
+.j-label{font-size:9px;color:var(--acc);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;opacity:.8}
+.j-desc{font-size:11px;color:var(--dim);margin:0 0 6px;line-height:1.5}
+.j-flag-good{font-size:11px;color:var(--pos);margin-top:4px}
 .job-section{margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--bdr)}
 .job-section:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
 
 /* ── POSSESSIONS EXPANDABLE ─────────────────────────────────────── */
 .poss-item{border-bottom:1px solid var(--bdr)}.poss-item:last-child{border-bottom:none}
-.poss-header{display:flex;align-items:center;justify-content:space-between;padding:6px 0;cursor:pointer}
-.poss-header:hover .poss-name{color:var(--acc)}
-.poss-icon{font-size:9px;color:var(--dim);flex-shrink:0;transition:transform .2s}
-.poss-body{font-size:11px;color:var(--dim);padding:2px 0 8px;line-height:1.6}
-.poss-val{color:var(--acc);font-size:11px;margin-top:2px}
+.poss-header{display:flex;align-items:center;justify-content:space-between;padding:7px 0;cursor:pointer;gap:6px}
+.poss-header:active{opacity:.7}
+.poss-header-main{flex:1;min-width:0;overflow:hidden}
+.poss-name{font-size:12px;font-weight:600;color:var(--txt);display:block}
+.poss-cond-preview{font-size:10px;color:var(--dim);display:block;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.poss-icon{font-size:9px;color:var(--dim);flex-shrink:0}
+.poss-body{display:none;padding:2px 0 10px;line-height:1.7}
+.poss-item[data-open="true"] .poss-body{display:block}
+.poss-detail-row{display:flex;gap:8px;align-items:baseline;padding:2px 0;font-size:11px;color:var(--dim)}
+.poss-detail-key{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;width:48px;flex-shrink:0;opacity:.7}
+.poss-val{color:var(--acc);font-size:11px}
 
 /* ── LOG IMPROVEMENTS ───────────────────────────────────────────── */
-.log-entry-row{display:flex;align-items:center;gap:6px;padding:6px 0;border-bottom:1px solid var(--bdr);cursor:pointer}
+.log-entry-row{display:flex;align-items:center;gap:6px;padding:6px 0}
 .log-entry-row:hover .log-text{color:var(--txt)}
-.log-jump{font-size:10px;color:var(--acc);background:none;border:1px solid var(--acc2);border-radius:3px;padding:1px 6px;cursor:pointer;font-family:var(--f);flex-shrink:0;margin-left:auto}
-.log-full-text{font-size:11px;color:var(--txt);padding:4px 0 8px 28px;line-height:1.6;white-space:pre-wrap;display:none;border-bottom:1px solid var(--bdr)}
+.log-jump{font-size:10px;color:var(--acc);background:none;border:1px solid var(--acc2);border-radius:3px;padding:1px 6px;cursor:pointer;font-family:var(--f);flex-shrink:0}
+.log-full-text{font-size:11px;color:var(--txt);padding:4px 0 10px 28px;line-height:1.7;white-space:pre-wrap;word-break:break-word;display:none}
 .log-entry.open .log-full-text{display:block}
 </style>
 </head>
@@ -996,7 +1007,12 @@ async function startNewGame() {
             npc.relationship_meter = Math.max(-100, Math.min(100, Number(nd.relationship_meter) || 0));
             npc.trust_meter = Math.max(-100, Math.min(100, Number(nd.trust_meter) || 0));
             npc.significance = 2;
-            if (nd.note) npc.recent_interactions = [nd.note];
+            const _initNotes = nd.note ? [nd.note] : [];
+            if (!_initNotes.length) {
+              const _relDesc = (nd.relationship_type ?? nd.npc_class ?? '').replace(/_/g, ' ');
+              _initNotes.push(`Known to player from before the game start${_relDesc ? ' — ' + _relDesc : ''}.`);
+            }
+            npc.recent_interactions = _initNotes;
             ws.npcs[nd.id] = npc;
           }
         }
@@ -1100,6 +1116,29 @@ async function startNewGame() {
   }
 }
 
+// ── SCHEDULE MISS DETECTION ───────────────────────────────────────────────────
+function detectScheduleMiss(prevIso, newIso, playerAction, ws) {
+  if (!ws.school || ws.school.status !== 'active') return [];
+  const prev = new Date(prevIso);
+  const next = new Date(newIso);
+  const missed = [];
+  const schoolAction = /\b(school|class|attend|lecture|go\s*to\s*school|pasok|eskwela)\b/i.test(playerAction);
+  if (schoolAction) return [];
+  const day = new Date(prev); day.setHours(0, 0, 0, 0);
+  const last = new Date(next); last.setHours(0, 0, 0, 0);
+  while (day <= last) {
+    const dow = day.getDay();
+    if (dow >= 1 && dow <= 5) {
+      const schoolEnd = new Date(day); schoolEnd.setHours(16, 0, 0, 0);
+      if (prev < schoolEnd && next >= schoolEnd) {
+        missed.push({ type: 'school' });
+      }
+    }
+    day.setDate(day.getDate() + 1);
+  }
+  return missed;
+}
+
 // ── PROCESS TURN ──────────────────────────────────────────────────────────────
 function autopilotHours(i) {
   if (/sleep|nap/i.test(i)) return 7;
@@ -1177,8 +1216,38 @@ async function processTurn(input) {
     }
     else { timeCost=autopilotHours(input); statDeltas=autopilotDeltas(input,timeCost); actionDesc='[autopilot]'; }
 
-    ws.sim_time     = advanceTime(ws.sim_time, timeCost).toISOString();
-    ws.player.stats = applyDecay(ws.player.stats, timeCost);
+    // Track explicit encounter in NPC recent_interactions
+    if (route === ROUTE.PATH_1_EXPLICIT) {
+      const NEEDS_PARTNER = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
+      const explicitType = actionDesc.match(/\[explicit:\s*([^\s\]]+)/)?.[1] ?? '';
+      if (NEEDS_PARTNER.includes(explicitType) && !actionDesc.includes('no established partner')) {
+        const inputLower = input.toLowerCase();
+        const namedNpc = Object.values(ws.npcs).find(n =>
+          n.status === 'active' && n.significance >= 1 && n.name && inputLower.includes(n.name.toLowerCase())
+        ) ?? Object.values(ws.npcs).find(n => n.status === 'active' && n.significance >= 1);
+        if (namedNpc) {
+          const ri = ws.npcs[namedNpc.id].recent_interactions ?? [];
+          ws.npcs[namedNpc.id] = { ...ws.npcs[namedNpc.id], recent_interactions: [...ri, `Intimate encounter — turn ${ws.turn + 1}`].slice(-5) };
+        }
+      }
+    }
+
+    const prevSimTime = ws.sim_time;
+    ws.sim_time       = advanceTime(ws.sim_time, timeCost).toISOString();
+    ws.player.stats   = applyDecay(ws.player.stats, timeCost);
+
+    // Schedule miss consequences
+    const missedSchedule = detectScheduleMiss(prevSimTime, ws.sim_time, input, ws);
+    for (const miss of missedSchedule) {
+      if (miss.type === 'school' && ws.school) {
+        ws.school.absence_count = (ws.school.absence_count ?? 0) + 1;
+        const n = ws.school.absence_count;
+        statDeltas.mood       = (statDeltas.mood       ?? 0) + Math.max(-20, -(4 + n * 3));
+        statDeltas.reputation = (statDeltas.reputation ?? 0) - (n > 2 ? 3 : 1);
+        await logEvent({ turn: ws.turn, category: 'schedule_miss', description: `Missed school — ${n} total absence${n > 1 ? 's' : ''}` });
+      }
+    }
+
     ws.player.stats = applyDeltas(ws.player.stats, statDeltas);
     if (locationChange) ws.player.location = locationChange;
 

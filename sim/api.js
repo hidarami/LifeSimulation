@@ -595,7 +595,7 @@ Return ONLY valid JSON (no markdown fences):
     "days_active": 45
   },
   "starting_possessions": [
-    { "name": "item name", "note": "its purpose or current condition", "value_peso": 800 }
+    { "name": "short item name", "condition": "one phrase for current physical state e.g. old and cracked", "note": "what it is used for or its story", "value_peso": 800_or_null, "acquired_method": "bought|gifted|inherited|found" }
   ]
 }
 
@@ -604,7 +604,7 @@ Rules:
 - school: include ONLY if player is clearly a student. SHS Grade 12 = 17–18 yrs old in 2018.
 - job_enrichment: include ONLY if lorebook mentions a job or income. Return null if none.
 - days_active: AGE-REALISTIC. A 17-yr-old in 2018 cannot have 3 years of adult streaming history. Max ~200 days.
-- starting_possessions: 4–6 items matching the character's economic class. Rural poor = basic cracked phone, worn clothes, sleeping mat, etc.
+- starting_possessions: 4–7 items matching the character's economic class and lifestyle. Infer from background even if lorebook doesn't list items. Rural poor = cracked phone, worn clothes, sleeping mat, lighter, rosary, small amount of cash, etc. Do NOT return an empty array — always generate possessions.
 - Return null for school if player is NOT described as a student.
 - Return null for job_enrichment if player has NO mentioned income source.`;
 

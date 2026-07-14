@@ -85,7 +85,12 @@ function buildNpcCard(npc, currentDate) {
 
   const task      = getNpcCurrentTask(npc, currentDate);
   const taskClass = task.available ? 'avail' : 'busy';
-  const relLabel  = (npc.relationship_type ?? npc.npc_class ?? 'acquaintance').replace(/_/g, ' ');
+  const rawLabel  = npc.relationship_type ?? npc.npc_class ?? '';
+  const relLabel  = (
+    npc.relationship_meter === 0 && npc.trust_meter === 0 && !['brother','sister','mother','father','uncle','aunt','cousin','friend','best_friend','boyfriend','girlfriend'].includes(rawLabel)
+      ? 'stranger'
+      : rawLabel || 'acquaintance'
+  ).replace(/_/g, ' ');
   const relSign   = npc.relationship_meter > 0 ? '+' : '';
   const relClass  = npc.relationship_meter >= 30 ? 'mp' : npc.relationship_meter <= -30 ? 'mn' : 'mz';
 
@@ -93,15 +98,14 @@ function buildNpcCard(npc, currentDate) {
   const header = document.createElement('div');
   header.className = 'npc-collapsed';
   header.innerHTML = `
-    <div class="npc-col-main">
+    <div class="npc-col-top">
       <span class="npc-name">${npc.name}</span>
-      <span class="npc-age" style="font-size:11px;color:var(--dim)">Age ${npc.age}</span>
-      <span class="npc-rel-label">${relLabel}</span>
-    </div>
-    <div class="npc-col-meta">
-      <span class="npc-task-pill ${taskClass}">${task.task.replace(/_/g,' ')}</span>
       <span class="npc-rel-num ${relClass}">${relSign}${npc.relationship_meter}</span>
       <span class="npc-expand-icon">▶</span>
+    </div>
+    <div class="npc-col-bottom">
+      <span class="npc-age-rel">Age ${npc.age} · <em>${relLabel}</em></span>
+      <span class="npc-task-pill ${taskClass}">${task.task.replace(/_/g,' ')}</span>
     </div>`;
 
   // ── Expanded details ──────────────────────────────────────────────────────
@@ -109,8 +113,11 @@ function buildNpcCard(npc, currentDate) {
     `<div class="tr-row"><span class="tr-k">${k}</span><div class="tr-t"><div class="tr-f" style="width:${v}%"></div></div><span class="tr-v">${v}</span></div>`
   ).join('');
 
-  const recent = (npc.recent_interactions ?? []).slice(-3)
-    .map(i => `<li>${i}</li>`).join('') || '<li>No interactions yet.</li>';
+  const recentArr = npc.recent_interactions ?? [];
+  const recentDefault = (npc.relationship_meter !== 0 || npc.trust_meter !== 0)
+    ? `<li>Relationship established prior to game start${npc.relationship_type ? ' — ' + npc.relationship_type.replace(/_/g,' ') : ''}.</li>`
+    : '<li>No meaningful interaction yet.</li>';
+  const recent = recentArr.slice(-3).map(i => `<li>${i}</li>`).join('') || recentDefault;
 
   const flags = (npc.active_flags ?? []).map(f => {
     const timer = npc.flag_timers?.[f];
@@ -160,8 +167,9 @@ export function renderJobPanel(job, school, container) {
     sec.innerHTML = `
       <div class="j-label">Student</div>
       <div class="j-emp">${school.name}</div>
-      <div class="j-pos">${school.grade_level ?? ''}</div>
-      <div class="j-sch">${school.schedule ?? ''}</div>
+      ${school.grade_level ? `<div class="j-role">${school.grade_level}</div>` : ''}
+      ${school.schedule && school.schedule !== 'null' ? `<div class="j-meta-row"><span class="j-meta-key">Hours</span><span class="j-sch-val">${school.schedule}</span></div>` : ''}
+      ${school.absence_count ? `<div class="j-meta-row"><span class="j-meta-key">Absent</span><span style="color:var(--low);font-size:11px">${school.absence_count} day${school.absence_count !== 1 ? 's' : ''}</span></div>` : ''}
       ${school.status === 'active' ? '<div class="j-flag-good">Currently Enrolled</div>' : ''}`;
     container.appendChild(sec);
   }
@@ -183,12 +191,12 @@ export function renderJobPanel(job, school, container) {
   sec.innerHTML = `
     <div class="j-label">Work</div>
     <div class="j-emp">${employer}</div>
-    ${!isBadStr(job.position) ? `<div class="j-pos">${job.position}</div>` : ''}
+    ${!isBadStr(job.position) ? `<div class="j-role">${job.position}</div>` : ''}
     ${job.description ? `<div class="j-desc">${job.description}</div>` : ''}
-    <div class="j-earn">${salary}</div>
-    ${!isBadStr(job.schedule) ? `<div class="j-sch">${job.schedule}</div>` : ''}
-    <div class="j-days">${job.days_employed ?? 0} days active</div>
-    ${flags ? `<div class="j-flags">${flags}</div>` : ''}`;
+    <div class="j-meta-row"><span class="j-meta-key">Pay</span><span class="j-earn">${salary}</span></div>
+    ${!isBadStr(job.schedule) ? `<div class="j-meta-row"><span class="j-meta-key">Hours</span><span class="j-sch-val">${job.schedule}</span></div>` : ''}
+    <div class="j-meta-row"><span class="j-meta-key">Active</span><span class="j-days-val">${job.days_employed ?? 0} days</span></div>
+    ${flags ? `<div class="j-flags" style="margin-top:6px">${flags}</div>` : ''}`;
   container.appendChild(sec);
 }
 
@@ -206,31 +214,43 @@ export function renderPossessionsPanel(possessions, irreversible, container) {
   }
 
   if (possessions?.length) {
-    const h = document.createElement('div'); h.className = 'psub'; h.textContent = 'Possessions';
+    const h = document.createElement('div'); h.className = 'psub';
+    h.textContent = `Possessions (${possessions.length})`;
     container.appendChild(h);
     possessions.forEach(p => {
       const item = document.createElement('div');
-      item.className   = 'poss-item';
+      item.className = 'poss-item';
       item.dataset.open = 'false';
-      const hasDetail = p.note || p.value_peso != null;
+
+      const condition = p.condition || null;
+
       const head = document.createElement('div');
       head.className = 'poss-header';
-      head.innerHTML = `<span class="poss-name">${p.name}</span>${hasDetail ? '<span class="poss-icon">▶</span>' : ''}`;
+      head.innerHTML = `
+        <div class="poss-header-main">
+          <span class="poss-name">${p.name}</span>
+          ${condition ? `<span class="poss-cond-preview">${condition}</span>` : ''}
+        </div>
+        <span class="poss-icon">▶</span>`;
       item.appendChild(head);
-      if (hasDetail) {
-        const body = document.createElement('div');
-        body.className = 'poss-body';
-        body.innerHTML = [
-          p.note ? `<div>${p.note}</div>` : '',
-          p.value_peso != null ? `<div class="poss-val">Est. value: ₱${Number(p.value_peso).toLocaleString()}</div>` : '',
-        ].join('');
-        item.appendChild(body);
-        head.addEventListener('click', () => {
-          const open = item.dataset.open === 'true';
-          item.dataset.open = open ? 'false' : 'true';
-          head.querySelector('.poss-icon').textContent = open ? '▶' : '▼';
-        });
-      }
+
+      const rows = [];
+      if (p.note && p.note !== condition) rows.push(`<div class="poss-detail-row"><span class="poss-detail-key">About</span><span>${p.note}</span></div>`);
+      if (condition)                       rows.push(`<div class="poss-detail-row"><span class="poss-detail-key">Cond.</span><span>${condition}</span></div>`);
+      if (p.acquired_method)              rows.push(`<div class="poss-detail-row"><span class="poss-detail-key">Origin</span><span>${p.acquired_method}</span></div>`);
+      if (p.value_peso != null)           rows.push(`<div class="poss-detail-row"><span class="poss-detail-key">Value</span><span class="poss-val">₱${Number(p.value_peso).toLocaleString()}</span></div>`);
+
+      const body = document.createElement('div');
+      body.className = 'poss-body';
+      body.innerHTML = rows.length ? rows.join('') : `<div class="poss-detail-row" style="opacity:.6">No additional details.</div>`;
+      item.appendChild(body);
+
+      head.addEventListener('click', () => {
+        const open = item.dataset.open === 'true';
+        item.dataset.open = open ? 'false' : 'true';
+        head.querySelector('.poss-icon').textContent = open ? '▶' : '▼';
+      });
+
       container.appendChild(item);
     });
   }
