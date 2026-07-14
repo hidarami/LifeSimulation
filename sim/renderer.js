@@ -141,7 +141,6 @@ function buildNpcCard(npc, currentDate) {
       ${buildMeter(npc.trust_meter, 'Trust')}
     </div>
     <div class="npc-traits" style="margin-top:6px">${traitBars}</div>
-    ${flags ? `<div class="npc-flags" style="margin-top:4px">${flags}</div>` : ''}
     <button class="npc-detail-btn" data-id="${npc.id}">Full Details ↗</button>`;
 
   header.addEventListener('click', e => {

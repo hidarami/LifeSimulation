@@ -215,6 +215,14 @@ Return exactly this JSON shape:
 Rules:
 - time_cost_hours must be a positive number (minimum 0.25)
 - stat_deltas: include only stats that actually change
+- CONTEXT-AWARE STAT SPIKES: Stat changes must reflect emotional and situational severity:
+  * Routine activities: ±1–5
+  * Minor social interactions: ±2–8
+  * Notable events (arguments, minor conflicts): ±5–15
+  * MAJOR EVENTS (caught in inappropriate acts, grave betrayals, public humiliation): ±15–40
+  * TRAUMATIC EVENTS (assault, severe betrayal, witnessing death): ±25–50
+  * When player is caught doing something inappropriate by authority/family: mood -20 to -35, social -15 to -30
+  * When player gravely betrays someone's trust: mood -10 to -20, social -15 to -25
 - risk_class must be honest — do not default to "none" to be conservative
 - location_change is null if the player stays in their current location
 - npc_ids_involved: only NPC ids that appear in the player's current world state`;
@@ -241,13 +249,18 @@ Return exactly this JSON shape:
 Rules:
 - relationship_delta and trust_delta: integers between -20 and +20
 - Calibration: ±1–3 = minor moment; ±5–8 = notable shift; ±10–15 = serious conflict or deep bond; ±20 = life-altering event. A family member being mildly annoyed by a phone call = −1 to −2 at most.
+- GRAVE BETRAYAL CALIBRATION: When player gravely betrays NPC (cheating, lying about major things, breaking sacred trust, inappropriate acts witnessed):
+  * relationship_delta: -15 to -20 (maximum penalty)
+  * trust_delta: -18 to -20 (maximum penalty)
+  * flags_to_add: MUST include "betrayed" (decay_rate "slow") and "angry" (decay_rate "medium")
+  * This applies even if NPC traits would normally soften the reaction
 - reaction_summary: one sentence, observable behavior only — no internal state labels, no emotion words
 - flags_to_add: flags are for SIGNIFICANT, PERSISTENT behavioral states only. The bar is high.
   "resentment" requires repeated mistreatment across multiple turns. A single inconvenient request does NOT trigger it.
   "jealousy_triggered" requires the NPC to directly witness competition.
   Daily friction between people who live together is normal life — it produces NO flag whatsoever.
   When uncertain, return an empty array. Calibrate toward fewer flags, not more.
-  Sexual/intimate context flags (only when action is explicitly sexual): "aroused" (NPC is physically responding — short duration), "post_first_sexual_encounter" (after a first sexual act with this NPC — decay slow), "mutual_unspoken_tension" (after intimate contact that changes the social dynamic — decay medium), "comfortable_intimacy" (established physical familiarity — decay slow), "uncomfortable" (NPC did not want this — required if gating thresholds not met).
+- Sexual/intimate context flags (only when action is explicitly sexual): "aroused" (NPC is physically responding — short duration), "post_first_sexual_encounter" (after a first sexual act with this NPC — decay slow), "mutual_unspoken_tension" (after intimate contact that changes the social dynamic — decay medium), "comfortable_intimacy" (established physical familiarity — decay slow), "uncomfortable" (NPC did not want this — required if gating thresholds not met).
 - NPC traits are HARD behavioral constraints — enforce strictly, no exceptions:
   * openness < 30: refuses all intimate contact unless trust_meter >= 60 AND relationship_meter >= 40 — return relationship_delta -5 to -15 if pushed
   * openness 30–50 AND relationship_meter < 20: no romantic or sexual contact — return relationship_delta -3 to -8 and flag "uncomfortable"

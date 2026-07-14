@@ -60,6 +60,20 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 }
 .panel-back:hover{color:var(--txt);background:var(--bdr)}
 
+/* ── DESKTOP/MOBILE RESPONSIVE ───────────────────────────────────────────── */
+@media (min-width: 768px) {
+  /* Hide back buttons on desktop - not needed */
+  .panel-back { display: none; }
+}
+
+@media (max-width: 767px) {
+  /* Mobile: show back buttons */
+  .panel-back { display: flex; }
+  /* Mobile: character panel back button on right side pointing right */
+  #panel-items .panel-back { order: 2; transform: rotate(180deg); }
+  #panel-items .panel-title { order: 1; }
+}
+
 /* ── CHARACTER HEADER ────────────────────────────────────────────────────── */
 #char-header{background:var(--sur);border-bottom:1px solid var(--bdr);padding:10px 14px 8px;flex-shrink:0}
 #char-header-row1{display:flex;align-items:center;gap:10px;margin-bottom:7px}
@@ -361,6 +375,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .npc-recent-list li{font-size:11px;color:var(--dim);padding:4px 0;border-bottom:1px solid var(--bdr)}
 .npc-recent-list li::before{content:'· '}
 
+/* ── CHAR OVERVIEW ───────────────────────────────────────────────────────── */
+#char-overview{display:none;font-size:11px;color:var(--dim);line-height:1.65;padding:5px 0 7px;margin-bottom:4px;border-bottom:1px solid var(--bdr);font-family:var(--fs);font-style:italic;}
+#char-overview.visible{display:block}
+
 /* ── EMPTY ───────────────────────────────────────────────────────────────── */
 .empty{color:var(--dim);font-size:12px;padding:16px 0}
 
@@ -514,7 +532,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
         <div id="char-info">
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0;overflow:hidden">
             <div id="char-name">—</div>
-            <div id="char-status" style="display:flex;flex-wrap:wrap;gap:3px;min-height:0"></div>
+            <div id="char-status" style="display:flex;flex-direction:column;gap:3px;min-height:0"></div>
           </div>
           <div id="h-cash">₱0</div>
         </div>
@@ -525,6 +543,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
           <div class="menu-line"></div>
         </div>
       </div>
+      <div id="char-overview" style="text-align:center;font-size:10px;color:var(--dim);padding:4px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
     </div>
     <div id="processing-bar"></div>
     <div id="center-stats-wrap"><div id="center-stats"></div></div>
@@ -694,7 +713,7 @@ import { loadWorldState, saveWorldState, createInitialWorldState,
          getCurrentSaveId } from './state.js';
 import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
          rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION,
-         applyCascadingEffects, computeCharacterEmotions } from './engine.js';
+         applyCascadingEffects, computeCharacterEmotions, applyCascadeEffectsToExternal } from './engine.js';
 import { routeInput, isExplicit, classifyExplicitActivity,
          EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE,
          hasThirdPartyPresence } from './sanitizer.js';
@@ -860,18 +879,52 @@ function renderSchedulePanel(job, school, container) {
   container.innerHTML = blocks.join('');
 }
 
+// ── CHARACTER OVERVIEW ────────────────────────────────────────────────────────
+function buildCharacterOverview(ws) {
+  if (!ws?.player) return '';
+  const { player, consequences, npcs, sim_time } = ws;
+  const ts = formatTimestamp(sim_time);
+  const emotions = computeCharacterEmotions(player.stats, consequences ?? [], Object.values(npcs ?? {}));
+  const emoStr = emotions.slice(0, 2).map(e => e.label.toLowerCase()).join(' & ');
+  const loc = (player.location ?? 'somewhere').replace(/_/g, ' ');
+  const nearby = Object.values(npcs ?? {})
+    .filter(n => n.status === 'active' && n.significance >= 1)
+    .slice(0, 3).map(n => n.name);
+  let text = `${ts.day}, ${ts.time}. At ${loc}.`;
+  if (emoStr) text += ` Feeling ${emoStr}.`;
+  if (ws.consequences?.length) {
+    const c = ws.consequences[0];
+    text += ` Dealing with ${c.type.replace(/_/g, ' ')}.`;
+  }
+  if (nearby.length) {
+    const nameStr = nearby.length === 1
+      ? nearby[0] + ' is nearby.'
+      : nearby.slice(0, -1).join(', ') + ' and ' + nearby.at(-1) + ' are nearby.';
+    text += ' ' + nameStr;
+  }
+  return text;
+}
+
 // ── RENDER ALL ────────────────────────────────────────────────────────────────
 function renderAll() {
   if (!WS) return;
   renderCenterStats(WS.player.stats);
+  // Character overview text
+  const overviewEl = document.getElementById('char-overview');
+  if (overviewEl) {
+    const ovTxt = buildCharacterOverview(WS);
+    overviewEl.textContent = ovTxt;
+    overviewEl.classList.toggle('visible', !!ovTxt);
+  }
   // Character emotion status
   const charStatusEl = document.getElementById('char-status');
   if (charStatusEl) {
-    const NEG = new Set(['Starving','Hungry','Sick','Unwell','Exhausted','Tired','Grimy','Depressed','Down','Isolated','Ill','Stressed','Tense']);
-    const POS = new Set(['Upbeat','Fine','Social','Happy','Grateful']);
-    const emotions = computeCharacterEmotions(WS.player.stats, WS.consequences ?? []);
+    const NEG = new Set(['Starving','Hungry','Sick','Unwell','Exhausted','Tired','Grimy','Depressed','Down','Isolated','Ill','Stressed','Tense','Embarrassed','Panicked']);
+    const POS = new Set(['Upbeat','Connected','Happy','Grateful','Elated']);
+    const BLANK = new Set(['Fine','Neutral']);
+    const emotions = computeCharacterEmotions(WS.player.stats, WS.consequences ?? [], Object.values(WS.npcs ?? {}));
     charStatusEl.innerHTML = emotions.map(em => {
-      const cls = NEG.has(em.label) ? 'neg' : POS.has(em.label) ? 'pos' : 'warn';
+      const cls = NEG.has(em.label) ? 'neg' : POS.has(em.label) ? 'pos' : BLANK.has(em.label) ? '' : 'warn';
       return `<span class="emotion-badge ${cls}">${em.label}<span class="emotion-cause">${em.cause}</span></span>`;
     }).join('');
   }
@@ -1328,13 +1381,46 @@ async function processTurn(input) {
       if (compound.ate) { statDeltas.hunger=(statDeltas.hunger??0)-30; statDeltas.mood=(statDeltas.mood??0)+5; }
       if (compound.location_hint) locationChange = compound.location_hint;
       timeCost = 0.5;
-      _mentionedNpc = Object.values(ws.npcs).find(n =>
-        n.status === 'active' && n.name && input.toLowerCase().includes(n.name.toLowerCase())
+      // Possessive form is the strongest signal ("ray's morning wood" → Ray is target)
+      const _inputLower = input.toLowerCase();
+      const _possNpc = Object.values(ws.npcs).find(n =>
+        n.status === 'active' && n.name && _inputLower.includes(n.name.toLowerCase() + "'s")
       );
+      // Fall back to verb-proximity: find NPC whose name is closest to an action verb
+      let _closestNpc = null, _minVerbDist = Infinity;
+      if (!_possNpc) {
+        const _aVerbs = ['jerk','stroke','finger','suck','blow','fuck','ride','mount','massage','grab','lick','eat','penetrat','makeout','rub','squeeze','pump','touch'];
+        for (const _cn of Object.values(ws.npcs)) {
+          if (_cn.status !== 'active' || !_cn.name) continue;
+          const _ni = _inputLower.indexOf(_cn.name.toLowerCase());
+          if (_ni === -1) continue;
+          for (const _vb of _aVerbs) {
+            const _vi = _inputLower.indexOf(_vb);
+            if (_vi === -1) continue;
+            const _d = Math.abs(_ni - _vi);
+            if (_d < _minVerbDist) { _minVerbDist = _d; _closestNpc = _cn; }
+          }
+        }
+      }
+      _mentionedNpc = _possNpc ?? _closestNpc ?? Object.values(ws.npcs).find(n =>
+        n.status === 'active' && n.name && _inputLower.includes(n.name.toLowerCase())
+      );
+      // Bystanders: other NPCs mentioned in input who are NOT the explicit partner
+      const _bystanders = Object.values(ws.npcs).filter(n =>
+        n.status === 'active' && n.name &&
+        input.toLowerCase().includes(n.name.toLowerCase()) &&
+        n.id !== _mentionedNpc?.id
+      ).map(n => {
+        const _bt = getNpcCurrentTask(n, ws.sim_time);
+        return `${n.name} (${_bt.task.replace(/_/g,' ')} — bystander, do not give them explicit actions or flags)`;
+      });
+      const _bystanderNote = _bystanders.length
+        ? ` — others present but uninvolved: ${_bystanders.join('; ')}`
+        : '';
       const partnerTag = (thirdParty && NEEDS_PARTNER.includes(type))
         ? ` — described partner in scene${_mentionedNpc ? ': ' + _mentionedNpc.name : ''}`
         : (!hasActiveNpc && !thirdParty ? ' — no established partner' : '');
-      actionDesc = `[explicit: ${type}${partnerTag}]` + (compound.ate ? ' + ate' : '');
+      actionDesc = `[explicit: ${type}${partnerTag}${_bystanderNote}]` + (compound.ate ? ' + ate' : '');
       // Auto-register described third party via Groq (async, non-blocking)
       if (thirdParty && !hasActiveNpc && NEEDS_PARTNER.includes(type)) {
         evaluateDescribedNpc(input).then(nd => {
@@ -1443,6 +1529,30 @@ async function processTurn(input) {
 
     ws.player.stats = applyDeltas(ws.player.stats, statDeltas);
     ws.player.stats = applyCascadingEffects(ws.player.stats);
+    
+    // Apply cascade effects to job/school/relationships
+    const cascadeEffects = applyCascadeEffectsToExternal(ws.player.stats, ws.job, ws.school, ws.npcs);
+    
+    // Apply job performance effects
+    if (ws.job && cascadeEffects.jobPerformance.length > 0) {
+      ws.job.performance_flags = [...(ws.job.performance_flags || []), ...cascadeEffects.jobPerformance];
+      // Remove duplicates
+      ws.job.performance_flags = [...new Set(ws.job.performance_flags)];
+    }
+    
+    // Apply school performance effects
+    if (ws.school && cascadeEffects.schoolPerformance.length > 0) {
+      ws.school.performance_flags = [...(ws.school.performance_flags || []), ...cascadeEffects.schoolPerformance];
+      ws.school.performance_flags = [...new Set(ws.school.performance_flags)];
+    }
+    
+    // Apply relationship modifiers from cascades
+    for (const [npcId, modifier] of Object.entries(cascadeEffects.relationshipModifiers)) {
+      if (ws.npcs[npcId]) {
+        ws.npcs[npcId] = applyRelationshipDelta(ws.npcs[npcId], modifier, null);
+      }
+    }
+    
     if (locationChange) ws.player.location = locationChange;
 
     for (const ev of checkWorldEvents(ws)) {
@@ -1470,10 +1580,17 @@ async function processTurn(input) {
     if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
       const _knownNames = new Set(Object.values(ws.npcs).map(n => n.name?.toLowerCase()).filter(Boolean));
       const _skip = new Set(['The','You','Your','She','He','They','His','Her','Their','What','This','That','Then','Turn','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','January','February','March','April','May','June','July','August','September','October','November','December']);
+      // Also check for common relationship terms regardless of capitalization
+      const _relTerms = ['mother','father','brother','sister','aunt','uncle','cousin','grandmother','grandfather','mom','dad'];
       const _newName = (prose.match(/\b([A-Z][a-z]{1,14})\b/g) ?? [])
         .filter(n => !_skip.has(n) && !_knownNames.has(n.toLowerCase()))
         .find((n, i, arr) => arr.indexOf(n) === i);
-      if (_newName) {
+      // If no capitalized name found, check for relationship terms in lowercase
+      const _relTerm = !_newName ? _relTerms.find(term => 
+        prose.toLowerCase().includes(term) && !_knownNames.has(term)
+      ) : null;
+      const _candidateName = _newName || (_relTerm ? _relTerm.charAt(0).toUpperCase() + _relTerm.slice(1) : null);
+      if (_candidateName) {
         evaluateDescribedNpc(prose.slice(0, 500)).then(nd => {
           const _proseNpcExists = Object.values(WS?.npcs ?? {}).some(n =>
             n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim()
@@ -1505,6 +1622,8 @@ async function processTurn(input) {
     saveWorldStateCloud(ws).catch(()=>{});
     renderAll();
     setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
+    // Auto-refresh log tab if currently open
+    if (document.querySelector('.p-tab[data-p="log"]')?.classList.contains('on')) renderActionLog();
 
     // NPC initiative — async, non-blocking, every 3rd turn
     if (ws.turn % 3 === 0) {

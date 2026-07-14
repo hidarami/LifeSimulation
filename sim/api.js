@@ -572,6 +572,17 @@ Return ONLY valid JSON:
   "trust_meter": 10
 }
 
+CRITICAL: Only extract HUMAN persons. DO NOT extract:
+- Animals, insects, pets (dog, cat, fly, mosquito, bird, etc.)
+- Objects, vehicles, inanimate things
+- Abstract concepts or weather phenomena
+
+FAMILY MEMBERS: ALWAYS extract family members mentioned as people:
+- mother, father, mom, dad, brother, sister, aunt, uncle, cousin, grandmother, grandfather
+- Even if mentioned in lowercase, these are ALWAYS human persons
+- Set npc_class to "household" for family members
+
+If the described entity is non-human, return { "found": false }.
 If no clear third party is physically present and acting, return { "found": false }.`;
 
   try {

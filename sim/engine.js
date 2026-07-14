@@ -156,6 +156,7 @@ export function advanceConsequences(consequences) {
 export function applyCascadingEffects(stats) {
   const s = { ...stats };
   const c = {};
+  // NEGATIVE CASCADES
   // Hunger → energy, mood, social
   if (s.hunger >= 85)       { c.energy = -15; c.mood = -12; c.social = -8; }
   else if (s.hunger >= 65)  { c.energy = -7;  c.mood = -5;  c.social = -4; }
@@ -174,6 +175,33 @@ export function applyCascadingEffects(stats) {
   else if (s.hygiene <= 30) { c.mood = (c.mood ?? 0) - 2;  c.social = (c.social ?? 0) - 4; }
   // Low social → mood
   if (s.social <= 15)       { c.mood = (c.mood ?? 0) - 7; }
+  // Low reputation → mood, social
+  if (s.reputation <= 20)   { c.mood = (c.mood ?? 0) - 5; c.social = (c.social ?? 0) - 8; }
+  else if (s.reputation <= 40) { c.mood = (c.mood ?? 0) - 2; c.social = (c.social ?? 0) - 3; }
+  // High arousal → mood, social (can be distracting)
+  if (s.arousal >= 80)       { c.mood = (c.mood ?? 0) - 3; c.social = (c.social ?? 0) - 5; }
+  else if (s.arousal >= 60)  { c.mood = (c.mood ?? 0) - 1; c.social = (c.social ?? 0) - 2; }
+
+  // POSITIVE CASCADES (recovery mechanics)
+  // High mood → social, energy
+  if (s.mood >= 85)         { c.social = (c.social ?? 0) + 8; c.energy = (c.energy ?? 0) + 5; }
+  else if (s.mood >= 70)    { c.social = (c.social ?? 0) + 4; c.energy = (c.energy ?? 0) + 2; }
+  // High energy → mood, hygiene
+  if (s.energy >= 85)       { c.mood = (c.mood ?? 0) + 6; c.hygiene = (c.hygiene ?? 0) + 3; }
+  else if (s.energy >= 70)  { c.mood = (c.mood ?? 0) + 3; c.hygiene = (c.hygiene ?? 0) + 1; }
+  // High hygiene → mood, social
+  if (s.hygiene >= 85)      { c.mood = (c.mood ?? 0) + 5; c.social = (c.social ?? 0) + 6; }
+  else if (s.hygiene >= 70) { c.mood = (c.mood ?? 0) + 2; c.social = (c.social ?? 0) + 3; }
+  // High social → mood
+  if (s.social >= 85)       { c.mood = (c.mood ?? 0) + 7; }
+  else if (s.social >= 70)  { c.mood = (c.mood ?? 0) + 3; }
+  // High reputation → mood, social
+  if (s.reputation >= 85)    { c.mood = (c.mood ?? 0) + 5; c.social = (c.social ?? 0) + 8; }
+  else if (s.reputation >= 70) { c.mood = (c.mood ?? 0) + 2; c.social = (c.social ?? 0) + 4; }
+  // Low hunger (well-fed) → energy, mood
+  if (s.hunger <= 15)        { c.energy = (c.energy ?? 0) + 4; c.mood = (c.mood ?? 0) + 3; }
+  else if (s.hunger <= 30)  { c.energy = (c.energy ?? 0) + 2; c.mood = (c.mood ?? 0) + 1; }
+
   // Apply at 50% weight to avoid instant death spirals
   for (const [key, delta] of Object.entries(c)) {
     if (!(key in STATS)) continue;
@@ -183,9 +211,111 @@ export function applyCascadingEffects(stats) {
   return s;
 }
 
+// ─── CASCADE EFFECTS ON JOB/SCHEDULE/RELATIONSHIPS ─────────────────────────────
+export function applyCascadeEffectsToExternal(stats, job, school, npcs) {
+  const effects = {
+    jobPerformance: [],
+    schoolPerformance: [],
+    relationshipModifiers: {}
+  };
+
+  // Health affects job/school attendance and performance
+  if (stats.health <= 20) {
+    effects.jobPerformance.push('too_sick_to_work');
+    effects.schoolPerformance.push('too_sick_to_attend');
+  } else if (stats.health <= 40) {
+    effects.jobPerformance.push('reduced_performance_health');
+    effects.schoolPerformance.push('reduced_performance_health');
+  }
+
+  // Energy affects work/school performance
+  if (stats.energy <= 15) {
+    effects.jobPerformance.push('exhausted_at_work');
+    effects.schoolPerformance.push('exhausted_at_school');
+  } else if (stats.energy <= 30) {
+    effects.jobPerformance.push('low_energy_performance');
+    effects.schoolPerformance.push('low_energy_performance');
+  }
+
+  // Mood affects work/school performance and relationships
+  if (stats.mood <= 15) {
+    effects.jobPerformance.push('severely_depressed');
+    effects.schoolPerformance.push('severely_depressed');
+    // Low mood makes character irritable in relationships
+    for (const [npcId, npc] of Object.entries(npcs || {})) {
+      effects.relationshipModifiers[npcId] = (effects.relationshipModifiers[npcId] || 0) - 5;
+    }
+  } else if (stats.mood <= 30) {
+    effects.jobPerformance.push('depressed_performance');
+    effects.schoolPerformance.push('depressed_performance');
+    for (const [npcId, npc] of Object.entries(npcs || {})) {
+      effects.relationshipModifiers[npcId] = (effects.relationshipModifiers[npcId] || 0) - 2;
+    }
+  } else if (stats.mood >= 85) {
+    effects.jobPerformance.push('excellent_mood');
+    effects.schoolPerformance.push('excellent_mood');
+    for (const [npcId, npc] of Object.entries(npcs || {})) {
+      effects.relationshipModifiers[npcId] = (effects.relationshipModifiers[npcId] || 0) + 3;
+    }
+  }
+
+  // Hygiene affects social interactions and some jobs
+  if (stats.hygiene <= 15) {
+    effects.jobPerformance.push('poor_hygiene');
+    effects.schoolPerformance.push('poor_hygiene');
+    for (const [npcId, npc] of Object.entries(npcs || {})) {
+      effects.relationshipModifiers[npcId] = (effects.relationshipModifiers[npcId] || 0) - 4;
+    }
+  } else if (stats.hygiene <= 30) {
+    effects.jobPerformance.push('below_average_hygiene');
+    effects.schoolPerformance.push('below_average_hygiene');
+    for (const [npcId, npc] of Object.entries(npcs || {})) {
+      effects.relationshipModifiers[npcId] = (effects.relationshipModifiers[npcId] || 0) - 2;
+    }
+  }
+
+  // Social affects relationship quality
+  if (stats.social <= 15) {
+    for (const [npcId, npc] of Object.entries(npcs || {})) {
+      effects.relationshipModifiers[npcId] = (effects.relationshipModifiers[npcId] || 0) - 3;
+    }
+  } else if (stats.social >= 85) {
+    for (const [npcId, npc] of Object.entries(npcs || {})) {
+      effects.relationshipModifiers[npcId] = (effects.relationshipModifiers[npcId] || 0) + 4;
+    }
+  }
+
+  // Reputation affects job opportunities and social standing
+  if (stats.reputation <= 20) {
+    effects.jobPerformance.push('poor_reputation');
+    for (const [npcId, npc] of Object.entries(npcs || {})) {
+      effects.relationshipModifiers[npcId] = (effects.relationshipModifiers[npcId] || 0) - 3;
+    }
+  } else if (stats.reputation >= 85) {
+    effects.jobPerformance.push('excellent_reputation');
+    for (const [npcId, npc] of Object.entries(npcs || {})) {
+      effects.relationshipModifiers[npcId] = (effects.relationshipModifiers[npcId] || 0) + 3;
+    }
+  }
+
+  return effects;
+}
+
 // ─── EMOTION COMPUTATION ──────────────────────────────────────────────────────
-export function computeCharacterEmotions(stats, consequences = []) {
+export function computeCharacterEmotions(stats, consequences = [], npcContext = null) {
   const e = [];
+  // Check for situational emotions from NPC reactions first (highest priority)
+  if (npcContext) {
+    const npcs = Array.isArray(npcContext) ? npcContext : [npcContext];
+    const uncomfortableNpcs = npcs.filter(n => n.active_flags?.includes('uncomfortable') || n.active_flags?.includes('angry') || n.active_flags?.includes('suspicious'));
+    if (uncomfortableNpcs.length > 0) {
+      e.push({ label: 'Embarrassed', cause: 'Caught in awkward situation' });
+      if (uncomfortableNpcs.length > 1 || uncomfortableNpcs.some(n => n.active_flags?.includes('angry'))) {
+        e.push({ label: 'Panicked', cause: 'Multiple witnesses upset' });
+      }
+    }
+  }
+  // Physical needs - allow multiple to coexist
   if (stats.hunger >= 80)       e.push({ label: 'Starving',   cause: 'Hasn\'t eaten in hours' });
   else if (stats.hunger >= 60)  e.push({ label: 'Hungry',     cause: 'Stomach is growling' });
   if (stats.health <= 20)       e.push({ label: 'Sick',       cause: 'Body is failing' });
@@ -194,24 +324,31 @@ export function computeCharacterEmotions(stats, consequences = []) {
   else if (stats.energy <= 25)  e.push({ label: 'Tired',      cause: 'Low on energy' });
   if (stats.hygiene <= 15)      e.push({ label: 'Grimy',      cause: 'Badly needs a shower' });
   else if (stats.hygiene <= 30) e.push({ label: 'Unkempt',    cause: 'Could use a wash' });
+  // Mood - allow coexistence with other emotions
   if (stats.mood <= 15)         e.push({ label: 'Depressed',  cause: 'Mood has bottomed out' });
   else if (stats.mood <= 30)    e.push({ label: 'Down',       cause: 'Feeling low' });
   else if (stats.mood >= 88)    e.push({ label: 'Elated',     cause: 'Riding high right now' });
   else if (stats.mood >= 75)    e.push({ label: 'Upbeat',     cause: 'In good spirits' });
+  // Social - allow coexistence
   if (stats.social <= 15)       e.push({ label: 'Isolated',   cause: 'Disconnected from everyone' });
-  else if (stats.social >= 80)  e.push({ label: 'Connected',  cause: 'Present and social' });
-  if (stats.arousal >= 80)      e.push({ label: 'Aroused',    cause: 'Strong physical need' });
-  else if (stats.arousal >= 65) e.push({ label: 'Restless',   cause: 'Pent-up tension' });
+  else if (stats.social >= 80)  e.push({ label: 'Connected', cause: 'Present and social' });
+  // Arousal - always add if threshold met, coexists with other emotions
+  if (stats.arousal >= 70)      e.push({ label: 'Horny',     cause: 'Strong physical urge' });
+  else if (stats.arousal >= 50) e.push({ label: 'Aroused',   cause: 'Building tension' });
+  else if (stats.arousal >= 30) e.push({ label: 'Restless',  cause: 'Mild tension' });
+  // Consequences
   const ill = consequences.find(c => c.type === 'illness' || c.type === 'hospitalization');
   if (ill)   e.push({ label: 'Ill',      cause: `${ill.type.replace(/_/g,' ')} — ${ill.duration}t left` });
   const unemp = consequences.find(c => c.type === 'unemployment');
   if (unemp) e.push({ label: 'Stressed', cause: 'Out of work' });
-  // Add positive filler only if nothing else qualifies and stats are decent
-  if (e.length < 2 && stats.mood >= 65 && stats.health >= 65 && stats.energy >= 55) {
-    if (!e.find(em => ['Upbeat','Elated','Connected'].includes(em.label)))
+  // Add baseline emotion if no strong emotions present
+  if (e.length === 0) {
+    if (stats.mood >= 65 && stats.health >= 65 && stats.energy >= 55) {
       e.push({ label: 'Fine', cause: 'Everything\'s holding together' });
+    } else {
+      e.push({ label: 'Neutral', cause: 'Coasting through the day' });
+    }
   }
-  if (!e.length) e.push({ label: 'Neutral', cause: 'Coasting through the day' });
   return e.slice(0, 3);
 }
 
