@@ -6,6 +6,7 @@
 import {
   buildGrokNarrationPrompt, buildGeminiClassifyPrompt,
   buildGeminiNpcPrompt, buildGeminiAutopilotPrompt,
+  buildMetaConsolePrompt,
 } from './prompt.js';
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
@@ -328,7 +329,18 @@ ${lorebook}
 
 Return exactly this shape:
 {
-  "player": { "location": "string or null", "cash": number_or_null },
+  "player": {
+    "location": "string or null",
+    "cash": number_or_null,
+    "initial_stats": {
+      "health": number_0_to_100_or_null,
+      "energy": number_0_to_100_or_null,
+      "hygiene": number_0_to_100_or_null,
+      "mood": number_0_to_100_or_null,
+      "social": number_0_to_100_or_null,
+      "reputation": number_0_to_100_or_null
+    }
+  },
   "start_date": { "year": number_or_null, "month": number_1_to_12_or_null },
   "job": null,
   "npcs": [],
@@ -336,6 +348,7 @@ Return exactly this shape:
 }
 
 start_date: Extract the in-world year and month (e.g. "summer of 2018" → year:2018, month:7; "February 2020" → year:2020, month:2; "2024" → year:2024, month:null). If no date context is mentioned, return null for both fields.
+initial_stats: Infer from character description ONLY — sick/injured→low health, depressed/grieving→low mood, isolated/alone→low social, filthy/homeless→low hygiene, well-rested→high energy, charismatic/popular→high reputation. Return null for any stat the lorebook does not imply. hunger and arousal are NOT included (always initialized separately). Never invent values — null is correct when unspecified.
 
 If employed, job shape:
 { "employer": "string", "position": "string", "salary_per_cycle": number, "pay_cycle": "daily|weekly|monthly", "schedule": "e.g. Mon-Fri 8AM-5PM" }
@@ -676,4 +689,109 @@ Rules:
     console.warn('[enrich] failed:', e.message);
     return null;
   }
+}
+
+// ─── CONTEXT-AWARE NPC FLAG EVALUATION ────────────────────────────────────────
+export async function evaluateNpcFlagsInContext(npc, prose, hoursElapsed) {
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (!groqKey || !npc.active_flags?.length) return [];
+  const prompt = `You evaluate whether NPC behavioral flags remain contextually valid after a new scene.
+
+NPC: ${npc.name} (${npc.relationship_type ?? npc.npc_class ?? 'person'})
+Active flags: ${npc.active_flags.join(', ')}
+Hours elapsed this turn: ${hoursElapsed.toFixed(1)}
+Scene just narrated: "${prose.slice(0, 500)}"
+
+Remove a flag if: the scene resolves the state (reconciliation removes "uncomfortable"), the underlying cause is clearly gone, or enough time passed and nothing reinforces it.
+Keep a flag if: the scene reinforces the emotional state, cause is unresolved, or too little time has passed.
+
+Return ONLY valid JSON:
+{ "flags_to_remove": ["flag1", "flag2"] }
+
+Empty array if nothing should be removed.`;
+
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+        max_tokens: 80,
+      }),
+    });
+    if (!res.ok) return [];
+    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return Array.isArray(parsed.flags_to_remove) ? parsed.flags_to_remove : [];
+  } catch { return []; }
+}
+
+// ─── META CONSOLE ─────────────────────────────────────────────────────────────
+const GROQ_CONSOLE_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant'];
+
+export async function callMetaConsole(messages, gameState) {
+  const systemPrompt = buildMetaConsolePrompt(gameState);
+
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (groqKey) {
+    for (const model of GROQ_CONSOLE_MODELS) {
+      try {
+        const res = await fetch(GROQ_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)],
+            temperature: 0.65,
+            max_tokens: 700,
+          }),
+        });
+        if (res.ok) {
+          const text = (await res.json()).choices?.[0]?.message?.content?.trim();
+          if (text) return text;
+        }
+      } catch {}
+    }
+  }
+
+  const gemKey = localStorage.getItem('GEMINI_API_KEY');
+  if (gemKey) {
+    try {
+      const conversation = messages.slice(-10).map(m => `${m.role === 'user' ? 'Player' : 'Assistant'}: ${m.content}`).join('\n\n');
+      const res = await fetch(`${GEMINI_URL}?key=${gemKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${conversation}\n\nAssistant:` }] }],
+          generationConfig: { temperature: 0.65, maxOutputTokens: 700 },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) return text;
+      }
+    } catch {}
+  }
+
+  const grokKey = localStorage.getItem('GROK_API_KEY');
+  if (grokKey) {
+    try {
+      const res = await fetch(GROK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${grokKey}` },
+        body: JSON.stringify({
+          model: GROK_MODEL,
+          max_tokens: 700,
+          messages: [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)],
+          stream: false,
+        }),
+      });
+      if (res.ok) return (await res.json()).choices?.[0]?.message?.content?.trim() ?? '';
+    } catch {}
+  }
+
+  throw new Error('No API available. Add a Groq, Gemini, or Grok key in Settings.');
 }

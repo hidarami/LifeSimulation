@@ -20,6 +20,12 @@ db.version(3).stores({
   events:  '++id, category, turn, saveId',
   actions: '++id, turn, saveId',
 });
+db.version(4).stores({
+  world:      '++id, timestamp',
+  events:     '++id, category, turn, saveId',
+  actions:    '++id, turn, saveId',
+  sim_console:'++id, saveId, timestamp',
+});
 
 // ─── INITIAL WORLD STATE ──────────────────────────────────────────────────────
 export function createInitialWorldState(playerName, startDate) {
@@ -293,4 +299,20 @@ export async function loadPlayerActions(limit = 200, saveId = null) {
   }
   const rows = await query.limit(limit).toArray();
   return rows.reverse();
+}
+
+// ─── CONSOLE HISTORY ──────────────────────────────────────────────────────────
+export async function saveConsoleMessage(saveId, role, content) {
+  if (saveId === null || saveId === undefined) return;
+  await db.sim_console.add({ saveId, role, content, timestamp: new Date().toISOString() });
+}
+
+export async function loadConsoleHistory(saveId) {
+  if (saveId === null || saveId === undefined) return [];
+  return await db.sim_console.where('saveId').equals(saveId).sortBy('timestamp');
+}
+
+export async function clearConsoleHistory(saveId) {
+  if (saveId === null || saveId === undefined) return;
+  await db.sim_console.where('saveId').equals(saveId).delete();
 }

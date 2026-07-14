@@ -4,6 +4,17 @@
 
 import { getNpcCurrentTask } from './npc.js';
 
+const TRAIT_INTERP = {
+  jealousy:    v => v >= 70 ? '↑ Gets jealous easily' : v < 30 ? '↓ Not the jealous type' : '— Average',
+  honesty:     v => v >= 70 ? '↑ Straightforward' : v < 30 ? '↓ May mislead you' : '— Selective',
+  patience:    v => v >= 70 ? '↑ Won\'t rush you' : v < 30 ? '↓ Short fuse' : '— Average',
+  warmth:      v => v >= 70 ? '↑ Caring, affectionate' : v < 30 ? '↓ Cold, distant' : '— Neutral',
+  ambition:    v => v >= 70 ? '↑ Driven, goal-oriented' : v < 30 ? '↓ Laid-back' : '— Moderate',
+  impulsivity: v => v >= 70 ? '↑ Acts before thinking' : v < 30 ? '↓ Deliberate' : '— Moderate',
+  dominance:   v => v >= 70 ? '↑ Assertive, takes control' : v < 30 ? '↓ Deferential' : '— Balanced',
+  openness:    v => v >= 70 ? '↑ Open to intimacy' : v < 30 ? '↓ Needs deep trust first' : '— Selective',
+};
+
 // ─── TURN ANCHOR ──────────────────────────────────────────────────────────────
 // Generated entirely by JS. Grok does not generate or know its format.
 
@@ -136,24 +147,29 @@ function buildNpcCard(npc, currentDate) {
 
   // ── Expanded details ──────────────────────────────────────────────────────
   const traitBars = Object.entries(npc.traits ?? {}).map(([k, v]) =>
-    `<div class="tr-row"><span class="tr-k">${k}</span><div class="tr-t"><div class="tr-f" style="width:${v}%"></div></div><span class="tr-v">${v}</span></div>`
+    `<div style="margin-bottom:5px">
+      <div class="tr-row"><span class="tr-k">${k}</span><div class="tr-t"><div class="tr-f" style="width:${v}%"></div></div><span class="tr-v">${v}</span></div>
+      <div style="font-size:9px;color:var(--dim);padding-left:72px;margin-top:1px;line-height:1.3">${(TRAIT_INTERP[k] ?? (() => ''))(v)}</div>
+    </div>`
   ).join('');
 
-  const flags = (npc.active_flags ?? []).map(f => {
+  const flags = (npc.active_flags ?? []).filter(f => {
     const timer = npc.flag_timers?.[f];
-    return `<span class="nflag">${f.replace(/_/g,' ')}${timer != null ? `<span class="nflag-timer"> ${timer}t</span>` : ''}</span>`;
-  }).join('');
+    return timer == null || timer > 0;
+  }).map(f => `<span class="nflag">${f.replace(/_/g,' ')}</span>`).join('');
 
   const details = document.createElement('div');
-  details.className    = 'npc-details';
+  details.className     = 'npc-details';
   details.style.display = 'none';
   details.innerHTML = `
     <div class="npc-meters" style="margin-top:6px">
       ${buildMeter(npc.relationship_meter, 'Rel')}
       ${buildMeter(npc.trust_meter, 'Trust')}
     </div>
-    <div class="npc-traits" style="margin-top:6px">${traitBars}</div>
-    <button class="npc-detail-btn" data-id="${npc.id}">Full Details ↗</button>`;
+    <div style="margin-top:9px;margin-bottom:4px;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">Personality</div>
+    <div class="npc-traits">${traitBars}</div>
+    ${flags ? `<div style="margin-top:7px;margin-bottom:3px;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">Active States</div><div class="npc-flags">${flags}</div>` : ''}
+    <button class="npc-detail-btn" data-id="${npc.id}">Schedule & History ↗</button>`;
 
   header.addEventListener('click', e => {
     e.stopPropagation();
