@@ -599,7 +599,8 @@ import { loadWorldState, saveWorldState, createInitialWorldState,
          createNewSaveSlot, listSaves, deleteSave,
          assembleTurnBrief, appendSignificantEvent, updateEventIndex, logEvent,
          saveNarration, loadNarrations, savePlayerAction, loadPlayerActions,
-         setSupabaseClient, saveWorldStateCloud, loadWorldStateCloud } from './state.js';
+         setSupabaseClient, saveWorldStateCloud, loadWorldStateCloud,
+         getCurrentSaveId } from './state.js';
 import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
          rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION } from './engine.js';
 import { routeInput, isExplicit, classifyExplicitActivity,
@@ -621,11 +622,14 @@ let initInProgress = false;
 // ── PANEL NAVIGATION ─────────────────────────────────────────────────────────
 let currentPanel = 'center';
 let _tx = 0, _ty = 0, _tt = 0;
+let _panelLock = false;
 
 function showPanel(p) {
   currentPanel = p;
+  _panelLock = true;
   const w = document.getElementById('panels-wrapper');
   w.className = p === 'left' ? 'show-left' : p === 'right' ? 'show-right' : 'show-center';
+  setTimeout(() => { _panelLock = false; }, 400);
 }
 
 // Panel back button handlers
@@ -641,6 +645,7 @@ document.addEventListener('touchstart', e => {
 }, { passive: true });
 
 document.addEventListener('touchend', e => {
+  if (_panelLock) return;
   if (document.querySelector('.modal-overlay.open')) return;
   if (document.getElementById('menu-drawer').classList.contains('open')) return;
   const dx = e.changedTouches[0].clientX - _tx;
@@ -752,16 +757,19 @@ async function renderActionLog() {
   if (!c) return;
   c.innerHTML = '';
   try {
-    const actions = await loadPlayerActions(100);
+    const actions = await loadPlayerActions(100, getCurrentSaveId());
     if (!actions.length) { c.innerHTML = '<p class="empty">No actions yet.</p>'; return; }
     for (const a of actions) {
       const el = document.createElement('div');
       el.className = 'log-entry';
       el.innerHTML = `<span class="log-turn">T${a.turn}</span><span class="log-text">${a.input.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</span>`;
-      el.addEventListener('click', () => {
+      el.addEventListener('click', e => {
+        e.stopPropagation();
         showPanel('center');
-        const t = document.querySelector(`.narration-entry[data-turn="${a.turn}"]`);
-        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setTimeout(() => {
+          const t = document.querySelector(`.narration-entry[data-turn="${a.turn}"]`);
+          if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 350);
       });
       c.appendChild(el);
     }
@@ -840,7 +848,6 @@ document.getElementById('btn-new').addEventListener('click', () => {
   document.getElementById('w-name').value = '';
   document.getElementById('w-age').value = '18';
   document.getElementById('w-sex').value = 'male';
-  document.getElementById('w-birthday').value = '';
   document.getElementById('w-lorebook').value = localStorage.getItem('LOREBOOK') || '';
   showWizardStep(1);
   document.getElementById('modal-newgame').classList.add('open');
@@ -923,6 +930,15 @@ async function startNewGame() {
           }
         }
         if (Array.isArray(parsed.possessions)) ws.player.possessions = parsed.possessions;
+
+        // Apply lorebook in-world date if found
+        if (parsed.start_date?.year) {
+          const yr = parsed.start_date.year;
+          const mo = Math.max(0, Math.min(11, (parsed.start_date.month ?? 6) - 1));
+          ws.sim_time = new Date(yr, mo, 15, 8, 0, 0).toISOString();
+          ws.player.birthday = String(yr - age);
+          console.log('[init] start date from lorebook:', yr, 'month', mo + 1);
+        }
       }
     }
 
@@ -1248,6 +1264,49 @@ document.getElementById('btn-load').addEventListener('click', async () => {
   } catch(e) { statusEl.textContent = 'Error: ' + e.message; }
 });
 
+// ── LOAD MODAL HANDLERS ────────────────────────────────────────────────────────
+[document.getElementById('btn-load-cancel'), document.getElementById('btn-load-cancel2')].forEach(b => {
+  b?.addEventListener('click', () => document.getElementById('load-modal').classList.remove('open'));
+});
+document.getElementById('load-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+document.getElementById('btn-load-confirm').addEventListener('click', async () => {
+  const listEl   = document.getElementById('save-list');
+  const statusEl = document.getElementById('load-status');
+  const selected = listEl.querySelector('[data-selected="true"]');
+  if (!selected) { statusEl.textContent = 'Select a save first.'; return; }
+  const id = parseInt(selected.dataset.id);
+  document.getElementById('load-modal').classList.remove('open');
+  try {
+    setStatus('Loading…', 'load');
+    WS = await loadWorldState(id);
+    if (!WS) { setStatus('Load failed — save not found.', 'err'); return; }
+    resetConvId();
+    document.getElementById('feed').innerHTML = '';
+    renderAll();
+    const saved = await loadNarrations(50, id);
+    const feed  = document.getElementById('feed');
+    if (saved.length) {
+      for (const n of saved) {
+        const a = renderTurnAnchor(n.turn, n.data?.simTime ?? n.timestamp, n.data?.location ?? '');
+        renderNarration(n.description, a, feed, n.turn);
+      }
+      feed.scrollTop = feed.scrollHeight;
+      const history = [];
+      for (const n of saved.slice(-3)) {
+        history.push({ role: 'user',      content: `[turn ${n.turn} context restored]` });
+        history.push({ role: 'assistant', content: n.description });
+      }
+      setConversationHistory(history);
+    }
+    setStatus(`Turn ${WS.turn} · ${WS.player.name}`);
+  } catch(e) {
+    setStatus('Load error: ' + e.message, 'err');
+    console.error('[load confirm]', e);
+  }
+});
+
 // ── SUPABASE AUTH ──────────────────────────────────────────────────────────────
 document.getElementById('btn-login-link').addEventListener('click', async () => {
   const email=document.getElementById('k-email').value.trim();
@@ -1276,7 +1335,7 @@ async function boot() {
   if (WS) {
     renderAll();
     try {
-      const saved = await loadNarrations(50);
+      const saved = await loadNarrations(50, getCurrentSaveId());
       const feed  = document.getElementById('feed');
       if (saved.length) {
         feed.innerHTML = '';

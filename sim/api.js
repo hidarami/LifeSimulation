@@ -20,7 +20,7 @@ function getKey(name) {
 
 // ─── GROK ─────────────────────────────────────────────────────────────────────
 const GROK_URL   = 'https://api.x.ai/v1/chat/completions';
-const GROK_MODEL = 'grok-4.3';
+const GROK_MODEL = 'grok-4.20-non-reasoning';
 let _convId = null;
 let _conversationHistory = []; // Store last 5 turns for narrative continuity
 export function resetConvId() { _convId = null; _conversationHistory = []; }
@@ -302,10 +302,13 @@ ${lorebook}
 Return exactly this shape:
 {
   "player": { "location": "string or null", "cash": number_or_null },
+  "start_date": { "year": number_or_null, "month": number_1_to_12_or_null },
   "job": null,
   "npcs": [],
   "possessions": []
 }
+
+start_date: Extract the in-world year and month (e.g. "summer of 2018" → year:2018, month:7; "February 2020" → year:2020, month:2; "2024" → year:2024, month:null). If no date context is mentioned, return null for both fields.
 
 If employed, job shape:
 { "employer": "string", "position": "string", "salary_per_cycle": number, "pay_cycle": "daily|weekly|monthly", "schedule": "e.g. Mon-Fri 8AM-5PM" }
@@ -329,6 +332,7 @@ Relationship meter: close family/romantic=70, good friend=50, acquaintance=20, s
 Traits default 50 if personality not described. Extract EVERY named person mentioned.
 CRITICAL: Also extract clearly implied household members or close relationships even if only partially named. Examples: "I live with my two brothers Jay and Ray (20,21)" → extract Jay AND Ray as separate NPCs. "my parents" → extract as father/mother with ids parent_father/parent_mother. "my best friend Marco" → extract Marco. "my girlfriend" → extract with id girlfriend_unnamed and name "Girlfriend". Do not leave anyone the player clearly lives with or is emotionally close to unextracted.`;
 
+  // Try Gemini first
   try {
     const res = await fetch(`${GEMINI_URL}?key=${key}`, {
       method: 'POST',
@@ -338,14 +342,51 @@ CRITICAL: Also extract clearly implied household members or close relationships 
         generationConfig: { temperature: 0.1, maxOutputTokens: 1200, response_mime_type: 'application/json' },
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-    return JSON.parse(text);
+    if (res.ok) {
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+      const parsed = JSON.parse(text);
+      if (parsed?.player || parsed?.npcs?.length) {
+        console.log('[lorebook] Gemini parsed OK:', parsed?.npcs?.length ?? 0, 'NPCs');
+        return parsed;
+      }
+    } else {
+      console.warn('[lorebook] Gemini HTTP', res.status);
+    }
   } catch (e) {
-    console.warn('[lorebook] parse failed:', e.message);
-    return null;
+    console.warn('[lorebook] Gemini failed:', e.message);
   }
+
+  // Groq fallback — if Gemini fails or returns empty
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (groqKey) {
+    try {
+      console.log('[lorebook] trying Groq fallback...');
+      const gr = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          max_tokens: 1200,
+        }),
+      });
+      if (gr.ok) {
+        const text = (await gr.json()).choices?.[0]?.message?.content ?? '{}';
+        const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+        if (parsed?.player || parsed?.npcs?.length) {
+          console.log('[lorebook] Groq fallback parsed OK:', parsed?.npcs?.length ?? 0, 'NPCs');
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('[lorebook] Groq fallback failed:', e.message);
+    }
+  }
+
+  console.warn('[lorebook] all parsers failed — world starts empty');
+  return null;
 }
 
 // ─── MULTI-AI WORLD BUILDING ──────────────────────────────────────────────────

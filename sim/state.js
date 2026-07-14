@@ -78,6 +78,7 @@ export function createInitialWorldState(playerName, startDate) {
 
 // ─── PERSISTENCE ─────────────────────────────────────────────────────────────
 let _worldId = null;
+export function getCurrentSaveId() { return _worldId; }
 
 export async function loadWorldState(id = null) {
   if (id) {
