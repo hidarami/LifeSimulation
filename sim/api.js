@@ -31,7 +31,7 @@ function buildGrokUserMessage(turnBrief, mode) {
     notable: 'Expand the scene. 2–4 paragraphs.',
     crisis:  'Write with urgency and weight. 3–5 paragraphs.',
     death:   'Write the death scene with gravity. 4–6 paragraphs.',
-    init:    'This is the opening scene of a new game. Establish the character in their immediate physical environment — body state, location, sensory details. Do not introduce NPCs unless the lorebook names them. End with: "What do you do?" 3–4 paragraphs.',
+    init:    'This is the opening scene of a new game. Establish the character in their immediate physical environment — body state, location, sensory details. 3–4 paragraphs.',
   }[mode] ?? '2–3 paragraphs.';
   return JSON.stringify({ ...turnBrief, narration_instruction: instruction });
 }
@@ -515,7 +515,6 @@ HARD GATES — return has_initiative:false if ANY apply:
 - The player and NPC are in the same physical location (they interact in person, not by message)
 
 Soft rules (only if hard gates all pass):
-- Default to has_initiative:false — most turns no NPC initiates
 - Remote contact (text/call) only if current_task is "leisure" or "winding_down"
 - The brief must be specific to THIS NPC's personality and relationship — NEVER generic ("hey just checking in", "what's up" = forbidden)
 - A concrete, scene-grounded reason must exist for the NPC to reach out NOW specifically
@@ -641,7 +640,7 @@ Return ONLY valid JSON (no markdown fences):
     "days_active": 45
   },
   "starting_possessions": [
-    { "name": "short item name", "condition": "one phrase for current physical state e.g. old and cracked", "note": "what it is used for or its story", "value_peso": 800_or_null, "acquired_method": "bought|gifted|inherited|found" }
+    { "name": "short item name", "condition": "one phrase for current physical state", "note": "what it is used for or its story", "value_peso": 800_or_null, "acquired_method": "bought|gifted|inherited|found" }
   ]
 }
 
@@ -650,7 +649,7 @@ Rules:
 - school: include ONLY if player is clearly a student. SHS Grade 12 = 17–18 yrs old in 2018.
 - job_enrichment: include ONLY if lorebook mentions a job or income. Return null if none.
 - days_active: AGE-REALISTIC. A 17-yr-old in 2018 cannot have 3 years of adult streaming history. Max ~200 days.
-- starting_possessions: 4–7 items matching the character's economic class and lifestyle. Infer from background even if lorebook doesn't list items. Rural poor = cracked phone, worn clothes, sleeping mat, lighter, rosary, small amount of cash, etc. Do NOT return an empty array — always generate possessions.
+- starting_possessions: 4–7 items matching the character's economic class and lifestyle. Infer from background even if lorebook doesn't list items. Do NOT return an empty array — always generate possessions.
 - Return null for school if player is NOT described as a student.
 - Return null for job_enrichment if player has NO mentioned income source.`;
 
