@@ -279,7 +279,9 @@ Return exactly this JSON shape:
   "risk_class": "none" | "low" | "moderate" | "high" | "critical",
   "location_change": string | null,
   "npc_ids_involved": string[],
-  "future_plans": []
+  "future_plans": [],
+  "alcohol_consumed": { "detected": false, "drink_type": "none", "quantity": 1 },
+  "context_tags": []
 }
 
 Rules:
@@ -310,7 +312,9 @@ Rules:
 - risk_class must be honest — do not default to "none" to be conservative
 - location_change is null if the player stays in their current location
 - npc_ids_involved: only NPC ids that appear in the player's current world state
-- future_plans: ONLY populate when player explicitly makes a concrete future plan/appointment with a specific NPC (e.g. "let's go swimming tomorrow", "meet me at the mall Saturday afternoon"). Each entry: { "npc_id": string (must be in npc_ids_involved), "offset_hours": number (hours from NOW until event starts — tomorrow afternoon ≈ 20-30h), "duration_hours": number (how long it lasts), "task": "brief activity label", "location": "outside|player_home|with_player" }. Empty array [] for anything that is not a concrete future appointment.`;
+- future_plans: ONLY populate when player explicitly makes a concrete future plan/appointment with a specific NPC (e.g. "let's go swimming tomorrow", "meet me at the mall Saturday afternoon"). Each entry: { "npc_id": string (must be in npc_ids_involved), "offset_hours": number (hours from NOW until event starts — tomorrow afternoon ≈ 20-30h), "duration_hours": number (how long it lasts), "task": "brief activity label", "location": "outside|player_home|with_player" }. Empty array [] for anything that is not a concrete future appointment.
+- alcohol_consumed: detect if the player is drinking alcohol in this action. { "detected": boolean, "drink_type": "beer"|"light_beer"|"wine"|"spirit_shot"|"cocktail"|"hard_liquor"|"spiked_drink"|"none", "quantity": number }. Triggers: "drink a beer", "have shots", "orders wine", "take a shot of gin", "have a few drinks". "drink water/juice/soda/coffee/tea/milk" → detected: false. Default: { "detected": false, "drink_type": "none", "quantity": 1 }
+- context_tags: array of tags that apply from: "crowded_place", "rain_exposure", "outdoor", "physical_exertion", "social_gathering", "risky_activity". Empty array if none apply.`;
 }
 
 // ─── GEMINI: NPC REACTION ─────────────────────────────────────────────────────

@@ -84,6 +84,51 @@ export function createInitialWorldState(playerName, startDate) {
   };
 }
 
+// ─── SAVE MIGRATION ───────────────────────────────────────────────────────────
+// Runs automatically when any save is loaded. Adds fields introduced in newer versions.
+// Safe to call repeatedly — only fills in genuinely missing fields.
+export function migrateSaveState(state) {
+  if (!state) return state;
+  // Top-level fields
+  if (!Array.isArray(state.challenges))                state.challenges               = [];
+  if (state.setting_description    == null)            state.setting_description      = '';
+  if (state.session_context_flavor == null)            state.session_context_flavor   = '';
+  if (!Array.isArray(state.recent_significant_events)) state.recent_significant_events = [];
+  if (!state.last_narration_prose)                     state.last_narration_prose     = '';
+  if (!state.event_index) state.event_index = {
+    last_arrest: null, last_hospitalization: null, last_breakup: null,
+    last_job_change: null, last_death_nearby: null, last_major_conflict: null,
+    last_sexual_encounter: null, last_new_relationship: null,
+    current_relationship: null, current_job_summary: null,
+  };
+  // Player fields
+  if (!Array.isArray(state.player.diseases))      state.player.diseases          = [];
+  if (!Array.isArray(state.player.possessions))   state.player.possessions       = [];
+  if (!Array.isArray(state.player.irreversible))  state.player.irreversible      = [];
+  if (!Array.isArray(state.player.habits))        state.player.habits            = [];
+  if (state.player.alcohol_tolerance == null)     state.player.alcohol_tolerance = 0;
+  if (!state.player.stats)                        state.player.stats             = {};
+  if (state.player.stats.alcohol    == null)      state.player.stats.alcohol     = 0;
+  if (state.player.stats.reputation == null)      state.player.stats.reputation  = 50;
+  // NPC fields
+  for (const npc of Object.values(state.npcs ?? {})) {
+    if (!npc.flag_timers)                               npc.flag_timers            = {};
+    if (!Array.isArray(npc.active_flags))              npc.active_flags            = [];
+    if (!Array.isArray(npc.recent_interactions))       npc.recent_interactions     = [];
+    if (npc.significance == null)                      npc.significance            = 0;
+    if (!npc.traits) npc.traits = { jealousy:30, honesty:60, patience:50, warmth:50, ambition:50, impulsivity:40, dominance:50, openness:50 };
+    else {
+      if (npc.traits.jealousy    == null) npc.traits.jealousy    = 30;
+      if (npc.traits.openness    == null) npc.traits.openness    = 50;
+      if (npc.traits.dominance   == null) npc.traits.dominance   = 50;
+      if (npc.traits.impulsivity == null) npc.traits.impulsivity = 40;
+    }
+    if (!npc.schedule) npc.schedule = { weekday_routine: [], weekend_routine: [], interruptions: [] };
+    else if (!Array.isArray(npc.schedule.interruptions)) npc.schedule.interruptions = [];
+  }
+  return state;
+}
+
 // ─── PERSISTENCE ─────────────────────────────────────────────────────────────
 let _worldId = null;
 export function getCurrentSaveId() { return _worldId; }
@@ -93,7 +138,7 @@ export async function loadWorldState(id = null) {
     const item = await db.world.get(id);
     if (item) {
       _worldId = id;
-      return item.state;
+      return migrateSaveState(item.state);
     }
     return null;
   }
@@ -101,7 +146,7 @@ export async function loadWorldState(id = null) {
   const all = await db.world.orderBy('timestamp').reverse().toArray();
   if (!all.length) return null;
   _worldId = all[0].id;
-  return all[0].state;
+  return migrateSaveState(all[0].state);
 }
 
 export async function saveWorldState(state) {

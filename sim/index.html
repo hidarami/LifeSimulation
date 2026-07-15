@@ -716,6 +716,23 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 <div id="challenge-overlay" style="display:none;position:fixed;bottom:90px;left:50%;transform:translateX(-50%);width:min(400px,calc(100% - 32px));z-index:160;display:flex;flex-direction:column;gap:8px;align-items:stretch;pointer-events:none">
   <div id="challenge-stack" style="display:flex;flex-direction:column;gap:8px;pointer-events:all"></div>
 </div>
+
+<!-- ── UPDATE BANNER ─────────────────────────────────────────────────────────── -->
+<div id="update-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:210;background:var(--sur);border-top:2px solid var(--acc);padding:10px 16px">
+  <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
+    <div>
+      <div style="font-size:11px;color:var(--acc);font-weight:700;letter-spacing:.06em">UPDATE AVAILABLE</div>
+      <div id="update-notes" style="font-size:11px;color:var(--dim);margin-top:1px"></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-shrink:0">
+      <button class="btn" id="btn-dismiss-update" style="font-size:11px;padding:5px 10px">Later</button>
+      <button class="btn btn-primary" id="btn-apply-update" style="font-size:11px;padding:5px 10px">Reload Now</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── META CONSOLE ───────────────────────────────────────────────────────────── -->
+<div id="panel-console">
   <div class="console-header">
     <div class="console-brand-block">
       <div class="console-brand">AI CONSOLE</div>
@@ -950,7 +967,7 @@ import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversa
          enrichWorldDetails, evaluateNpcFlagsInContext, callMetaConsole,
          extractNarrativeStateChanges } from './api.js';
 import { renderNpcPanel, renderJobPanel,
-         renderPossessionsPanel, renderNarration, renderTurnAnchor, renderChallengesPanel } from './renderer.js';
+         renderPossessionsPanel, renderNarration, renderTurnAnchor, renderChallengesPanel,
          livesWithPlayer, getSmartNpcLabel } from './renderer.js';
 import { checkWorldEvents, checkNpcEvents, applyEventEffect, applyNpcEventEffect,
          progressDiseases, progressNpcDiseases, checkDiseaseContraction, checkNpcDiseaseSpread,
@@ -1883,6 +1900,7 @@ async function processTurn(input) {
     let actionDesc = input;
     let _mentionedNpc = null; // NPC explicitly named in player input — set in PATH_1 block
     let _p1ShouldDetectNpc = false; // deferred flag — registration runs after WS commit
+    let _cls2Result = null; // Cached PATH_2 classify result — reused for alcohol + context
     const route = routeInput(input);
 
     if (route === ROUTE.PATH_1_EXPLICIT) {
@@ -1960,10 +1978,11 @@ async function processTurn(input) {
     }
     else if (route === ROUTE.PATH_2_NOVEL) {
       const safe = sanitizeStateForGemini(ws);
-      const cls  = await classifyAction(input, safe);
-      statDeltas=cls.stat_deltas??{}; timeCost=Math.min(Math.max(cls.time_cost_hours??0.25, 0.08), 4.0);
-      locationChange=cls.location_change??null; actionDesc=`[${cls.action_type??'action'}]`;
-      riskResult=rollRisk(cls.risk_class??'none', ws.player.stats);
+    const cls  = await classifyAction(input, safe);
+    _cls2Result = cls;
+    statDeltas=cls.stat_deltas??{}; timeCost=Math.min(Math.max(cls.time_cost_hours??0.25, 0.08), 4.0);
+    locationChange=cls.location_change??null; actionDesc=`[${cls.action_type??'action'}]`;
+    riskResult=rollRisk(cls.risk_class??'none', ws.player.stats);
       for (const npcId of (cls.npc_ids_involved??[])) {
         if (!ws.npcs[npcId]) continue;
         const ctx = buildNpcContextForGemini(ws.npcs[npcId], ws.sim_time);
@@ -2124,12 +2143,11 @@ async function processTurn(input) {
       }
     }
 
-    // ── Alcohol detection from Gemini classify ───────────────────────────────
+    // ── Alcohol detection from Gemini classify (uses cached result — no second API call) ──
     if (route === ROUTE.PATH_2_NOVEL) {
-      const cls_ref = await classifyAction(input, sanitizeStateForGemini(ws)).catch(() => null);
-      if (cls_ref?.alcohol_consumed?.detected && cls_ref.alcohol_consumed.drink_type !== 'none') {
-        const alcoholInc = calculateAlcoholEffect(cls_ref.alcohol_consumed.drink_type, ws.player)
-          * (cls_ref.alcohol_consumed.quantity ?? 1);
+      if (_cls2Result?.alcohol_consumed?.detected && _cls2Result.alcohol_consumed.drink_type !== 'none') {
+        const alcoholInc = calculateAlcoholEffect(_cls2Result.alcohol_consumed.drink_type, ws.player)
+          * (_cls2Result.alcohol_consumed.quantity ?? 1);
         ws.player.stats.alcohol = Math.min(100, (ws.player.stats.alcohol ?? 0) + alcoholInc);
         if ((ws.player.stats.alcohol ?? 0) > 20) {
           ws.player.alcohol_tolerance = Math.min(100, (ws.player.alcohol_tolerance ?? 0) + 0.5);
@@ -2154,10 +2172,10 @@ async function processTurn(input) {
     ws = progressNpcDiseases(ws);
 
     // ── Context tag extraction for disease contraction ────────────────────────
-    const _contextTags = [];
-    if (/crowd|mall|market|school|church|public|fiesta|concert/i.test(input)) _contextTags.push('crowded_place');
-    if (/rain|wet|storm|baha|ulan/i.test(input)) _contextTags.push('rain_exposure');
-    if (/outside|outdoors|park|street/i.test(input)) _contextTags.push('outdoor');
+    const _contextTags = [...(_cls2Result?.context_tags ?? [])];
+    if (!_contextTags.includes('crowded_place') && /crowd|mall|market|school|church|public|fiesta|concert/i.test(input)) _contextTags.push('crowded_place');
+    if (!_contextTags.includes('rain_exposure') && /rain|wet|storm|baha|ulan/i.test(input)) _contextTags.push('rain_exposure');
+    if (!_contextTags.includes('outdoor') && /outside|outdoors|park|street/i.test(input)) _contextTags.push('outdoor');
 
     // ── Disease contraction from environment ─────────────────────────────────
     let hangoverChallengePending = null;
@@ -2893,7 +2911,46 @@ function parseAndApplyConsoleStateChange(response) {
   }
 }
 
+// ── UPDATE SYSTEM ─────────────────────────────────────────────────────────────
+async function checkForUpdate() {
+  try {
+    const res = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const { version, notes } = await res.json();
+    const stored = localStorage.getItem('sim_version');
+    if (!stored) {
+      // First-ever visit — store version silently, no banner
+      localStorage.setItem('sim_version', version);
+      return;
+    }
+    if (stored !== version) {
+      const banner = document.getElementById('update-banner');
+      const notesEl = document.getElementById('update-notes');
+      if (notesEl) notesEl.textContent = notes || `Version ${version} is ready`;
+      if (banner) banner.style.display = '';
+      banner?.dataset && (banner.dataset.newVersion = version);
+    }
+  } catch { /* network unavailable — skip silently */ }
+}
+
+document.getElementById('btn-dismiss-update')?.addEventListener('click', () => {
+  document.getElementById('update-banner').style.display = 'none';
+  // Don't store version — remind again on next visit until they apply the update
+});
+
+document.getElementById('btn-apply-update')?.addEventListener('click', async () => {
+  try {
+    const res = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' });
+    if (res.ok) {
+      const { version } = await res.json();
+      localStorage.setItem('sim_version', version);
+    }
+  } catch {}
+  window.location.reload(true); // Hard reload — bypasses browser cache
+});
+
 boot();
+checkForUpdate(); // Non-blocking — runs after boot so it doesn't delay startup
 </script>
 </body>
 </html>
