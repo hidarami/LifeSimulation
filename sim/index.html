@@ -920,7 +920,8 @@ import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversa
          buildWorldWithMultipleAIs, evaluateDescribedNpc,
          enrichWorldDetails, evaluateNpcFlagsInContext, callMetaConsole } from './api.js';
 import { renderNpcPanel, renderJobPanel,
-         renderPossessionsPanel, renderNarration, renderTurnAnchor } from './renderer.js';
+         renderPossessionsPanel, renderNarration, renderTurnAnchor,
+         livesWithPlayer, getSmartNpcLabel } from './renderer.js';
 import { checkWorldEvents, applyEventEffect } from './events.js';
 import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
          buildNpcContextForGemini, applyRelationshipDelta, createNpc,
@@ -931,6 +932,72 @@ let WS = null;
 let _processTurnCounter = 0; // race condition guard for non-blocking NPC callbacks
 let _sbClient = null;
 let initInProgress = false;
+
+// ── SIM PATCH APPLIER ─────────────────────────────────────────────────────────
+function _applySimPatch(patch) {
+  if (!WS || !patch) return;
+  try {
+    if (patch.npc_updates) {
+      for (const [id, upd] of Object.entries(patch.npc_updates)) {
+        if (!WS.npcs[id]) { console.warn('[patch] Unknown NPC id:', id); continue; }
+        if (upd.schedule?.weekday_routine?.length) {
+          WS.npcs[id].schedule = {
+            weekday_routine: upd.schedule.weekday_routine,
+            weekend_routine: upd.schedule.weekend_routine ?? WS.npcs[id].schedule?.weekend_routine ?? upd.schedule.weekday_routine,
+            interruptions:   WS.npcs[id].schedule?.interruptions ?? [],
+          };
+        }
+        if (upd.relationship_meter != null) WS.npcs[id].relationship_meter = Math.max(-100, Math.min(100, Number(upd.relationship_meter)));
+        if (upd.trust_meter       != null) WS.npcs[id].trust_meter         = Math.max(-100, Math.min(100, Number(upd.trust_meter)));
+        if (upd.traits)            WS.npcs[id].traits            = { ...WS.npcs[id].traits, ...upd.traits };
+        if (upd.active_flags)      WS.npcs[id].active_flags      = upd.active_flags;
+        if (upd.bio)               WS.npcs[id].bio               = upd.bio;
+        if (upd.npc_class)         WS.npcs[id].npc_class         = upd.npc_class;
+        if (upd.relationship_type) WS.npcs[id].relationship_type = upd.relationship_type;
+      }
+    }
+    if (patch.player_updates) {
+      if (patch.player_updates.cash     != null) WS.player.cash     = Number(patch.player_updates.cash);
+      if (patch.player_updates.location)          WS.player.location = patch.player_updates.location;
+      if (patch.player_updates.stats && typeof patch.player_updates.stats === 'object')
+        WS.player.stats = { ...WS.player.stats, ...patch.player_updates.stats };
+    }
+    if ('job_update'    in patch) WS.job    = patch.job_update;
+    if ('school_update' in patch) WS.school = patch.school_update;
+    if (patch.setting_description) WS.setting_description = patch.setting_description;
+    if (patch.add_npcs?.length) {
+      for (const nd of patch.add_npcs) {
+        if (!nd.id || WS.npcs[nd.id]) continue;
+        const _pn = createNpc({ id: nd.id, name: nd.name, age: nd.age ?? 20, npc_class: nd.npc_class ?? 'household', relationship_type: nd.relationship_type ?? null, traits: nd.traits ?? {} });
+        _pn.relationship_meter = nd.relationship_meter ?? 0;
+        _pn.trust_meter        = nd.trust_meter        ?? 0;
+        _pn.significance       = nd.significance       ?? 2;
+        WS.npcs[nd.id]         = _pn;
+      }
+    }
+    if (patch.remove_npcs?.length) {
+      for (const id of patch.remove_npcs) { if (WS.npcs[id]) WS.npcs[id].status = 'inactive'; }
+    }
+    if (patch.add_interruptions?.length) {
+      for (const { npc_id, interruption } of patch.add_interruptions) {
+        if (!WS.npcs[npc_id] || !interruption?.start || !interruption?.end) continue;
+        WS.npcs[npc_id].schedule = WS.npcs[npc_id].schedule ?? { weekday_routine: [], weekend_routine: [], interruptions: [] };
+        WS.npcs[npc_id].schedule.interruptions = WS.npcs[npc_id].schedule.interruptions ?? [];
+        // Prevent duplicate overlapping interruptions
+        const _newS = new Date(interruption.start).getTime();
+        const _newE = new Date(interruption.end).getTime();
+        const _noOverlap = WS.npcs[npc_id].schedule.interruptions.every(ex => {
+          const _exS = new Date(ex.start).getTime(), _exE = new Date(ex.end).getTime();
+          return _newE <= _exS || _newS >= _exE;
+        });
+        if (_noOverlap) WS.npcs[npc_id].schedule.interruptions.push(interruption);
+      }
+    }
+    saveWorldState(WS).catch(() => {});
+    renderAll();
+    console.log('[patch] SIM_PATCH applied:', Object.keys(patch).filter(k => patch[k] != null && (!Array.isArray(patch[k]) || patch[k].length)));
+  } catch(e) { console.error('[patch] Apply failed:', e); }
+}
 
 // ── PANEL NAVIGATION ─────────────────────────────────────────────────────────
 let currentPanel = 'center';
@@ -1129,7 +1196,7 @@ function renderAll() {
       return `<span class="emotion-badge ${cls}">${em.label}<span class="emotion-cause">${em.cause}</span></span>`;
     }).join('');
   }
-  renderNpcPanel(WS.npcs, document.getElementById('npc-cards'), WS.sim_time, WS.player.name);
+  renderNpcPanel(WS.npcs, document.getElementById('npc-cards'), WS.sim_time, WS.player.name, WS.player.location ?? 'home');
   renderJobPanel(WS.job, WS.school ?? null, document.getElementById('p-job'));
   renderPossessionsPanel(WS.player.possessions, WS.player.irreversible, document.getElementById('p-items'));
   renderSchedulePanel(WS.job, WS.school ?? null, document.getElementById('p-schedule'));
@@ -1225,9 +1292,10 @@ function openNpcModal(npcId) {
 
   // Current schedule status
   const task = WS.sim_time ? getNpcCurrentTask(npc, WS.sim_time) : null;
-  const _mAwayMap = { workplace: 'At work', school: 'At school', transit: 'In transit', outside: 'Out' };
-  const _mPresent = task ? (task.present !== false) : true;
-  const _mTaskLabel = task ? (!_mPresent ? (_mAwayMap[task.location] ?? 'Away') : task.task.replace(/_/g,' ')) : '';
+  const _mPresent   = task ? (task.present !== false) : true;
+  const _mLocInfo   = task ? getSmartNpcLabel(task, npc, WS?.player?.location ?? 'home') : null;
+  const _mTaskLabel = _mLocInfo?.label ?? '';
+  const _mAvailCls  = _mLocInfo?.cls ?? 'busy';
   const _mAvail = task ? (task.available && _mPresent) : false;
   const taskHtml = task ? `<div class="npc-d-section"><div class="npc-d-title">Right Now</div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
@@ -1586,6 +1654,29 @@ async function startNewGame() {
         if (_bioNpc && ws.npcs[_bioNpc.id]) ws.npcs[_bioNpc.id].bio = bio;
           }
         }
+        // Apply per-NPC custom schedules from enrichment
+        if (enriched.npc_schedules && typeof enriched.npc_schedules === 'object') {
+          for (const [key, sched] of Object.entries(enriched.npc_schedules)) {
+            if (!sched?.weekday_routine?.length) continue;
+            const _sk     = key.toLowerCase().replace(/[\s-]+/g, '_');
+            const _skFirst = _sk.split('_')[0];
+            const _sNpc = Object.values(ws.npcs).find(n => {
+              if (!n.name) return false;
+              const fn = n.name.toLowerCase().split(/\s+/)[0];
+              const fk = n.name.toLowerCase().replace(/\s+/g, '_');
+              const id = (n.id ?? '').toLowerCase();
+              return fn === _skFirst || fk === _sk || id === _sk || id.split('_')[0] === _skFirst;
+            });
+            if (_sNpc && ws.npcs[_sNpc.id]) {
+              ws.npcs[_sNpc.id].schedule = {
+                weekday_routine: sched.weekday_routine,
+                weekend_routine: sched.weekend_routine ?? sched.weekday_routine,
+                interruptions:   ws.npcs[_sNpc.id].schedule?.interruptions ?? [],
+              };
+              console.log(`[enrich] Custom schedule → ${_sNpc.name} (${sched.weekday_routine.length} blocks)`);
+            }
+          }
+        }
         if (enriched.school?.name)  ws.school = enriched.school;
         if (enriched.job_enrichment) {
           if (ws.job) {
@@ -1857,6 +1948,37 @@ async function processTurn(input) {
           ws.npcs[npcId].recent_interactions = [...ri, rxn.reaction_summary].slice(-5);
         }
       }
+      // Apply future plans (player makes concrete appointments with NPCs)
+      if (Array.isArray(cls.future_plans) && cls.future_plans.length) {
+        const _planBase = ws.sim_time;
+        for (const plan of cls.future_plans) {
+          if (!ws.npcs[plan.npc_id] || !(plan.offset_hours > 0) || !(plan.duration_hours > 0)) continue;
+          const _ps = advanceTime(_planBase, plan.offset_hours).toISOString();
+          const _pe = advanceTime(_planBase, plan.offset_hours + plan.duration_hours).toISOString();
+          ws.npcs[plan.npc_id].schedule = ws.npcs[plan.npc_id].schedule
+            ?? { weekday_routine: [], weekend_routine: [], interruptions: [] };
+          ws.npcs[plan.npc_id].schedule.interruptions =
+            ws.npcs[plan.npc_id].schedule.interruptions ?? [];
+          // Only add if no overlap with existing interruptions
+          const _pS = new Date(_ps).getTime(), _pE = new Date(_pe).getTime();
+          const _noOv = (ws.npcs[plan.npc_id].schedule.interruptions ?? []).every(ex => {
+            const eS = new Date(ex.start).getTime(), eE = new Date(ex.end).getTime();
+            return _pE <= eS || _pS >= eE;
+          });
+          if (_noOv) {
+            ws.npcs[plan.npc_id].schedule.interruptions.push({
+              start:         _ps,
+              end:           _pe,
+              task:          plan.task ?? 'outing with player',
+              interruptible: false,
+              available:     true,
+              location:      plan.location ?? 'outside',
+              note:          `Planned with player — turn ${ws.turn}`,
+            });
+            console.log(`[plans] Scheduled "${plan.task}" with ${ws.npcs[plan.npc_id].name} at ${_ps}`);
+          }
+        }
+      }
     }
     else { timeCost=autopilotHours(input); statDeltas=autopilotDeltas(input,timeCost); actionDesc='[autopilot]'; }
 
@@ -1975,7 +2097,20 @@ async function processTurn(input) {
       for (const [_nlId, _nlNpc] of Object.entries(ws.npcs)) {
         if (_nlNpc.status !== 'active') continue;
         const _nlTask = getNpcCurrentTask(_nlNpc, ws.sim_time);
-        brief.npc_locations[_nlId] = { name: _nlNpc.name, task: _nlTask.task, location: _nlTask.location ?? 'home', present: _nlTask.present !== false };
+        const _nlLoc  = _nlTask.location ?? 'home';
+        const _nlCo   = livesWithPlayer(_nlNpc);
+        let _nlCtx = _nlLoc;
+        if      (_nlLoc === 'home' &&  _nlCo)  _nlCtx = 'same household as player — their home IS the player\'s home';
+        else if (_nlLoc === 'home' && !_nlCo)  _nlCtx = 'their own separate home — NOT the player\'s home';
+        else if (_nlLoc === 'player_home')      _nlCtx = 'visiting player\'s home right now';
+        else if (_nlLoc === 'with_player')      _nlCtx = 'physically with the player at a shared location';
+        brief.npc_locations[_nlId] = {
+          name:    _nlNpc.name,
+          task:    _nlTask.task,
+          location: _nlLoc,
+          present: _nlTask.present !== false,
+          context: _nlCtx,
+        };
       }
       const mode = { [TURN_CLASSIFICATION.ROUTINE]:'notable', [TURN_CLASSIFICATION.NOTABLE]:'notable', [TURN_CLASSIFICATION.CRISIS]:'crisis', [TURN_CLASSIFICATION.DEATH]:'death' }[turnClass] ?? 'notable';
       prose = await callGrok(brief, mode);
@@ -2399,8 +2534,21 @@ async function sendConsoleMessage() {
   appendConsoleMsg('user', content, true);
   showConsoleThinking();
   try {
-    const reply = await callMetaConsole(_consoleMessages.slice(-24), WS ?? null);
+    let reply = await callMetaConsole(_consoleMessages.slice(-24), WS ?? null);
     removeConsoleThinking();
+    // Extract and apply SIM_PATCH if present
+    const _patchMatch = reply.match(/<SIM_PATCH>\s*([\s\S]*?)\s*<\/SIM_PATCH>/i);
+    if (_patchMatch) {
+      reply = reply.replace(/<SIM_PATCH>[\s\S]*?<\/SIM_PATCH>/i, '').trim();
+      try {
+        const _patch = JSON.parse(_patchMatch[1].trim());
+        _applySimPatch(_patch);
+        reply += '\n\n✓ Changes applied to game world.';
+      } catch (_pe) {
+        reply += '\n\n⚠ Patch present but failed to parse — changes not applied. Check console for details.';
+        console.warn('[console patch] parse failed:', _pe.message, '\nRaw:', _patchMatch[1].slice(0, 300));
+      }
+    }
     _consoleMessages.push({ role: 'assistant', content: reply });
     appendConsoleMsg('assistant', reply, true);
   } catch(err) {

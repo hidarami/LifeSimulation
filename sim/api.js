@@ -666,7 +666,8 @@ Return ONLY valid JSON. No markdown. Fill every required field — never return 
   "school": null,
   "job_enrichment": null,
   "starting_possessions": [],
-  "npc_descriptions": {}
+  "npc_descriptions": {},
+  "npc_schedules": {}
 }
 
 GENERATION RULES — read carefully:
@@ -698,7 +699,24 @@ NPC_DESCRIPTIONS — REQUIRED if NPCs exist, never empty:
   - Key: first name in lowercase only (e.g. "mark", "jenny", "mama", "papa")
   - Value: 2-3 sentences covering: (1) physical appearance, (2) a specific habit or mannerism, (3) their specific role in the character's life
   - Add concrete detail not in the lorebook — physical features, how they speak, what they always do
-  - Never restate the lorebook verbatim`;
+  - Never restate the lorebook verbatim
+
+NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are listed:
+  - Generate a PERSONALIZED weekly schedule for EVERY NPC in KNOWN NPCs
+  - Key: first name in lowercase (same as npc_descriptions keys)
+  - Value: { "weekday_routine": [...blocks], "weekend_routine": [...blocks] }
+  - Each block: { "start_hour": number, "end_hour": number, "task": string, "interruptible": boolean, "location": string }
+  - Blocks MUST be contiguous and cover ALL 24 hours exactly (start at 0, end at 24, no gaps, no overlaps)
+  - location values: "home" (their own home), "workplace", "school", "transit", "outside"
+  - REASON from each NPC's actual role — never use a generic template:
+    * Construction/manual worker: up 5am, work 6am-5pm at workplace, commute 5-6pm, leisure/home 6-10pm, sleep 10pm
+    * Housewife managing home store: up 5am, home duties + store all day at "home" (NEVER "workplace"), wind down 9pm, sleep 10pm
+    * Student only: up 5-6am, school 7am-4pm at school, commute 4-5pm, leisure home 5-10pm, sleep 10pm
+    * Student + part-time job: school block + commute + part_time_work block (3-4 hrs at workplace or outside), home, sleep
+    * Unemployed/at-home: up 7-8am, home leisure, errands 9-11am outside, home the rest, sleep 10-11pm
+    * Office worker: up 6am, commute 7-8am, work 8-5pm at workplace, commute 5-6pm, home leisure, sleep 10pm
+  - Weekend routines should differ: no school/work blocks unless role requires (e.g. retail, construction sometimes Sat)
+  - interruptible: false for sleeping, morning_prep, work, school, commuting. true for leisure, errands, winding_down, studying, store_duty`;
 
   const tryGroq = async (model) => {
     const res = await fetch(GROQ_URL, {
@@ -708,7 +726,7 @@ NPC_DESCRIPTIONS — REQUIRED if NPCs exist, never empty:
         model,
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.72,
-        max_tokens: 1500,
+        max_tokens: 2000,
       }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

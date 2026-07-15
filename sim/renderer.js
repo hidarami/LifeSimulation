@@ -4,6 +4,52 @@
 
 import { getNpcCurrentTask } from './npc.js';
 
+// ─── NPC LOCATION HELPERS ─────────────────────────────────────────────────────
+export function livesWithPlayer(npc) {
+  const rt = (npc.relationship_type ?? '').toLowerCase();
+  const FAMILY = new Set([
+    'mother','father','brother','sister','uncle','aunt',
+    'grandfather','grandmother','lola','lolo','guardian',
+    'parent_father','parent_mother','stepmother','stepfather',
+    'stepbrother','stepsister','parent',
+  ]);
+  if (FAMILY.has(rt)) return true;
+  if (rt === 'roommate') return true;
+  if (npc.npc_class === 'household' && !['neighbor','landlord','building_admin'].includes(rt)) return true;
+  return false;
+}
+
+export function getSmartNpcLabel(task, npc, playerLocation = 'home') {
+  const loc      = task.location ?? 'home';
+  const cohabits = livesWithPlayer(npc);
+  if (loc === 'workplace')    return { label: 'At work',           cls: 'busy'  };
+  if (loc === 'school')       return { label: 'At school',         cls: 'busy'  };
+  if (loc === 'transit')      return { label: 'Commuting',         cls: 'busy'  };
+  if (loc === 'player_home')  return { label: 'Visiting you',      cls: 'avail' };
+  if (loc === 'with_player')  return { label: 'With you',          cls: 'avail' };
+  if (loc === 'outside') {
+    return task.interruptible
+      ? { label: 'Out — reachable',  cls: 'avail' }
+      : { label: 'Out on errands',   cls: 'busy'  };
+  }
+  // loc === 'home'
+  if (cohabits) {
+    if (task.task === 'sleeping')     return { label: 'Sleeping',       cls: 'busy'  };
+    if (task.task === 'morning_prep') return { label: 'Getting ready',  cls: 'busy'  };
+    if (task.task === 'winding_down') return { label: 'Winding down',   cls: 'avail' };
+    return task.available
+      ? { label: 'Home — free',  cls: 'avail' }
+      : { label: 'Home — busy',  cls: 'busy'  };
+  } else {
+    if (task.task === 'sleeping')     return { label: 'Asleep at home',  cls: 'busy'  };
+    if (task.task === 'morning_prep') return { label: 'Getting ready',   cls: 'busy'  };
+    if (task.task === 'winding_down') return { label: 'At home',         cls: 'avail' };
+    return task.available
+      ? { label: 'At their home',       cls: 'avail' }
+      : { label: 'At home — busy',      cls: 'busy'  };
+  }
+}
+
 const TRAIT_INTERP = {
   jealousy:    v => v >= 70 ? '↑ Gets jealous easily' : v < 30 ? '↓ Not the jealous type' : '— Average',
   honesty:     v => v >= 70 ? '↑ Straightforward' : v < 30 ? '↓ May mislead you' : '— Selective',
@@ -81,7 +127,7 @@ export function renderStatPanel(stats, cash, container) {
 }
 
 // ─── NPC PANEL ────────────────────────────────────────────────────────────────
-export function renderNpcPanel(npcs, container, currentDate, playerName) {
+export function renderNpcPanel(npcs, container, currentDate, playerName, playerLocation = 'home') {
   container.innerHTML = '';
   const pkey = playerName?.toLowerCase().trim();
   const active = Object.values(npcs).filter(n =>
@@ -92,7 +138,7 @@ export function renderNpcPanel(npcs, container, currentDate, playerName) {
     container.innerHTML = '<p class="empty">No significant relationships yet.</p>';
     return;
   }
-  active.forEach(npc => container.appendChild(buildNpcCard(npc, currentDate)));
+  active.forEach(npc => container.appendChild(buildNpcCard(npc, currentDate, playerLocation)));
 }
 
 function getNpcEmotionLabel(npc) {
@@ -107,17 +153,14 @@ function getNpcEmotionLabel(npc) {
   return e.slice(0, 2);
 }
 
-function buildNpcCard(npc, currentDate) {
+function buildNpcCard(npc, currentDate, playerLocation = 'home') {
   const card = document.createElement('div');
   card.className       = 'npc-card';
   card.dataset.id      = npc.id;
   card.dataset.expanded = 'false';
 
-  const task        = getNpcCurrentTask(npc, currentDate);
-  const _npcPresent = task.present !== false;
-  const _awayMap    = { workplace: 'At work', school: 'At school', transit: 'In transit', outside: 'Out' };
-  const taskDisplay = !_npcPresent ? (_awayMap[task.location] ?? 'Away') : task.task.replace(/_/g, ' ');
-  const taskClass   = _npcPresent && task.available ? 'avail' : 'busy';
+  const task                         = getNpcCurrentTask(npc, currentDate);
+  const { label: taskDisplay, cls: taskClass } = getSmartNpcLabel(task, npc, playerLocation);
   const rawLabel  = npc.relationship_type ?? npc.npc_class ?? '';
   const relLabel  = (
     npc.relationship_meter === 0 && npc.trust_meter === 0 && !['brother','sister','mother','father','uncle','aunt','cousin','friend','best_friend','boyfriend','girlfriend'].includes(rawLabel)

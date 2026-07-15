@@ -256,7 +256,8 @@ Return exactly this JSON shape:
   "stat_deltas": { "health": 0, "energy": 0, "hunger": 0, "hygiene": 0, "mood": 0, "social": 0 },
   "risk_class": "none" | "low" | "moderate" | "high" | "critical",
   "location_change": string | null,
-  "npc_ids_involved": string[]
+  "npc_ids_involved": string[],
+  "future_plans": []
 }
 
 Rules:
@@ -286,7 +287,8 @@ Rules:
   * Brushing teeth: hygiene +6, mood +3 (0.05–0.08h)
 - risk_class must be honest — do not default to "none" to be conservative
 - location_change is null if the player stays in their current location
-- npc_ids_involved: only NPC ids that appear in the player's current world state`;
+- npc_ids_involved: only NPC ids that appear in the player's current world state
+- future_plans: ONLY populate when player explicitly makes a concrete future plan/appointment with a specific NPC (e.g. "let's go swimming tomorrow", "meet me at the mall Saturday afternoon"). Each entry: { "npc_id": string (must be in npc_ids_involved), "offset_hours": number (hours from NOW until event starts — tomorrow afternoon ≈ 20-30h), "duration_hours": number (how long it lasts), "task": "brief activity label", "location": "outside|player_home|with_player" }. Empty array [] for anything that is not a concrete future appointment.`;
 }
 
 // ─── GEMINI: NPC REACTION ─────────────────────────────────────────────────────
@@ -436,5 +438,26 @@ ARCHITECTURE:
 CURRENT GAME STATE:
 ${stateBlock}
 
-Speak plainly and helpfully. Be direct. You can answer anything, not just game questions.`;
+Speak plainly and helpfully. Be direct. You can answer anything, not just game questions.
+
+APPLYING CHANGES — when the player asks you to modify the world and confirms it:
+1. Explain what you're changing in 1-3 sentences.
+2. Append ONE <SIM_PATCH> block at the very end. Never output it for hypothetical examples or questions.
+
+PATCH FORMAT (include ONLY fields actually changing — omit null/empty):
+<SIM_PATCH>
+{"npc_updates":{"EXACT_NPC_ID":{"schedule":{"weekday_routine":[{"start_hour":0,"end_hour":6,"task":"sleeping","interruptible":false,"location":"home"}],"weekend_routine":[...]},"relationship_meter":null,"trust_meter":null,"traits":{},"active_flags":[],"bio":null,"npc_class":null,"relationship_type":null}},"player_updates":{"cash":null,"location":null,"stats":{}},"job_update":null,"school_update":null,"setting_description":null,"add_npcs":[],"remove_npcs":[],"add_interruptions":[{"npc_id":"string","interruption":{"start":"ISO_datetime","end":"ISO_datetime","task":"string","interruptible":false,"available":true,"location":"outside","note":"string"}}]}
+</SIM_PATCH>
+
+PATCH RULES:
+- npc_id keys must EXACTLY match existing NPC ids listed in CURRENT GAME STATE — never invent ids
+- Schedule blocks must be contiguous and cover ALL 24 hours (0 to 24) with zero gaps
+- Location values: "home" (NPC's own/shared home), "workplace", "school", "transit", "outside", "player_home" (NPC at player's home), "with_player" (together with player away from both homes)
+- "home" for HOUSEHOLD NPCs (family living together) = same home as player. "home" for non-household = their own separate home
+- For schedule fixes: reason from actual NPC role. Construction worker → workplace 6am-5pm. Housewife with home store → "home" all day (NEVER "workplace"). Student+part-time → school block + separate part_time_work block. Unemployed → leisure/errands at home, no workplace
+- Always provide the COMPLETE routine arrays when updating schedule (all 24h covered)
+- For add_interruptions: use ISO datetime strings resolvable from current sim_time context
+- job_update: use "job_update": null to remove job, or full job object to set/replace
+- school_update: same pattern as job_update
+- NEVER output SIM_PATCH when just answering questions — only when explicitly applying confirmed changes`;
 }
