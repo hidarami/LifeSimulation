@@ -894,13 +894,40 @@ window._devlog = (function(){
       <button class="modal-close" id="btn-mcancel">✕</button>
     </div>
     <div class="modal-body">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Quick start — one key for everything</div>
+      <div class="field">
+        <label class="field-label">Quick-start Key <span style="font-weight:400;opacity:.6">(fills BOTH narrator &amp; classifier — provider auto-detected)</span></label>
+        <div class="pw-wrapper"><input class="field-input" id="k-quickstart" type="password" placeholder="Paste one API key to power the whole game"><button class="pw-toggle" data-target="k-quickstart">👁</button></div>
+        <div id="k-quickstart-badge" style="font-size:10px;color:var(--pos);margin-top:3px;display:none"></div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Narrator — AI that writes your story</div>
       <div class="field">
         <label class="field-label">Narrator Key <span style="font-weight:400;opacity:.6">(xai- = Grok · sk- = OpenAI · sk-ant- = Anthropic · sk-or- = OpenRouter · gsk_ = Groq · AIza = Gemini)</span></label>
         <div class="pw-wrapper"><input class="field-input" id="k-narrator" type="password" placeholder="Paste any supported API key — provider auto-detected"><button class="pw-toggle" data-target="k-narrator">👁</button></div>
         <div id="k-narrator-badge" style="font-size:10px;color:var(--pos);margin-top:3px;display:none"></div>
       </div>
-      <div class="field"><label class="field-label">Narrator Model <span style="font-weight:400;opacity:.6">(optional — leave blank to use provider default)</span></label><input class="field-input" id="k-narrator-model" placeholder="e.g. grok-4.20-non-reasoning or gpt-4o"></div>
+      <div class="field" id="k-narrator-provider-row" style="display:none">
+        <label class="field-label">Narrator Provider <span style="font-weight:400;opacity:.6">(key prefix unrecognized — choose one)</span></label>
+        <select class="field-input" id="k-narrator-provider">
+          <option value="">Auto-detect from key</option>
+          <option value="grok">Grok/xAI</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="groq">Groq</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="custom">Custom (OpenAI-compatible)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Narrator Model <span style="font-weight:400;opacity:.6">(discovered from provider — or type your own below)</span></label>
+        <div style="display:flex;gap:6px">
+          <select class="field-input" id="k-narrator-model-list" style="flex:1"><option value="">— enter key, then Discover —</option></select>
+          <button class="btn" id="k-narrator-refresh" type="button" title="Discover models" style="white-space:nowrap">↻ Discover</button>
+        </div>
+        <input class="field-input" id="k-narrator-model" placeholder="Override: exact model id (optional)" style="margin-top:6px">
+      </div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Classifier — AI that handles game logic &amp; JSON</div>
       <div class="field">
@@ -908,7 +935,31 @@ window._devlog = (function(){
         <div class="pw-wrapper"><input class="field-input" id="k-classifier" type="password" placeholder="Paste any supported API key"><button class="pw-toggle" data-target="k-classifier">👁</button></div>
         <div id="k-classifier-badge" style="font-size:10px;color:var(--pos);margin-top:3px;display:none"></div>
       </div>
-      <div class="field"><label class="field-label">Classifier Model <span style="font-weight:400;opacity:.6">(optional)</span></label><input class="field-input" id="k-classifier-model" placeholder="e.g. gemini-2.0-flash or llama-3.1-8b-instant"></div>
+      <div class="field" id="k-classifier-provider-row" style="display:none">
+        <label class="field-label">Classifier Provider <span style="font-weight:400;opacity:.6">(key prefix unrecognized — choose one)</span></label>
+        <select class="field-input" id="k-classifier-provider">
+          <option value="">Auto-detect from key</option>
+          <option value="grok">Grok/xAI</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="groq">Groq</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="custom">Custom (OpenAI-compatible)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Classifier Model <span style="font-weight:400;opacity:.6">(discovered from provider — or type your own below)</span></label>
+        <div style="display:flex;gap:6px">
+          <select class="field-input" id="k-classifier-model-list" style="flex:1"><option value="">— enter key, then Discover —</option></select>
+          <button class="btn" id="k-classifier-refresh" type="button" title="Discover models" style="white-space:nowrap">↻ Discover</button>
+        </div>
+        <input class="field-input" id="k-classifier-model" placeholder="Override: exact model id (optional)" style="margin-top:6px">
+      </div>
+      <div class="field" id="k-custom-baseurl-row" style="display:none">
+        <label class="field-label">Custom Base URL <span style="font-weight:400;opacity:.6">(OpenAI-compatible, e.g. https://host/v1)</span></label>
+        <input class="field-input" id="k-custom-baseurl" placeholder="https://your-endpoint/v1">
+      </div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Content Mode</div>
       <div class="menu-toggle-row" id="btn-content-mode" style="padding:10px 0;cursor:pointer">
@@ -1135,6 +1186,7 @@ import { challengeFromDisease, challengeFromNpcEvent, challengeFromWorldEvent,
 import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
          buildNpcContextForGemini, applyRelationshipDelta, createNpc,
          driftTraits, getNpcCurrentTask, updateNpcCareer } from './npc.js';
+import { detectProvider, getProviderDisplayName, fetchModels } from './providers.js';
 
          
 let WS = null;
@@ -2679,31 +2731,92 @@ document.getElementById('btn-logs').addEventListener('click', () => {
 });
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
-function _detectBadge(inputId, badgeId) {
-  const inp = document.getElementById(inputId);
-  const badge = document.getElementById(badgeId);
-  if (!inp || !badge) return;
-  const update = () => {
-    const v = inp.value.trim();
-    const p = v.startsWith('xai-') ? 'Grok/xAI' : v.startsWith('AIza') ? 'Google Gemini' :
-              v.startsWith('sk-or-') ? 'OpenRouter' : v.startsWith('gsk_') ? 'Groq' :
-              v.startsWith('sk-ant-') ? 'Anthropic' : v.startsWith('sk-') ? 'OpenAI' :
-              v ? 'Custom (OpenRouter-compatible)' : '';
-    badge.textContent = p ? `✓ Detected: ${p}` : '';
-    badge.style.display = p ? 'block' : 'none';
-  };
-  inp.removeEventListener('input', inp._badgeFn);
-  inp._badgeFn = update;
-  inp.addEventListener('input', update);
-  update();
+// Effective provider for a slot: explicit dropdown choice wins, else auto-detect from key.
+function _effectiveProvider(prefix) {
+  const sel = document.getElementById(`k-${prefix}-provider`)?.value?.trim();
+  if (sel) return sel;
+  return detectProvider(document.getElementById(`k-${prefix}`)?.value?.trim() ?? '');
 }
+
+// Show the shared Custom base-URL field only when a slot resolves to the 'custom' provider.
+function _updateCustomBaseUrlRow() {
+  const row = document.getElementById('k-custom-baseurl-row');
+  if (!row) return;
+  const isCustom = _effectiveProvider('narrator') === 'custom' || _effectiveProvider('classifier') === 'custom';
+  row.style.display = isCustom ? 'block' : 'none';
+}
+
+// Update the detected-provider badge and reveal the provider picker when the key
+// prefix is unrecognized (detectProvider returns null).
+function _updateSlotDetection(prefix) {
+  const inp     = document.getElementById(`k-${prefix}`);
+  const badge   = document.getElementById(`k-${prefix}-badge`);
+  const provRow = document.getElementById(`k-${prefix}-provider-row`);
+  const provSel = document.getElementById(`k-${prefix}-provider`);
+  if (!inp) return;
+  const v = inp.value.trim();
+  const auto = detectProvider(v);
+  if (badge) {
+    if (auto)      { badge.textContent = `✓ Detected: ${getProviderDisplayName(auto)}`; badge.style.color = 'var(--pos)'; badge.style.display = 'block'; }
+    else if (v)    { badge.textContent = '⚠ Unrecognized key — choose a provider below'; badge.style.color = 'var(--warn, #d98b2b)'; badge.style.display = 'block'; }
+    else           { badge.textContent = ''; badge.style.display = 'none'; }
+  }
+  if (provRow) provRow.style.display = ((v && !auto) || (provSel && provSel.value)) ? 'block' : 'none';
+  _updateCustomBaseUrlRow();
+}
+
+// Seed a model dropdown with the saved model (no network call on open).
+function _seedModelList(prefix) {
+  const listEl = document.getElementById(`k-${prefix}-model-list`);
+  if (!listEl) return;
+  const saved = localStorage.getItem(`${prefix.toUpperCase()}_MODEL`) ?? '';
+  listEl.innerHTML = saved
+    ? `<option value="${saved}" selected>${saved}</option><option value="">— use provider default —</option>`
+    : '<option value="">— enter key, then Discover —</option>';
+}
+
+// Discover models for a slot from its provider and populate the dropdown.
+async function _discoverModels(prefix) {
+  const listEl   = document.getElementById(`k-${prefix}-model-list`);
+  const key      = document.getElementById(`k-${prefix}`)?.value?.trim();
+  const provider = _effectiveProvider(prefix);
+  const baseUrl  = document.getElementById('k-custom-baseurl')?.value?.trim();
+  if (!listEl) return;
+  if (!key || !provider) { listEl.innerHTML = '<option value="">— enter a key / pick a provider first —</option>'; return; }
+  listEl.innerHTML = '<option value="">Loading…</option>';
+  const models  = await fetchModels(provider, key, baseUrl);
+  const current = localStorage.getItem(`${prefix.toUpperCase()}_MODEL`) ?? '';
+  if (!models.length) { listEl.innerHTML = '<option value="">— discovery failed, type a model below —</option>'; return; }
+  listEl.innerHTML = '<option value="">— use provider default —</option>' +
+    models.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${m}</option>`).join('');
+}
+
+// Wire per-slot controls once (key input → detection, dropdown → override, Discover button).
+function _wireSlot(prefix) {
+  const inp        = document.getElementById(`k-${prefix}`);
+  const provSel    = document.getElementById(`k-${prefix}-provider`);
+  const refreshBtn = document.getElementById(`k-${prefix}-refresh`);
+  const listEl     = document.getElementById(`k-${prefix}-model-list`);
+  if (inp && !inp._slotWired) { inp._slotWired = true; inp.addEventListener('input', () => _updateSlotDetection(prefix)); }
+  if (provSel && !provSel._slotWired) { provSel._slotWired = true; provSel.addEventListener('change', _updateCustomBaseUrlRow); }
+  if (refreshBtn && !refreshBtn._slotWired) { refreshBtn._slotWired = true; refreshBtn.addEventListener('click', () => _discoverModels(prefix)); }
+  if (listEl && !listEl._slotWired) {
+    listEl._slotWired = true;
+    listEl.addEventListener('change', () => { const ov = document.getElementById(`k-${prefix}-model`); if (ov && listEl.value) ov.value = listEl.value; });
+  }
+}
+document.getElementById('k-custom-baseurl')?.addEventListener('input', _updateCustomBaseUrlRow);
 
 document.getElementById('btn-settings').addEventListener('click', () => {
   closeMenu();
+  document.getElementById('k-quickstart').value      = '';
   document.getElementById('k-narrator').value        = localStorage.getItem('NARRATOR_KEY') ?? '';
   document.getElementById('k-narrator-model').value  = localStorage.getItem('NARRATOR_MODEL') ?? '';
+  document.getElementById('k-narrator-provider').value = localStorage.getItem('NARRATOR_PROVIDER') ?? '';
   document.getElementById('k-classifier').value      = localStorage.getItem('CLASSIFIER_KEY') ?? '';
   document.getElementById('k-classifier-model').value = localStorage.getItem('CLASSIFIER_MODEL') ?? '';
+  document.getElementById('k-classifier-provider').value = localStorage.getItem('CLASSIFIER_PROVIDER') ?? '';
+  document.getElementById('k-custom-baseurl').value  = localStorage.getItem('CUSTOM_BASE_URL') ?? '';
   document.getElementById('k-grok').value            = localStorage.getItem('GROK_API_KEY') ?? '';
   document.getElementById('k-gem').value             = localStorage.getItem('GEMINI_API_KEY') ?? '';
   document.getElementById('k-or').value              = localStorage.getItem('OPENROUTER_API_KEY') ?? '';
@@ -2716,9 +2829,12 @@ document.getElementById('btn-settings').addEventListener('click', () => {
   const _cTog = document.getElementById('content-mode-tog');
   const _explicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
   if (_cTog) _cTog.classList.toggle('on', _explicit);
-  // Auto-detect badges
-  _detectBadge('k-narrator', 'k-narrator-badge');
-  _detectBadge('k-classifier', 'k-classifier-badge');
+  // Slot controls: wire listeners, seed model dropdowns, refresh detection/badges
+  ['quickstart', 'narrator', 'classifier'].forEach(_wireSlot);
+  _seedModelList('narrator');
+  _seedModelList('classifier');
+  ['quickstart', 'narrator', 'classifier'].forEach(_updateSlotDetection);
+  _updateCustomBaseUrlRow();
   document.getElementById('modal').classList.add('open');
 });
 
@@ -2733,12 +2849,15 @@ document.getElementById('modal').addEventListener('click', e => { if (e.target==
 document.getElementById('btn-msave').addEventListener('click', () => {
   const _sv = id => document.getElementById(id)?.value?.trim() ?? '';
   const _set = (k, v) => v ? localStorage.setItem(k, v) : localStorage.removeItem(k);
-  _set('NARRATOR_KEY',        _sv('k-narrator'));
-  _set('NARRATOR_MODEL',      _sv('k-narrator-model'));
-  _set('NARRATOR_PROVIDER',   ''); // always auto-detect from key
-  _set('CLASSIFIER_KEY',      _sv('k-classifier'));
-  _set('CLASSIFIER_MODEL',    _sv('k-classifier-model'));
-  _set('CLASSIFIER_PROVIDER', '');
+  // Quick-start key (if provided) powers BOTH narrator & classifier slots.
+  const _qs = _sv('k-quickstart');
+  _set('NARRATOR_KEY',        _qs || _sv('k-narrator'));
+  _set('NARRATOR_MODEL',      _sv('k-narrator-model') || _sv('k-narrator-model-list'));
+  _set('NARRATOR_PROVIDER',   _sv('k-narrator-provider')); // '' = auto-detect from key
+  _set('CLASSIFIER_KEY',      _qs || _sv('k-classifier'));
+  _set('CLASSIFIER_MODEL',    _sv('k-classifier-model') || _sv('k-classifier-model-list'));
+  _set('CLASSIFIER_PROVIDER', _sv('k-classifier-provider'));
+  _set('CUSTOM_BASE_URL',     _sv('k-custom-baseurl'));
   localStorage.setItem('GROK_API_KEY',       _sv('k-grok'));
   localStorage.setItem('GEMINI_API_KEY',     _sv('k-gem'));
   localStorage.setItem('OPENROUTER_API_KEY', _sv('k-or'));

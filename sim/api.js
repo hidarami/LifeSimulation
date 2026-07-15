@@ -549,8 +549,8 @@ If significance is not "significant", return found:false rather than creating a 
 // Always called during init. Generates creative world details even from empty lorebook.
 
 export async function enrichWorldDetails(lorebook, ws) {
-  const groqKey = localStorage.getItem('GROQ_API_KEY');
-  if (!groqKey) return null;
+  const _helper = getHelperSlot();
+  if (!_helper.key || !_helper.provider) return null;
 
   const npcNames  = Object.values(ws.npcs ?? {}).map(n => `${n.name} (${n.relationship_type ?? n.npc_class}, age ${n.age})`).join(', ') || 'none';
   const startYear = ws.sim_time ? new Date(ws.sim_time).getFullYear() : new Date().getFullYear();
@@ -627,53 +627,19 @@ NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are liste
   - Weekend routines should differ: no school/work blocks unless role requires (e.g. retail, construction sometimes Sat)
   - interruptible: false for sleeping, morning_prep, work, school, commuting. true for leisure, errands, winding_down, studying, store_duty`;
 
-  const tryGroq = async (model) => {
-    const res = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.72,
-        max_tokens: 2000,
-      }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-    return JSON.parse(raw.replace(/```json|```/g, '').trim());
-  };
-
-  // Try smarter model first, fall back to fast model
-  for (const model of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) {
+  // Helper slot first (Groq by default), classifier slot as fallback — both via dispatchJSON.
+  const slots = [getHelperSlot(), getClassifierSlot()];
+  const _seenProviders = new Set();
+  for (const { key, provider, model } of slots) {
+    if (!key || !provider || _seenProviders.has(provider)) continue;
+    _seenProviders.add(provider);
     try {
-      const parsed = await tryGroq(model);
-      if (parsed.location_name || parsed.setting_description || parsed.starting_possessions?.length) {
-        console.log(`[enrich] ${model} OK — loc: ${parsed.location_name?.slice(0,40)} | poss: ${parsed.starting_possessions?.length} | school: ${parsed.school?.name}`);
+      const parsed = await dispatchJSON(provider, key, model, prompt, 2000);
+      if (parsed && (parsed.location_name || parsed.setting_description || parsed.starting_possessions?.length)) {
+        console.log(`[enrich] ${provider} OK — loc: ${parsed.location_name?.slice(0,40)} | poss: ${parsed.starting_possessions?.length} | school: ${parsed.school?.name}`);
         return parsed;
       }
-    } catch (e) { console.warn(`[enrich] ${model} failed:`, e.message); }
-  }
-
-  // Gemini fallback
-  const gemKey = localStorage.getItem('GEMINI_API_KEY');
-  if (gemKey) {
-    try {
-      const res = await fetch(`${GEMINI_URL}?key=${gemKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.72, maxOutputTokens: 1400, response_mime_type: 'application/json' },
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-        const parsed = JSON.parse(text);
-        console.log('[enrich] Gemini fallback OK — loc:', parsed.location_name?.slice(0,40));
-        return parsed;
-      }
-    } catch (e) { console.warn('[enrich] Gemini fallback failed:', e.message); }
+    } catch (e) { console.warn(`[enrich] ${provider} failed:`, e.message); }
   }
 
   console.warn('[enrich] all models failed');
@@ -684,8 +650,8 @@ NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are liste
 // After Grok generates prose, Groq checks for implied state changes
 // (NPC quits job, player moves, NPC enrolls in school, etc.)
 export async function extractNarrativeStateChanges(prose, worldState) {
-  const groqKey = localStorage.getItem('GROQ_API_KEY');
-  if (!groqKey || !prose || prose.length < 80) return null;
+  const helper = getHelperSlot();
+  if (!helper.key || !helper.provider || !prose || prose.length < 80) return null;
   const npcList = Object.values(worldState.npcs ?? {})
     .filter(n => n.status === 'active')
     .map(n => `${n.id}: ${n.name} (${n.relationship_type ?? n.npc_class})`)
@@ -727,15 +693,8 @@ Return ONLY valid JSON:
 
 Set has_changes: true ONLY if you found at least one definitive change.`;
   try {
-    const res = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-      body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.0, max_tokens: 350 }),
-    });
-    if (!res.ok) return null;
-    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return parsed.has_changes ? parsed : null;
+    const parsed = await dispatchJSON(helper.provider, helper.key, helper.model, prompt, 350);
+    return parsed?.has_changes ? parsed : null;
   } catch { return null; }
 }
 
