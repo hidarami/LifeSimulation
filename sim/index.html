@@ -961,6 +961,13 @@ window._devlog = (function(){
         <input class="field-input" id="k-custom-baseurl" placeholder="https://your-endpoint/v1">
       </div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Locale &amp; Language</div>
+      <div class="field-row">
+        <div class="field"><label class="field-label">Country / Culture</label><input class="field-input" id="k-locale" type="text" placeholder="Philippines"></div>
+        <div class="field"><label class="field-label">Local Language</label><input class="field-input" id="k-language" type="text" placeholder="Tagalog"></div>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Affects world-building and do-not-translate rules. Defaults to Philippines / Tagalog.</div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Content Mode</div>
       <div class="menu-toggle-row" id="btn-content-mode" style="padding:10px 0;cursor:pointer">
         <span style="font-size:13px">Adult Content (Explicit)</span>
@@ -1191,6 +1198,7 @@ import { detectProvider, getProviderDisplayName, fetchModels } from './providers
          
 let WS = null;
 let _processTurnCounter = 0; // race condition guard for non-blocking NPC callbacks
+let _patchUndo = null;       // undo snapshot — type "undo" in AI Console to restore
 let _sbClient = null;
 let initInProgress = false;
 
@@ -1224,6 +1232,7 @@ function _tryParsePatchJson(raw) {
 
 function _applySimPatch(patch) {
   if (!WS || !patch) return;
+  _patchUndo = JSON.parse(JSON.stringify(WS)); // snapshot before destructive change
   window._devlog?.patch('SIM_PATCH received', patch);
   const _changed = [];
   try {
@@ -1303,6 +1312,42 @@ function _applySimPatch(patch) {
     window._devlog?.error('SIM_PATCH apply error', { error: e.message });
     console.error('[patch] Apply failed:', e);
   }
+}
+
+// ── STATE_CHANGE → SIM_PATCH alias (Item 4 consolidation) ────────────────────
+function _extractAndApplyStateChange(raw) {
+  const m = raw.match(/<STATE_CHANGE>\s*([\s\S]*?)\s*<\/STATE_CHANGE>/i);
+  if (!m) return false;
+  try {
+    const cmd = JSON.parse(m[1].trim());
+    const patch = {};
+    switch (cmd.action) {
+      case 'modify_stat':
+      case 'update_player':
+        patch.player_updates = {};
+        if (cmd.changes?.cash     != null) patch.player_updates.cash     = Number(cmd.changes.cash);
+        if (cmd.changes?.location)         patch.player_updates.location = cmd.changes.location;
+        if (cmd.changes?.stats && typeof cmd.changes.stats === 'object')
+                                           patch.player_updates.stats    = cmd.changes.stats;
+        break;
+      case 'update_job':    patch.job_update    = cmd.changes; break;
+      case 'clear_job':     patch.job_update    = null;        break;
+      case 'update_school': patch.school_update = cmd.changes; break;
+      case 'clear_school':  patch.school_update = null;        break;
+      case 'update_npc': {
+        const _u = {};
+        if (cmd.changes?.relationship_meter != null) _u.relationship_meter = cmd.changes.relationship_meter;
+        if (cmd.changes?.trust_meter        != null) _u.trust_meter        = cmd.changes.trust_meter;
+        if (cmd.changes?.traits)                     _u.traits             = cmd.changes.traits;
+        if (cmd.changes?.bio)                        _u.bio                = cmd.changes.bio;
+        if (cmd.changes?.status)                     _u.status             = cmd.changes.status;
+        if (Object.keys(_u).length) patch.npc_updates = { [cmd.target]: _u };
+        break;
+      }
+    }
+    if (Object.keys(patch).length) { _applySimPatch(patch); return true; }
+  } catch (e) { window._devlog?.error('STATE_CHANGE parse failed', { error: e.message }); }
+  return false;
 }
 
 // ── PANEL NAVIGATION ─────────────────────────────────────────────────────────
@@ -2131,6 +2176,94 @@ function detectScheduleMiss(prevIso, newIso, playerAction, ws) {
   return missed;
 }
 
+// ── DEATH: POV SHIFT ─────────────────────────────────────────────────────────
+// Design: new POV = highest-significance active NPC; world time/NPCs carry over;
+// player stats reset to successor's baseline; log persists; session context resets.
+async function _handleDeath(deathProse) {
+  if (!WS) return;
+  window._devlog?.system('DEATH: initiating POV shift');
+  const _candidates = Object.values(WS.npcs)
+    .filter(n => n.status === 'active' && n.significance >= 1)
+    .sort((a, b) => b.significance - a.significance || b.relationship_meter - a.relationship_meter);
+  const _successor = _candidates[0] ?? null;
+  if (!_successor) {
+    setStatus('☠ Character has died. No active characters remain — game over.', 'err');
+    return;
+  }
+  const _deceasedName = WS.player.name ?? 'the previous character'; // capture BEFORE overwrite
+  setStatus(`☠ Generating post-death summary... POV shifts to ${_successor.name}.`, 'err');
+  // ── Post-life legacy narration ────────────────────────────────────────────
+  let legacyProse = '';
+  try {
+    const _lb = assembleTurnBrief(WS, {
+      turnNumber: WS.turn, simTime: WS.sim_time, location: WS.player.location,
+      actionDescription: '[death_legacy]', statDeltas: {}, riskResult: null,
+      consequenceUpdate: null, npcReactions: [], turnClass: 'DEATH', isExplicit: false,
+      rawInput: `[${_deceasedName} has died. ${_successor.name} will carry the story forward.]`,
+    });
+    legacyProse = await callGrok(
+      { ..._lb, successor_npc: { name: _successor.name, relationship: _successor.relationship_type ?? _successor.npc_class } },
+      'legacy'
+    );
+  } catch {
+    legacyProse = `${_deceasedName} is gone. The world moves on. ${_successor.name} is left to carry what remains.`;
+  }
+  const _la = renderTurnAnchor(WS.turn, WS.sim_time, WS.player.location);
+  renderNarration(legacyProse, _la, document.getElementById('feed'), WS.turn);
+  document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior: 'smooth' });
+  // ── Register deceased as inactive NPC ────────────────────────────────────
+  const _deadId = `${_deceasedName.toLowerCase().replace(/\s+/g,'_')}_deceased`;
+  WS.npcs[_deadId] = {
+    id: _deadId, name: _deceasedName, age: WS.player.age ?? 18, npc_class: 'household',
+    relationship_type: 'deceased_player', status: 'inactive', departure_reason: 'deceased',
+    significance: 3, relationship_meter: 0, trust_meter: 0,
+    traits: {}, active_flags: [], flag_timers: {}, recent_interactions: [`Died on turn ${WS.turn}`],
+    schedule: { weekday_routine: [], weekend_routine: [], interruptions: [] },
+  };
+  // ── Successor becomes the player ─────────────────────────────────────────
+  delete WS.npcs[_successor.id];
+  WS.player = {
+    name: _successor.name, age: _successor.age ?? 20,
+    sex: _successor.sex ?? (WS.player.sex ?? 'unknown'),
+    location: WS.player.location,
+    stats: {
+      health: 75, energy: 65, hunger: 30, hygiene: 65, mood: 35, arousal: 0,
+      social: 50,
+      reputation: Math.max(10, Math.min(60, Math.round((_successor.relationship_meter + 100) / 3.33))),
+      alcohol: 0,
+    },
+    cash: 200, skills: {}, habits: [], irreversible: [], possessions: [], diseases: [], alcohol_tolerance: 0,
+  };
+  WS.challenges = []; WS.consequences = [];
+  WS.last_narration_prose = legacyProse; WS.session_context_flavor = '';
+  WS.recent_significant_events = [`${_successor.name} takes over after ${_deceasedName} died on turn ${WS.turn}`];
+  WS.turn += 1;
+  await saveWorldState(WS);
+  await saveNarration(WS.turn, WS.sim_time, WS.player.location, legacyProse);
+  renderAll(); resetConvId();
+  // ── Opening scene for new POV (non-blocking) ──────────────────────────────
+  setTimeout(async () => {
+    try {
+      const _ib = assembleTurnBrief(WS, {
+        turnNumber: WS.turn + 1, simTime: WS.sim_time, location: WS.player.location,
+        actionDescription: '[pov_shift_start]', statDeltas: {}, riskResult: null,
+        consequenceUpdate: null, npcReactions: [], turnClass: 'NOTABLE', isExplicit: false,
+        rawInput: `[Begin playing as ${WS.player.name}, reacting to the recent death of ${_deceasedName}]`,
+      });
+      const _ip = await callGrok(_ib, 'pov_shift');
+      WS.turn += 1; WS.last_narration_prose = _ip;
+      const _ia = renderTurnAnchor(WS.turn, WS.sim_time, WS.player.location);
+      renderNarration(_ip, _ia, document.getElementById('feed'), WS.turn);
+      document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior: 'smooth' });
+      await saveWorldState(WS); await saveNarration(WS.turn, WS.sim_time, WS.player.location, _ip);
+      renderAll(); setStatus(`${WS.player.name} — Turn ${WS.turn}`);
+    } catch (_ie) { setStatus(`${WS.player.name} — Continue.`); }
+    document.getElementById('submit-btn').disabled = false;
+    document.getElementById('action-input').disabled = false;
+    setProcessing(false);
+  }, 800);
+}
+
 // ── PROCESS TURN ──────────────────────────────────────────────────────────────
 function autopilotHours(i) {
   if (/sleep|nap/i.test(i)) return 7;
@@ -2681,9 +2814,10 @@ async function processTurn(input) {
     }
 
     if (turnClass === TURN_CLASSIFICATION.DEATH) {
-      setStatus('☠ Character has died.', 'err');
+      setStatus('☠ Character has died — processing...', 'err');
       document.getElementById('submit-btn').disabled = true;
       document.getElementById('action-input').disabled = true;
+      setTimeout(() => _handleDeath(prose), 500);
     }
   } catch(err) {
     window._devlog?.error(`processTurn error`, { message: err.message, stack: err.stack?.slice(0,400) });
@@ -2823,7 +2957,9 @@ document.getElementById('btn-settings').addEventListener('click', () => {
   document.getElementById('k-groq').value            = localStorage.getItem('GROQ_API_KEY') ?? '';
   document.getElementById('k-sb-url').value          = localStorage.getItem('SUPABASE_URL') ?? '';
   document.getElementById('k-sb-key').value          = localStorage.getItem('SUPABASE_ANON_KEY') ?? '';
-  document.getElementById('k-lorebook').value        = localStorage.getItem('LOREBOOK') ?? '';
+  document.getElementById('k-lorebook').value        = localStorage.getItem('LOREBOOK')  ?? '';
+  document.getElementById('k-locale').value          = localStorage.getItem('LOCALE')    ?? 'Philippines';
+  document.getElementById('k-language').value        = localStorage.getItem('LANGUAGE')  ?? 'Tagalog';
   document.getElementById('auth-status').textContent = '';
   // Content mode toggle
   const _cTog = document.getElementById('content-mode-tog');
@@ -2866,6 +3002,8 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   localStorage.setItem('SUPABASE_ANON_KEY',  _sv('k-sb-key'));
   localStorage.setItem('LOREBOOK',           document.getElementById('k-lorebook')?.value ?? '');
   localStorage.setItem('CONTENT_MODE',       _contentExplicit ? 'explicit' : 'filtered');
+  localStorage.setItem('LOCALE',   document.getElementById('k-locale')?.value?.trim()   || 'Philippines');
+  localStorage.setItem('LANGUAGE', document.getElementById('k-language')?.value?.trim() || 'Tagalog');
   const su = localStorage.getItem('SUPABASE_URL'), sk = localStorage.getItem('SUPABASE_ANON_KEY');
   if (su && sk && window.supabase) { _sbClient = window.supabase.createClient(su, sk); setSupabaseClient(_sbClient); }
   document.getElementById('modal').classList.remove('open');
@@ -3113,6 +3251,18 @@ async function sendConsoleMessage() {
   const content = inp.value.trim();
   if (!content) return;
   inp.value = ''; inp.style.height = 'auto';
+  // Undo last patch
+  if (content.toLowerCase() === 'undo') {
+    if (_patchUndo && WS) {
+      WS = _patchUndo; _patchUndo = null;
+      await saveWorldState(WS).catch(() => {}); renderAll();
+      appendConsoleMsg('user', 'undo');
+      appendConsoleMsg('assistant', '↩ Last patch undone — world state restored.', false);
+    } else {
+      appendConsoleMsg('assistant', 'Nothing to undo — no recent patch was applied.', false);
+    }
+    return;
+  }
   _consoleSending = true;
   document.getElementById('console-submit').disabled = true;
   _consoleMessages.push({ role: 'user', content });
@@ -3138,7 +3288,14 @@ async function sendConsoleMessage() {
     };
 
     let _patchApplied = _extractAndApplyPatch(reply);
-    reply = reply.replace(/<SIM_PATCH>[\s\S]*?<\/SIM_PATCH>/i, '').trim();
+    // Legacy STATE_CHANGE alias → SIM_PATCH
+    if (!_patchApplied && /<STATE_CHANGE>/i.test(reply)) {
+      _patchApplied = _extractAndApplyStateChange(reply);
+    }
+    reply = reply
+      .replace(/<SIM_PATCH>[\s\S]*?<\/SIM_PATCH>/i, '')
+      .replace(/<STATE_CHANGE>[\s\S]*?<\/STATE_CHANGE>/i, '')
+      .trim();
 
     // ── Second pass: if reply claims a change but no patch found ─────────
     if (!_patchApplied && WS) {

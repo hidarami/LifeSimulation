@@ -5,28 +5,34 @@
 // ─── EXPLICIT PATTERNS ────────────────────────────────────────────────────────
 // Semantic category regexes. Any match = explicit. Expandable without a word list.
 
-const EXPLICIT_PATTERNS = [
-  // Direct sex acts
+// ── English explicit patterns ─────────────────────────────────────────────────
+const _EP_EN = [
   /\b(fuck|screw|bang|rail|nail|shag|bone|plow|pound)\b/i,
-  // Oral
   /\b(blowjob|blow\s*job|fellatio|cunnilingus|go\s*down\s*on|(suck|sucking)\s*(him|her|them|off|his|her|their)?\s*(cock|dick|pussy|clit)?|eat\s*(him|her|out|pussy|ass))\b/i,
-  // Body-motion intercourse cues
   /\b(ride\s*(him|her|them|it)|mount\s*(him|her|them)|straddle\s*(him|her|them)|grind\s*(on|against|him|her|them)|thrust\b|penetrat(e|ing|ion))\b/i,
-  // Passive intercourse cues
   /\b(hump\b|get\s*(fucked|railed|pounded|banged)|be\s*(on\s*top|inside))\b/i,
-  // Manual
   /\b(finger\s*(him|her|them|bang)|jerk\s*(him|me|her)?\s*off|handjob|hand\s*job|stroke\s*(his|her|their|my)\s*(cock|dick|pussy|clit))\b/i,
-  // Sexual body parts in active context
   /\b(cock|dick|pussy|clit|clitoris|erect(ion)?|boner|cum\b|cumming|orgasm|ejaculat|aroused|hard\s*on)\b/i,
-  // Restraint / kink
   /\b(pin\s*(him|her|them)\s*down|tie\s*(him|her|them)\s*up|bondage|spanking|spank\s*(him|her|me)|dom(inat(e|ion))?|submission|sub\s*to)\b/i,
-  // Makeout
   /\b(makeout|make\s*out|making\s*out|french\s*kiss|kiss\s*(him|her|them)\s*(deeply|hungrily|hard))\b/i,
-  // Edging / teasing sexual
   /\b(edge\s*(him|her|them)|tease\s*(his|her|their|my)\s*(cock|dick|pussy|clit)|masturbat)\b/i,
-  // Positions
   /\b(doggy(\s*style)?|missionary|cowgirl|reverse\s*cowgirl|69\b|sixty.?nine)\b/i,
 ];
+
+// ── Tagalog (Filipino) explicit patterns ──────────────────────────────────────
+// Add more language groups below: _EP_ES, _EP_ID, etc.
+const _EP_TL = [
+  /\b(kantot|kantutin|magkantot|kantutan|kinantot|pakantot)\b/i,   // intercourse
+  /\b(jakol|jakolihin|magjakol|nagjajakol|jakolin)\b/i,             // masturbation (male)
+  /\b(chupa|chupahin|magchupa|nagchuchupa|ichupa)\b/i,              // oral sex
+  /\b(tite|oten|burat)\b/i,                                          // penis
+  /\b(puke|pek-pek|pekpek)\b/i,                                     // vagina
+  /\b(tamod)\b/i,                                                     // ejaculate
+  /\b(malibog|kalibugan|nalibugan)\b/i,                              // horny/lust
+  /\b(halayin|halayan)\b/i,                                           // grope/molest
+];
+
+export const EXPLICIT_PATTERNS = [..._EP_EN, ..._EP_TL];
 
 export function isExplicit(input) {
   const n = input.toLowerCase().trim();
@@ -59,6 +65,11 @@ export function classifyExplicitActivity(input) {
   if (/\bjerk\s+it\s+off\b/i.test(n)) return 'manual_giving';
   if (/\bstroke\s+(it|him|them)\b/i.test(n)) return 'manual_giving';
   if (/\bsuck(ing)?\b.{0,60}\bcum\b/i.test(n)) return 'oral_giving';
+  // Tagalog classification
+  if (/\b(kantot|kantutin|magkantot|kantutan|kinantot)\b/i.test(n)) return 'intercourse';
+  if (/\b(jakol|jakolihin|magjakol|nagjajakol|jakolin)\b/i.test(n)) return 'solo_masturbation';
+  if (/\b(chupa|chupahin|magchupa|nagchuchupa|ichupa)\b/i.test(n)) return 'oral_giving';
+  if (/\b(puke|pek-pek|pekpek|tite|oten|burat)\b/i.test(n)) return 'intercourse';
   return 'intercourse'; // ambiguous explicit default
 }
 

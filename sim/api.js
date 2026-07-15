@@ -41,17 +41,21 @@ export function setConversationHistory(h) { _conversationHistory = Array.isArray
 
 function buildGrokUserMessage(turnBrief, mode) {
   const instruction = {
-    notable: 'Expand the scene. 2–4 paragraphs.',
-    crisis:  'Write with urgency and weight. 3–5 paragraphs.',
-    death:   'Write the death scene with gravity. 4–6 paragraphs.',
-    init:    'This is the opening scene of a new game. Establish the character in their immediate physical environment — body state, location, sensory details. 3–4 paragraphs.',
+    notable:   'Expand the scene. 2–4 paragraphs.',
+    crisis:    'Write with urgency and weight. 3–5 paragraphs.',
+    death:     'Write the death scene with gravity. 4–6 paragraphs.',
+    legacy:    'Write a post-death reflection from the world\'s perspective: how the death of the player character ripples outward. Show the successor NPC\'s immediate reaction and the weight they now carry. Do NOT resurrect the deceased. 3–5 paragraphs.',
+    pov_shift: 'This is the first scene from a new player POV after the previous character died. Establish the new POV character — their location, body, and the immediate emotional weight of what they know happened. Do not rush past the loss. 3–4 paragraphs.',
+    init:      'This is the opening scene of a new game. Establish the character in their immediate physical environment — body state, location, sensory details. 3–4 paragraphs.',
   }[mode] ?? '2–3 paragraphs.';
   return JSON.stringify({ ...turnBrief, narration_instruction: instruction });
 }
 
 export async function callGrok(turnBrief, mode) {
-  const lorebook = typeof localStorage !== 'undefined' ? (localStorage.getItem('LOREBOOK') ?? '') : '';
-  const sys = buildGrokNarrationPrompt(lorebook);
+  const lorebook  = typeof localStorage !== 'undefined' ? (localStorage.getItem('LOREBOOK')  ?? '') : '';
+  const locale    = typeof localStorage !== 'undefined' ? (localStorage.getItem('LOCALE')    ?? 'Philippines') : 'Philippines';
+  const language  = typeof localStorage !== 'undefined' ? (localStorage.getItem('LANGUAGE')  ?? 'Tagalog') : 'Tagalog';
+  const sys = buildGrokNarrationPrompt(lorebook, locale, language);
   const usr = buildGrokUserMessage(turnBrief, mode);
 
   const { key, provider, model } = getNarratorSlot();
@@ -567,9 +571,9 @@ function _backfillEnrichment(parsed, ws) {
   if (!parsed.setting_description || _wc(parsed.setting_description) < 25) {
     const loc = (ws.player?.location ?? 'a modest home').replace(/_/g, ' ');
     parsed.setting_description =
-      `The home at ${loc} is modest but functional, typical of a Filipino lower-middle-class household. ` +
+      `The home at ${loc} is modest but functional, typical of a lower-middle-class household. ` +
       `Worn furniture fills the main living area alongside a small television and basic kitchen equipment. ` +
-      `Sounds from the surrounding neighbourhood — passing jeepneys, the occasional bark of a dog — filter in through thin concrete walls.`;
+      `Sounds from the surrounding neighbourhood filter in through the walls.`;
   }
 
   // job_enrichment: description (≥2 sentences / ~12 words), schedule, and earnings required
@@ -612,13 +616,25 @@ export async function enrichWorldDetails(lorebook, ws) {
   const _helper = getHelperSlot();
   if (!_helper.key || !_helper.provider) return null;
 
+  const _eLocale  = typeof localStorage !== 'undefined' ? (localStorage.getItem('LOCALE')   ?? 'Philippines') : 'Philippines';
+  const _eIsPhil  = /philippine|filipin/i.test(_eLocale);
+  const _addrFmt  = _eIsPhil
+    ? 'specific Philippine address — sitio/street, barangay, municipality, province'
+    : `specific ${_eLocale} address with neighborhood, city/town, and region`;
+  const _schoolGrade = _eIsPhil
+    ? 'e.g. Grade 12 - HUMSS Strand OR 1st Year - BS Criminology'
+    : 'e.g. Year 12 - Sciences OR 1st Year - Business Administration';
+  const _schoolDefault = _eIsPhil
+    ? 'most common in Philippines for this age'
+    : `most common for this age in ${_eLocale}`;
+
   const npcNames  = Object.values(ws.npcs ?? {}).map(n => `${n.name} (${n.relationship_type ?? n.npc_class}, age ${n.age})`).join(', ') || 'none';
   const startYear = ws.sim_time ? new Date(ws.sim_time).getFullYear() : new Date().getFullYear();
   const hasJob    = !!ws.job;
   const hasSchool = !!ws.school;
   const lbText    = lorebook?.trim() || '';
 
-  const prompt = `You are a world-building AI for a Filipino life simulation game. Generate complete, vivid details for this character. Fill ALL required fields — never skip or return null for required fields.
+  const prompt = `You are a world-building AI for a ${_eLocale} life simulation game. Generate complete, vivid details for this character. Fill ALL required fields — never skip or return null for required fields.
 
 CHARACTER: ${ws.player?.name ?? 'Character'}, age ${ws.player?.age ?? 18}
 YEAR: ${startYear}
@@ -630,7 +646,7 @@ SCHOOL ALREADY PARSED: ${hasSchool ? 'YES — ' + (ws.school?.name ?? '') : 'NO'
 Return ONLY valid JSON. No markdown. Fill every required field — never return null for required fields.
 
 {
-  "location_name": "REQUIRED: specific Philippine address — sitio/street, barangay, municipality, province. Always generate, never null.",
+  "location_name": "REQUIRED: ${_addrFmt}. Always generate, never null.",
   "setting_description": "REQUIRED: 3-4 vivid sentences describing the home — layout, furniture, sounds, smells, economic class markers. Always generate, never null.",
   "school": null,
   "job_enrichment": null,
@@ -647,9 +663,9 @@ SETTING_DESCRIPTION: Always describe the home vividly. MINIMUM 3 full sentences,
 
 SCHOOL — decide based on age and lorebook:
   - Generate IF: character is age 14–22 AND lorebook does NOT say dropped out / no school / graduated / finished school
-  - When NO lorebook: age 18 → default to Grade 12 or 1st year college (most common in Philippines for this age)
+  - When NO lorebook: age 18 → default to final year of secondary school or 1st year of tertiary/college (${_schoolDefault})
   - When SCHOOL ALREADY PARSED = YES: return null (don't override)
-  - Schema: { "name": "realistic Philippine school name", "grade_level": "e.g. Grade 12 - HUMSS Strand OR 1st Year - BS Criminology", "schedule": "Mon-Fri 7:00 AM – 4:30 PM", "status": "active" }
+  - Schema: { "name": "realistic ${_eLocale} school name", "grade_level": "${_schoolGrade}", "schedule": "Mon-Fri 7:00 AM – 4:30 PM", "status": "active" }
 
 JOB_ENRICHMENT — reason about it:
   - When JOB ALREADY PARSED = YES: return enrichment details to fill missing gaps — { "platform_or_employer": "...", "position": "specific job title", "description": "REQUIRED — exactly 2 full sentences describing daily tasks and work environment; never omit or leave blank", "schedule": "REQUIRED — e.g. Mon–Fri 8:00 AM – 5:00 PM; never null or empty string", "earnings": "REQUIRED — e.g. ₱550/day or ₱12,000/month; never null or empty string", "days_active": realistic_number }

@@ -192,25 +192,44 @@ export async function saveWorldStateCloud(state) {
   try {
     const { data: { user } } = await _supabase.auth.getUser();
     if (!user) return;
+    const saveId = _worldId ?? null;
     await _supabase.from('world_states').upsert(
-      { user_id: user.id, state, updated_at: new Date().toISOString() },
-      { onConflict: 'user_id' }
+      { user_id: user.id, save_id: saveId, state, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,save_id' }
     );
   } catch (e) { console.warn('[cloud] save failed:', e.message); }
 }
 
-export async function loadWorldStateCloud() {
+export async function loadWorldStateCloud(saveId = undefined) {
   if (!_supabase) return null;
   try {
     const { data: { user } } = await _supabase.auth.getUser();
     if (!user) return null;
-    const { data } = await _supabase
-      .from('world_states')
-      .select('state')
-      .eq('user_id', user.id)
-      .single();
-    return data?.state ?? null;
+    const targetId = saveId !== undefined ? saveId : _worldId;
+    if (targetId !== null && targetId !== undefined) {
+      const { data } = await _supabase
+        .from('world_states').select('state')
+        .eq('user_id', user.id).eq('save_id', targetId).maybeSingle();
+      if (data?.state) return data.state;
+    }
+    // Backward compat: legacy row with no save_id
+    const { data: legacy } = await _supabase
+      .from('world_states').select('state')
+      .eq('user_id', user.id).is('save_id', null).maybeSingle();
+    return legacy?.state ?? null;
   } catch { return null; }
+}
+
+export async function listWorldStatesCloud() {
+  if (!_supabase) return [];
+  try {
+    const { data: { user } } = await _supabase.auth.getUser();
+    if (!user) return [];
+    const { data } = await _supabase
+      .from('world_states').select('save_id, state, updated_at')
+      .eq('user_id', user.id).order('updated_at', { ascending: false });
+    return data ?? [];
+  } catch { return []; }
 }
 
 // ─── EVENT LOG ────────────────────────────────────────────────────────────────
