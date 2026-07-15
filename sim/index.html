@@ -894,12 +894,36 @@ window._devlog = (function(){
       <button class="modal-close" id="btn-mcancel">✕</button>
     </div>
     <div class="modal-body">
-      <div class="field"><label class="field-label">Grok API Key</label><div class="pw-wrapper"><input class="field-input" id="k-grok" type="password" placeholder="xai-..."><button class="pw-toggle" data-target="k-grok">👁</button></div></div>
-      <div class="field"><label class="field-label">Gemini API Key</label><div class="pw-wrapper"><input class="field-input" id="k-gem" type="password" placeholder="AIza..."><button class="pw-toggle" data-target="k-gem">👁</button></div></div>
-      <div class="field"><label class="field-label">OpenRouter (fallback)</label><div class="pw-wrapper"><input class="field-input" id="k-or" type="password" placeholder="sk-or-..."><button class="pw-toggle" data-target="k-or">👁</button></div></div>
-      <div class="field"><label class="field-label">Groq (Gemini fallback)</label><div class="pw-wrapper"><input class="field-input" id="k-groq" type="password" placeholder="gsk_..."><button class="pw-toggle" data-target="k-groq">👁</button></div></div>
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Narrator — AI that writes your story</div>
+      <div class="field">
+        <label class="field-label">Narrator Key <span style="font-weight:400;opacity:.6">(xai- = Grok · sk- = OpenAI · sk-ant- = Anthropic · sk-or- = OpenRouter · gsk_ = Groq · AIza = Gemini)</span></label>
+        <div class="pw-wrapper"><input class="field-input" id="k-narrator" type="password" placeholder="Paste any supported API key — provider auto-detected"><button class="pw-toggle" data-target="k-narrator">👁</button></div>
+        <div id="k-narrator-badge" style="font-size:10px;color:var(--pos);margin-top:3px;display:none"></div>
+      </div>
+      <div class="field"><label class="field-label">Narrator Model <span style="font-weight:400;opacity:.6">(optional — leave blank to use provider default)</span></label><input class="field-input" id="k-narrator-model" placeholder="e.g. grok-4.20-non-reasoning or gpt-4o"></div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
-      <div class="field"><label class="field-label">Lorebook — world &amp; character facts sent every Grok prompt</label><textarea class="field-input field-textarea" id="k-lorebook" placeholder="e.g. Name: Rico Diaz, 18, male. Lives alone in Cavite..."></textarea></div>
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Classifier — AI that handles game logic &amp; JSON</div>
+      <div class="field">
+        <label class="field-label">Classifier Key <span style="font-weight:400;opacity:.6">(can be the same key as narrator)</span></label>
+        <div class="pw-wrapper"><input class="field-input" id="k-classifier" type="password" placeholder="Paste any supported API key"><button class="pw-toggle" data-target="k-classifier">👁</button></div>
+        <div id="k-classifier-badge" style="font-size:10px;color:var(--pos);margin-top:3px;display:none"></div>
+      </div>
+      <div class="field"><label class="field-label">Classifier Model <span style="font-weight:400;opacity:.6">(optional)</span></label><input class="field-input" id="k-classifier-model" placeholder="e.g. gemini-2.0-flash or llama-3.1-8b-instant"></div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Content Mode</div>
+      <div class="menu-toggle-row" id="btn-content-mode" style="padding:10px 0;cursor:pointer">
+        <span style="font-size:13px">Adult Content (Explicit)</span>
+        <div class="tog" id="content-mode-tog"><div class="tog-knob"></div></div>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6">When off, explicit player actions skip narration and run as autopilot. Useful for filtered-model users.</div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Additional / Fallback Keys</div>
+      <div class="field"><label class="field-label">Grok API Key <span style="font-weight:400;opacity:.6">(used as narrator if Narrator Key is empty)</span></label><div class="pw-wrapper"><input class="field-input" id="k-grok" type="password" placeholder="xai-..."><button class="pw-toggle" data-target="k-grok">👁</button></div></div>
+      <div class="field"><label class="field-label">Gemini API Key <span style="font-weight:400;opacity:.6">(used as classifier if Classifier Key is empty)</span></label><div class="pw-wrapper"><input class="field-input" id="k-gem" type="password" placeholder="AIza..."><button class="pw-toggle" data-target="k-gem">👁</button></div></div>
+      <div class="field"><label class="field-label">Groq API Key <span style="font-weight:400;opacity:.6">(fast helper for NPC analysis &amp; world building)</span></label><div class="pw-wrapper"><input class="field-input" id="k-groq" type="password" placeholder="gsk_..."><button class="pw-toggle" data-target="k-groq">👁</button></div></div>
+      <div class="field"><label class="field-label">OpenRouter API Key <span style="font-weight:400;opacity:.6">(narrator fallbacks — free uncensored models)</span></label><div class="pw-wrapper"><input class="field-input" id="k-or" type="password" placeholder="sk-or-..."><button class="pw-toggle" data-target="k-or">👁</button></div></div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div class="field"><label class="field-label">Lorebook — world &amp; character facts sent every narrator prompt</label><textarea class="field-input field-textarea" id="k-lorebook" placeholder="e.g. Name: Rico Diaz, 18, male. Lives alone in Cavite..."></textarea></div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div class="field"><label class="field-label">Supabase URL</label><input class="field-input" id="k-sb-url" placeholder="https://xxx.supabase.co"></div>
       <div class="field"><label class="field-label">Supabase Anon Key</label><div class="pw-wrapper"><input class="field-input" id="k-sb-key" type="password" placeholder="eyJ..."><button class="pw-toggle" data-target="k-sb-key">👁</button></div></div>
@@ -2080,7 +2104,11 @@ async function processTurn(input) {
     let _mentionedNpc = null; // NPC explicitly named in player input — set in PATH_1 block
     let _p1ShouldDetectNpc = false; // deferred flag — registration runs after WS commit
     let _cls2Result = null; // Cached PATH_2 classify result — reused for alcohol + context
-    const route = routeInput(input);
+    // Content mode: filtered = redirect explicit to autopilot (for users on censored models)
+    let route = routeInput(input);
+    if (route === ROUTE.PATH_1_EXPLICIT && localStorage.getItem('CONTENT_MODE') === 'filtered') {
+      route = ROUTE.PATH_3_AUTOPILOT;
+    }
 
     window._devlog?.system(`processTurn start T${(WS?.turn??0)+1}`, { input: input.slice(0,80), route });
     if (route === ROUTE.PATH_1_EXPLICIT) {
@@ -2651,32 +2679,78 @@ document.getElementById('btn-logs').addEventListener('click', () => {
 });
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────────
+function _detectBadge(inputId, badgeId) {
+  const inp = document.getElementById(inputId);
+  const badge = document.getElementById(badgeId);
+  if (!inp || !badge) return;
+  const update = () => {
+    const v = inp.value.trim();
+    const p = v.startsWith('xai-') ? 'Grok/xAI' : v.startsWith('AIza') ? 'Google Gemini' :
+              v.startsWith('sk-or-') ? 'OpenRouter' : v.startsWith('gsk_') ? 'Groq' :
+              v.startsWith('sk-ant-') ? 'Anthropic' : v.startsWith('sk-') ? 'OpenAI' :
+              v ? 'Custom (OpenRouter-compatible)' : '';
+    badge.textContent = p ? `✓ Detected: ${p}` : '';
+    badge.style.display = p ? 'block' : 'none';
+  };
+  inp.removeEventListener('input', inp._badgeFn);
+  inp._badgeFn = update;
+  inp.addEventListener('input', update);
+  update();
+}
+
 document.getElementById('btn-settings').addEventListener('click', () => {
   closeMenu();
-  document.getElementById('k-grok').value     = localStorage.getItem('GROK_API_KEY') ?? '';
-  document.getElementById('k-gem').value      = localStorage.getItem('GEMINI_API_KEY') ?? '';
-  document.getElementById('k-or').value       = localStorage.getItem('OPENROUTER_API_KEY') ?? '';
-  document.getElementById('k-groq').value     = localStorage.getItem('GROQ_API_KEY') ?? '';
-  document.getElementById('k-sb-url').value   = localStorage.getItem('SUPABASE_URL') ?? '';
-  document.getElementById('k-sb-key').value   = localStorage.getItem('SUPABASE_ANON_KEY') ?? '';
-  document.getElementById('k-lorebook').value = localStorage.getItem('LOREBOOK') ?? '';
+  document.getElementById('k-narrator').value        = localStorage.getItem('NARRATOR_KEY') ?? '';
+  document.getElementById('k-narrator-model').value  = localStorage.getItem('NARRATOR_MODEL') ?? '';
+  document.getElementById('k-classifier').value      = localStorage.getItem('CLASSIFIER_KEY') ?? '';
+  document.getElementById('k-classifier-model').value = localStorage.getItem('CLASSIFIER_MODEL') ?? '';
+  document.getElementById('k-grok').value            = localStorage.getItem('GROK_API_KEY') ?? '';
+  document.getElementById('k-gem').value             = localStorage.getItem('GEMINI_API_KEY') ?? '';
+  document.getElementById('k-or').value              = localStorage.getItem('OPENROUTER_API_KEY') ?? '';
+  document.getElementById('k-groq').value            = localStorage.getItem('GROQ_API_KEY') ?? '';
+  document.getElementById('k-sb-url').value          = localStorage.getItem('SUPABASE_URL') ?? '';
+  document.getElementById('k-sb-key').value          = localStorage.getItem('SUPABASE_ANON_KEY') ?? '';
+  document.getElementById('k-lorebook').value        = localStorage.getItem('LOREBOOK') ?? '';
   document.getElementById('auth-status').textContent = '';
+  // Content mode toggle
+  const _cTog = document.getElementById('content-mode-tog');
+  const _explicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
+  if (_cTog) _cTog.classList.toggle('on', _explicit);
+  // Auto-detect badges
+  _detectBadge('k-narrator', 'k-narrator-badge');
+  _detectBadge('k-classifier', 'k-classifier-badge');
   document.getElementById('modal').classList.add('open');
+});
+
+// Content mode toggle handler
+let _contentExplicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
+document.getElementById('btn-content-mode')?.addEventListener('click', () => {
+  _contentExplicit = !_contentExplicit;
+  document.getElementById('content-mode-tog')?.classList.toggle('on', _contentExplicit);
 });
 [document.getElementById('btn-mcancel'), document.getElementById('btn-mcancel2')].forEach(b => b?.addEventListener('click', () => document.getElementById('modal').classList.remove('open')));
 document.getElementById('modal').addEventListener('click', e => { if (e.target===e.currentTarget) e.currentTarget.classList.remove('open'); });
 document.getElementById('btn-msave').addEventListener('click', () => {
-  localStorage.setItem('GROK_API_KEY',      document.getElementById('k-grok').value.trim());
-  localStorage.setItem('GEMINI_API_KEY',    document.getElementById('k-gem').value.trim());
-  localStorage.setItem('OPENROUTER_API_KEY',document.getElementById('k-or').value.trim());
-  localStorage.setItem('GROQ_API_KEY',      document.getElementById('k-groq').value.trim());
-  localStorage.setItem('SUPABASE_URL',      document.getElementById('k-sb-url').value.trim());
-  localStorage.setItem('SUPABASE_ANON_KEY', document.getElementById('k-sb-key').value.trim());
-  localStorage.setItem('LOREBOOK',          document.getElementById('k-lorebook').value);
+  const _sv = id => document.getElementById(id)?.value?.trim() ?? '';
+  const _set = (k, v) => v ? localStorage.setItem(k, v) : localStorage.removeItem(k);
+  _set('NARRATOR_KEY',        _sv('k-narrator'));
+  _set('NARRATOR_MODEL',      _sv('k-narrator-model'));
+  _set('NARRATOR_PROVIDER',   ''); // always auto-detect from key
+  _set('CLASSIFIER_KEY',      _sv('k-classifier'));
+  _set('CLASSIFIER_MODEL',    _sv('k-classifier-model'));
+  _set('CLASSIFIER_PROVIDER', '');
+  localStorage.setItem('GROK_API_KEY',       _sv('k-grok'));
+  localStorage.setItem('GEMINI_API_KEY',     _sv('k-gem'));
+  localStorage.setItem('OPENROUTER_API_KEY', _sv('k-or'));
+  localStorage.setItem('GROQ_API_KEY',       _sv('k-groq'));
+  localStorage.setItem('SUPABASE_URL',       _sv('k-sb-url'));
+  localStorage.setItem('SUPABASE_ANON_KEY',  _sv('k-sb-key'));
+  localStorage.setItem('LOREBOOK',           document.getElementById('k-lorebook')?.value ?? '');
+  localStorage.setItem('CONTENT_MODE',       _contentExplicit ? 'explicit' : 'filtered');
   const su = localStorage.getItem('SUPABASE_URL'), sk = localStorage.getItem('SUPABASE_ANON_KEY');
   if (su && sk && window.supabase) { _sbClient = window.supabase.createClient(su, sk); setSupabaseClient(_sbClient); }
   document.getElementById('modal').classList.remove('open');
-  setStatus('Keys saved.');
+  setStatus('Settings saved.');
 });
 document.querySelectorAll('.pw-toggle').forEach(btn => {
   btn.addEventListener('click', () => {

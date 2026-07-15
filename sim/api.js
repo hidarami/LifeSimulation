@@ -8,6 +8,11 @@ import {
   buildGeminiNpcPrompt, buildGeminiAutopilotPrompt,
   buildMetaConsolePrompt,
 } from './prompt.js';
+import {
+  detectProvider, dispatchChat, dispatchJSON,
+  getNarratorSlot, getClassifierSlot, getHelperSlot,
+  getNarratorFallbacks, PROVIDER_ENDPOINTS, getProviderDisplayName,
+} from './providers.js';
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 // Fix #4: true means fallback is only triggered on genuine outages
@@ -41,85 +46,73 @@ export async function callGrok(turnBrief, mode) {
   const lorebook = typeof localStorage !== 'undefined' ? (localStorage.getItem('LOREBOOK') ?? '') : '';
   const sys = buildGrokNarrationPrompt(lorebook);
   const usr = buildGrokUserMessage(turnBrief, mode);
-  const grokKey = getKey('GROK_API_KEY');
-  console.log('[Grok Debug] Key starts with:', grokKey.slice(0, 8), 'length:', grokKey.length);
-  console.log('[Grok Debug] Model:', GROK_MODEL);
-  const headers = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${grokKey}`,
-  };
-  if (_convId) headers['x-grok-conv-id'] = _convId;
 
-  // Build messages with conversation history for narrative continuity
+  const { key, provider, model } = getNarratorSlot();
+  if (!key || !provider) throw new Error('Narrator API key not configured. Open ⚙ Settings → Narrator Key.');
+
+  const cfg = PROVIDER_ENDPOINTS[provider];
+  window._devlog?.api(`Narrator call`, { provider, model: model || cfg?.default_narrator_model });
+
   const messages = [
     { role: 'system', content: sys },
-    ..._conversationHistory.slice(-4), // Last 4 turns for context
+    ..._conversationHistory.slice(-4),
     { role: 'user', content: usr },
   ];
 
-  const body = {
-    model: GROK_MODEL,
-    max_tokens: 600,
-    messages,
-    stream: false,
-  };
-  console.log('[Grok Debug] Request body:', JSON.stringify(body).slice(0, 300) + '...');
-
+  let prose;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // Increased to 30s for conversation history
-    const res = await fetch(GROK_URL, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
-    clearTimeout(timeout);
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error('[Grok API Error]', res.status, errText);
-      throw new Error(`Grok HTTP ${res.status}: ${errText}`);
-    }
-    const data = await res.json();
-    if (data.id && !_convId) _convId = data.id;
-    const prose = data.choices[0].message.content.trim();
-    // Detect Grok refusal — reroute to fallback narrator
-    const _rc = prose.toLowerCase();
-    const _refused = prose.length < 90 || [
-      "i can't assist","i cannot assist","i'm unable to","i am unable to",
-      "i can't help","i cannot help","i don't feel comfortable","not able to",
-      "against my","my guidelines","my policy","safety guidelines","content policy"
-    ].some(p => _rc.includes(p));
-    if (_refused) {
-      console.warn('[Grok] Refusal detected — routing to fallback narrator');
-      try {
-        const _orKey = typeof localStorage !== 'undefined' ? localStorage.getItem('OPENROUTER_API_KEY') : null;
-        if (_orKey) {
-          const _fbProse = await callFallbackNarrator(sys, usr, mode);
-          if (_fbProse && _fbProse.length > 80) {
-            _conversationHistory.push({ role: 'user', content: usr });
-            _conversationHistory.push({ role: 'assistant', content: _fbProse });
-            return _fbProse;
-          }
-        }
-      } catch (_fe) { console.warn('[Grok] Fallback also failed:', _fe.message); }
-    }
-
-    // Add this turn to conversation history for continuity
-    _conversationHistory.push({ role: 'user', content: usr });
-    _conversationHistory.push({ role: 'assistant', content: prose });
-    if (_conversationHistory.length > 20) _conversationHistory = _conversationHistory.slice(-20);
-
-    window._devlog?.api(`Grok narration OK`, { model: GROK_MODEL, chars: prose.length, refusal: _refused });
-    return prose;
+    prose = await dispatchChat(provider, key, model, messages, 600, 30000);
   } catch (err) {
-    window._devlog?.error('callGrok error', { message: err.message });
-    const isOutage = !navigator.onLine
-      || err.message?.includes('502')
-      || err.message?.includes('503')
-      || err.message === 'Failed to fetch';
-    if (FALLBACK_ON_OUTAGE_ONLY && isOutage) {
-      console.warn('[api] Grok outage — using fallback narrator:', err.message);
-      return callFallbackNarrator(sys, usr, mode);
+    window._devlog?.error('Narrator primary failed', { provider, error: err.message });
+    const isOutage = !navigator.onLine || err.message?.includes('502') || err.message?.includes('503') || err.message === 'Failed to fetch';
+    if (FALLBACK_ON_OUTAGE_ONLY && !isOutage) {
+      throw new Error(`Narrator failed (${err.message}) — check your ${getProviderDisplayName(provider)} API key and model.`);
     }
-    // Surface the real error so you can see what's actually wrong
-    throw new Error(`Grok failed (${err.message}) — check your API key and model name.`);
+    console.warn('[narrator] Primary failed, trying fallbacks:', err.message);
+    prose = await _callNarratorFallback(sys, usr);
   }
+
+  const _rc = prose.toLowerCase();
+  const _refused = prose.length < 90 || [
+    "i can't assist","i cannot assist","i'm unable to","i am unable to",
+    "i can't help","i cannot help","i don't feel comfortable","not able to",
+    "against my","my guidelines","my policy","safety guidelines","content policy"
+  ].some(p => _rc.includes(p));
+
+  if (_refused) {
+    window._devlog?.api('Narrator refusal detected — trying fallback', { provider });
+    try {
+      const _fbProse = await _callNarratorFallback(sys, usr);
+      if (_fbProse && _fbProse.length > 80) {
+        _conversationHistory.push({ role: 'user', content: usr });
+        _conversationHistory.push({ role: 'assistant', content: _fbProse });
+        if (_conversationHistory.length > 20) _conversationHistory = _conversationHistory.slice(-20);
+        return _fbProse;
+      }
+    } catch (_fe) { window._devlog?.error('Narrator fallback also refused/failed', { error: _fe.message }); }
+  }
+
+  _conversationHistory.push({ role: 'user', content: usr });
+  _conversationHistory.push({ role: 'assistant', content: prose });
+  if (_conversationHistory.length > 20) _conversationHistory = _conversationHistory.slice(-20);
+
+  window._devlog?.api(`Narrator OK`, { provider, model: model || cfg?.default_narrator_model, chars: prose.length });
+  return prose;
+}
+
+async function _callNarratorFallback(systemPrompt, userMessage) {
+  const fallbacks = getNarratorFallbacks();
+  for (const { key, provider, model } of fallbacks) {
+    try {
+      const msgs = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
+      const text = await dispatchChat(provider, key, model, msgs, 600, 22000);
+      if (text && text.length > 60) {
+        window._devlog?.api(`Narrator fallback OK`, { provider, model });
+        return text;
+      }
+    } catch (e) { window._devlog?.error(`Narrator fallback failed`, { provider, model, error: e.message }); }
+  }
+  throw new Error('All narrator fallbacks exhausted. Configure OpenRouter or Groq as fallback keys in ⚙ Settings.');
 }
 
 // ─── GEMINI ───────────────────────────────────────────────────────────────────
@@ -127,44 +120,21 @@ const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemi
 const GROQ_URL   = 'https://api.groq.com/openai/v1/chat/completions';
 
 async function geminiRaw(prompt, maxTokens = 400) {
-  const key = getKey('GEMINI_API_KEY');
-  //temporary log for debugging//
-  console.log('[gemini] key starts with:', key.slice(0, 8), 'length:', key.length);
-  const res = await fetch(`${GEMINI_URL}?key=${key}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: maxTokens,
-        response_mime_type: 'application/json',
-      },
-    }),
-  });
-  if (!res.ok) {
-    const msg = await res.text();
-    // Fix #4: surface rate-limit distinctly so callers can choose to skip, not swap model
-    if (res.status === 429) {
-    const groqKey = localStorage.getItem('GROQ_API_KEY');
-    if (groqKey) {
-      const gr = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-        body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.1, max_tokens: 400 }),
-      });
-      if (gr.ok) {
-        const text = (await gr.json()).choices[0].message.content;
-        try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch { return {}; }
+  const { key, provider, model } = getClassifierSlot();
+  if (!key || !provider) throw new Error('Classifier API key not configured. Open ⚙ Settings → Classifier Key.');
+  try {
+    return await dispatchJSON(provider, key, model, prompt, maxTokens);
+  } catch (e) {
+    // Rate-limit: try helper slot as fallback classifier
+    if (e.message === 'GEMINI_RATE_LIMIT' || e.message?.includes('429')) {
+      const helper = getHelperSlot();
+      if (helper.key && helper.provider && helper.provider !== provider) {
+        window._devlog?.api('Classifier rate-limited, falling back to helper slot', { helper_provider: helper.provider });
+        return dispatchJSON(helper.provider, helper.key, helper.model, prompt, maxTokens);
       }
     }
-    throw new Error('GEMINI_RATE_LIMIT');
+    throw e;
   }
-    throw new Error(`Gemini HTTP ${res.status}: ${msg}`);
-  }
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-  try { return JSON.parse(text); } catch { return {}; }
 }
 
 export async function classifyAction(input, sanitizedState) {
@@ -192,61 +162,23 @@ export async function evaluateNpcReaction(npcContext, actionDescription, playerS
 // Fix #3: autopilot narration — Gemini with strict style guide; prose mode (no JSON)
 export async function callGeminiAutopilot(sanitizedState, hours, activityLabel) {
   const prompt = buildGeminiAutopilotPrompt(sanitizedState, hours, activityLabel);
+  const msgs   = [{ role: 'user', content: prompt }];
+  const hrLabel = hours >= 1 ? `${hours}h` : `${Math.round(hours * 60)}min`;
 
-  // Try OpenRouter first — free quota, saves Gemini for classification
-  const orKey = localStorage.getItem('OPENROUTER_API_KEY');
-  if (orKey) {
+  // Priority: helper (Groq) → classifier → narrator — autopilot is a cheap task
+  const slots = [getHelperSlot(), getClassifierSlot(), getNarratorSlot()];
+  const _seenProviders = new Set();
+  for (const { key, provider, model } of slots) {
+    if (!key || !provider || _seenProviders.has(provider)) continue;
+    _seenProviders.add(provider);
     try {
-      const res = await fetch(OPENROUTER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${orKey}` },
-        body: JSON.stringify({
-          model: 'openai/gpt-oss-120b:free',
-          max_tokens: 150,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
-      if (res.ok) {
-        const text = (await res.json()).choices?.[0]?.message?.content?.trim();
-        if (text) return text;
-      }
+      const cfg = PROVIDER_ENDPOINTS[provider];
+      const useModel = model || cfg?.default_helper_model || null;
+      const text = await dispatchChat(provider, key, useModel, msgs, 150, 12000);
+      if (text && text.length > 20) return text;
     } catch {}
   }
-
-  // Try Groq second
-  const groqKey = localStorage.getItem('GROQ_API_KEY');
-  if (groqKey) {
-    try {
-      const res = await fetch(GROQ_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          max_tokens: 150,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.5,
-        }),
-      });
-      if (res.ok) {
-        const text = (await res.json()).choices?.[0]?.message?.content?.trim();
-        if (text) return text;
-      }
-    } catch {}
-  }
-
-  // Fall back to Gemini
-  const key = getKey('GEMINI_API_KEY');
-  const res = await fetch(`${GEMINI_URL}?key=${key}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.5, maxOutputTokens: 120 },
-    }),
-  });
-  if (!res.ok) throw new Error(`Gemini autopilot HTTP ${res.status}`);
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+  return `${hrLabel} passed.`;
 }
 
 // Fix #1: session compression is now optional flavor, not required continuity
@@ -292,43 +224,7 @@ export async function compressSessionContext(last10Events) {
   } catch { return ''; }
 }
 
-// ─── FALLBACK NARRATOR ────────────────────────────────────────────────────────
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-// Tried in order — prefers models with fewer content restrictions
-const FALLBACK_NARRATOR_MODELS = [
-  'nousresearch/hermes-3-llama-3.1-405b:free',
-  'mistralai/mistral-7b-instruct:free',
-  'openchat/openchat-7b:free',
-  'meta-llama/llama-3.1-8b-instruct:free',
-];
-
-async function callFallbackNarrator(systemPrompt, userMessage, mode) {
-  const key = getKey('OPENROUTER_API_KEY');
-  for (const model of FALLBACK_NARRATOR_MODELS) {
-    try {
-      const fbController = new AbortController();
-      const fbTimeout = setTimeout(() => fbController.abort(), 22000);
-      const res = await fetch(OPENROUTER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-        signal: fbController.signal,
-        body: JSON.stringify({
-          model, max_tokens: 600,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user',   content: userMessage  },
-          ],
-        }),
-      });
-      clearTimeout(fbTimeout);
-      if (!res.ok) { console.warn('[fallback] model', model, 'HTTP', res.status); continue; }
-      const data = await res.json();
-      const text = data.choices?.[0]?.message?.content?.trim();
-      if (text && text.length > 60) { console.log('[fallback] succeeded with:', model); return text; }
-    } catch (e) { console.warn('[fallback] model', model, 'failed:', e.message); }
-  }
-  throw new Error('All fallback narrators exhausted. Check OpenRouter API key and quota.');
-}
+// Fallback narrator — handled by _callNarratorFallback (near callGrok) via providers.js
 
 // ─── LOREBOOK PARSER ──────────────────────────────────────────────────────────
 export async function parseLorebookToWorldState(lorebook) {
@@ -881,15 +777,59 @@ Empty array if nothing should be removed.`;
 }
 
 // ─── META CONSOLE ─────────────────────────────────────────────────────────────
-const GROQ_CONSOLE_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant'];
-
 export async function callMetaConsole(messages, gameState) {
   const systemPrompt = buildMetaConsolePrompt(gameState);
-  window._devlog?.patch('Console API call', { models: 'grok→groq→gemini', msgs: messages.length });
+  window._devlog?.patch('Console API call', { msgs: messages.length });
 
-  // Try Grok FIRST — far better instruction-following for SIM_PATCH format
-  const grokKey = localStorage.getItem('GROK_API_KEY');
-  if (grokKey) {
+  // Narrator slot first — meta console is a sophisticated chat task (best for SIM_PATCH)
+  const narratorSlot = getNarratorSlot();
+  if (narratorSlot.key && narratorSlot.provider) {
+    try {
+      const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
+      const reply = await dispatchChat(narratorSlot.provider, narratorSlot.key, narratorSlot.model, allMsgs, 800, 30000);
+      if (reply && reply.length > 20) {
+        window._devlog?.patch(`Console: ${narratorSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
+        return reply;
+      }
+    } catch (e) { window._devlog?.error('Console: narrator slot failed', { error: e.message }); }
+  }
+
+  // Helper slot (Groq) — fast and capable for structured tasks
+  const helperSlot = getHelperSlot();
+  const HELPER_CHAT_MODELS = { groq: 'llama-3.3-70b-versatile', openai: 'gpt-4o-mini', gemini: 'gemini-2.0-flash' };
+  if (helperSlot.key && helperSlot.provider && helperSlot.provider !== narratorSlot.provider) {
+    const model = helperSlot.model || HELPER_CHAT_MODELS[helperSlot.provider] || null;
+    for (const m of model ? [model, HELPER_CHAT_MODELS[helperSlot.provider]].filter(Boolean) : [HELPER_CHAT_MODELS[helperSlot.provider]]) {
+      try {
+        const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
+        const reply = await dispatchChat(helperSlot.provider, helperSlot.key, m, allMsgs, 800, 25000);
+        if (reply && reply.length > 20) {
+          window._devlog?.patch(`Console: ${helperSlot.provider}(${m}) responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
+          return reply;
+        }
+      } catch (e) { window._devlog?.error(`Console: ${helperSlot.provider}(${m}) failed`, { error: e.message }); }
+    }
+  }
+
+  // Classifier slot last resort
+  const classifierSlot = getClassifierSlot();
+  if (classifierSlot.key && classifierSlot.provider && classifierSlot.provider !== narratorSlot.provider) {
+    try {
+      const conv = messages.slice(-10).map(m => `${m.role === 'user' ? 'Player' : 'Assistant'}: ${m.content}`).join('\n\n');
+      const gemMsg = [{ role: 'user', content: `${systemPrompt}\n\n${conv}\n\nAssistant:` }];
+      const reply = await dispatchChat(classifierSlot.provider, classifierSlot.key, classifierSlot.model, gemMsg, 800, 20000);
+      if (reply && reply.length > 20) {
+        window._devlog?.patch(`Console: ${classifierSlot.provider} responded`, { chars: reply.length });
+        return reply;
+      }
+    } catch (e) { window._devlog?.error('Console: classifier slot failed', { error: e.message }); }
+  }
+
+  throw new Error('No API available for console. Configure a Narrator Key in ⚙ Settings.');
+}
+
+// Keep for any remaining internal callers that reference old Grok const
+const GROQ_CONSOLE_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant'];
     try {
       const res = await fetch(GROK_URL, {
         method: 'POST',
