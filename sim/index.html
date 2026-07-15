@@ -1228,64 +1228,6 @@ function _applySimPatch(patch) {
     console.error('[patch] Apply failed:', e);
   }
 }
-        if (upd.schedule?.weekday_routine?.length) {
-          WS.npcs[id].schedule = {
-            weekday_routine: upd.schedule.weekday_routine,
-            weekend_routine: upd.schedule.weekend_routine ?? WS.npcs[id].schedule?.weekend_routine ?? upd.schedule.weekday_routine,
-            interruptions:   WS.npcs[id].schedule?.interruptions ?? [],
-          };
-        }
-        if (upd.relationship_meter != null) WS.npcs[id].relationship_meter = Math.max(-100, Math.min(100, Number(upd.relationship_meter)));
-        if (upd.trust_meter       != null) WS.npcs[id].trust_meter         = Math.max(-100, Math.min(100, Number(upd.trust_meter)));
-        if (upd.traits)            WS.npcs[id].traits            = { ...WS.npcs[id].traits, ...upd.traits };
-        if (upd.active_flags)      WS.npcs[id].active_flags      = upd.active_flags;
-        if (upd.bio)               WS.npcs[id].bio               = upd.bio;
-        if (upd.npc_class)         WS.npcs[id].npc_class         = upd.npc_class;
-        if (upd.relationship_type) WS.npcs[id].relationship_type = upd.relationship_type;
-      }
-    }
-    if (patch.player_updates) {
-      if (patch.player_updates.cash     != null) WS.player.cash     = Number(patch.player_updates.cash);
-      if (patch.player_updates.location)          WS.player.location = patch.player_updates.location;
-      if (patch.player_updates.stats && typeof patch.player_updates.stats === 'object')
-        WS.player.stats = { ...WS.player.stats, ...patch.player_updates.stats };
-    }
-    if ('job_update'    in patch) WS.job    = patch.job_update;
-    if ('school_update' in patch) WS.school = patch.school_update;
-    if (patch.setting_description) WS.setting_description = patch.setting_description;
-    if (patch.add_npcs?.length) {
-      for (const nd of patch.add_npcs) {
-        if (!nd.id || WS.npcs[nd.id]) continue;
-        const _pn = createNpc({ id: nd.id, name: nd.name, age: nd.age ?? 20, npc_class: nd.npc_class ?? 'household', relationship_type: nd.relationship_type ?? null, traits: nd.traits ?? {} });
-        _pn.relationship_meter = nd.relationship_meter ?? 0;
-        _pn.trust_meter        = nd.trust_meter        ?? 0;
-        _pn.significance       = nd.significance       ?? 2;
-        WS.npcs[nd.id]         = _pn;
-      }
-    }
-    if (patch.remove_npcs?.length) {
-      for (const id of patch.remove_npcs) { if (WS.npcs[id]) WS.npcs[id].status = 'inactive'; }
-    }
-    if (patch.add_interruptions?.length) {
-      for (const { npc_id, interruption } of patch.add_interruptions) {
-        if (!WS.npcs[npc_id] || !interruption?.start || !interruption?.end) continue;
-        WS.npcs[npc_id].schedule = WS.npcs[npc_id].schedule ?? { weekday_routine: [], weekend_routine: [], interruptions: [] };
-        WS.npcs[npc_id].schedule.interruptions = WS.npcs[npc_id].schedule.interruptions ?? [];
-        // Prevent duplicate overlapping interruptions
-        const _newS = new Date(interruption.start).getTime();
-        const _newE = new Date(interruption.end).getTime();
-        const _noOverlap = WS.npcs[npc_id].schedule.interruptions.every(ex => {
-          const _exS = new Date(ex.start).getTime(), _exE = new Date(ex.end).getTime();
-          return _newE <= _exS || _newS >= _exE;
-        });
-        if (_noOverlap) WS.npcs[npc_id].schedule.interruptions.push(interruption);
-      }
-    }
-    saveWorldState(WS).catch(() => {});
-    renderAll();
-    console.log('[patch] SIM_PATCH applied:', Object.keys(patch).filter(k => patch[k] != null && (!Array.isArray(patch[k]) || patch[k].length)));
-  } catch(e) { console.error('[patch] Apply failed:', e); }
-}
 
 // ── PANEL NAVIGATION ─────────────────────────────────────────────────────────
 let currentPanel = 'center';
