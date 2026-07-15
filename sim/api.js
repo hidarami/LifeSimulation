@@ -194,42 +194,12 @@ export async function callGeminiAutopilot(sanitizedState, hours, activityLabel) 
 export async function compressSessionContext(last10Events) {
   if (!last10Events?.length) return '';
   const prompt = `Summarize these simulation events in 1–2 sentences of atmospheric flavor only. Do not add facts not present in the events. Output only the summary:\n\n${last10Events.map((e, i) => `${i + 1}. ${e}`).join('\n')}`;
-
-  // Groq is fast and free for compression
-  const groqKey = localStorage.getItem('GROQ_API_KEY');
-  if (groqKey) {
-    try {
-      const res = await fetch(GROQ_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.4,
-          max_tokens: 80,
-        }),
-      });
-      if (res.ok) {
-        const text = (await res.json()).choices?.[0]?.message?.content?.trim();
-        if (text) return text;
-      }
-    } catch (e) { window._devlog?.error?.('dispatch fallback failed', e); }
-  }
-
-  const key = localStorage.getItem('GEMINI_API_KEY');
-  if (!key) return '';
+  const helper = getHelperSlot();
+  if (!helper.key || !helper.provider) return '';
   try {
-    const res = await fetch(`${GEMINI_URL}?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 80 },
-      }),
-    });
-    if (!res.ok) return '';
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+    const text = await dispatchChat(helper.provider, helper.key, helper.model,
+      [{ role: 'user', content: prompt }], 80, 12000);
+    return text?.trim() ?? '';
   } catch { return ''; }
 }
 
@@ -356,9 +326,9 @@ CRITICAL: Do NOT extract the player character themselves (the "you" / protagonis
 // ─── MULTI-AI WORLD BUILDING ──────────────────────────────────────────────────
 // Runs Gemini (structure) and Groq (trait depth) in parallel during init.
 
-async function buildNpcDepthWithGroq(lorebook) {
-  const groqKey = localStorage.getItem('GROQ_API_KEY');
-  if (!groqKey) return null;
+async function buildNpcDepth(lorebook) {
+  const helper = getHelperSlot();
+  if (!helper.key || !helper.provider) return null;
   const prompt = `From this lorebook, infer personality trait scores (0-100) for every named or implied NPC.
 
 Lorebook: """${lorebook.slice(0, 2000)}"""
@@ -382,19 +352,7 @@ Return ONLY valid JSON, no markdown:
 Use the person's first name in lowercase as the key. Infer traits CREATIVELY — never return all-50 for any NPC. Even without explicit personality clues, infer from age (younger = higher impulsivity), role (older sibling = higher dominance/ambition), relationship dynamics (close but tense = lower patience), and implied character. Each NPC must be meaningfully different from all others in at least 3 traits.`;
 
   try {
-    const res = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 500,
-      }),
-    });
-    if (!res.ok) return null;
-    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-    return JSON.parse(text.replace(/```json|```/g, '').trim());
+    return await dispatchJSON(helper.provider, helper.key, helper.model, prompt, 500);
   } catch { return null; }
 }
 
@@ -404,7 +362,7 @@ export async function buildWorldWithMultipleAIs(lorebook) {
   // Run Gemini (structure) and Groq (NPC trait depth) in parallel
   const [geminiResult, groqResult] = await Promise.allSettled([
     parseLorebookToWorldState(lorebook),
-    buildNpcDepthWithGroq(lorebook),
+    buildNpcDepth(lorebook),
   ]);
 
   const base  = geminiResult.status === 'fulfilled' ? geminiResult.value : null;
@@ -431,8 +389,8 @@ export async function buildWorldWithMultipleAIs(lorebook) {
 // Called async every 3rd turn. Groq decides if any NPC would naturally reach out.
 
 export async function checkNpcInitiative(npcContextArray, playerStats, turnNumber) {
-  const groqKey = localStorage.getItem('GROQ_API_KEY');
-  if (!groqKey || !npcContextArray?.length) return [];
+  const helper = getHelperSlot();
+  if (!helper.key || !helper.provider || !npcContextArray?.length) return [];
 
   const prompt = `You are an NPC behavior engine for a life simulation. Decide if any NPC would naturally initiate contact with the player right now.
 
@@ -460,20 +418,8 @@ Return ONLY valid JSON:
 }`;
 
   try {
-    const res = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.4,
-        max_tokens: 150,
-      }),
-    });
-    if (!res.ok) return [];
-    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return (parsed.has_initiative && parsed.npc_id && parsed.brief)
+    const parsed = await dispatchJSON(helper.provider, helper.key, helper.model, prompt, 150);
+    return (parsed?.has_initiative && parsed.npc_id && parsed.brief)
       ? [{ npc_id: parsed.npc_id, type: parsed.type ?? 'message', brief: parsed.brief }]
       : [];
   } catch { return []; }
@@ -484,8 +430,8 @@ Return ONLY valid JSON:
 // Groq quickly extracts enough info to register them.
 
 export async function evaluateDescribedNpc(playerInput) {
-  const groqKey = localStorage.getItem('GROQ_API_KEY');
-  if (!groqKey) return null;
+  const helper = getHelperSlot();
+  if (!helper.key || !helper.provider) return null;
 
   const prompt = `Analyze this text and determine whether a specific human person had a meaningful interaction worth tracking as an ongoing character.
 
@@ -537,20 +483,8 @@ TRAIT RULES — inference only, no defaults or templates:
 If significance is not "significant", return found:false rather than creating a low-value record.`;
 
   try {
-    const res = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 250,
-      }),
-    });
-    if (!res.ok) return null;
-    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return parsed.found ? parsed : null;
+    const parsed = await dispatchJSON(helper.provider, helper.key, helper.model, prompt, 250);
+    return parsed?.found ? parsed : null;
   } catch { return null; }
 }
 
@@ -636,7 +570,7 @@ export async function enrichWorldDetails(lorebook, ws) {
 
 CHARACTER: ${ws.player?.name ?? 'Character'}, age ${ws.player?.age ?? 18}
 YEAR: ${startYear}
-${lbText ? `LOREBOOK:\n"""\n${lbText.slice(0, 1400)}\n"""` : 'NO LOREBOOK PROVIDED — invent a complete, believable Filipino life based on the name and age alone. Be creative and specific.'}
+${lbText ? `LOREBOOK:\n"""\n${lbText.slice(0, 1400)}\n"""` : `NO LOREBOOK PROVIDED — invent a complete, believable ${_eLocale} life based on the name and age alone. Be creative and specific.`}
 KNOWN NPCs: ${npcNames}
 JOB ALREADY PARSED: ${hasJob ? 'YES — ' + (ws.job?.position ?? '') + ' at ' + (ws.job?.employer ?? '') : 'NO'}
 SCHOOL ALREADY PARSED: ${hasSchool ? 'YES — ' + (ws.school?.name ?? '') : 'NO'}
@@ -655,7 +589,7 @@ Return ONLY valid JSON. No markdown. Fill every required field — never return 
 
 GENERATION RULES — read carefully:
 
-LOCATION: Always generate a specific Philippine address. If lorebook names a place, expand it with street/sitio-level detail. If no place mentioned, invent one plausibly matching the character's name and cultural background.
+LOCATION: Always generate a specific address matching: ${_addrFmt}. If lorebook names a place, expand it with local-level detail. If no place mentioned, invent one plausibly matching the character's name and cultural background.
 
 SETTING_DESCRIPTION: Always describe the home vividly. MINIMUM 3 full sentences, each covering a different dimension: (1) physical layout and key furniture, (2) economic-class markers and visible condition, (3) sensory atmosphere — sounds, smells, or quality of light. This 3-sentence minimum is MANDATORY for all models including fast or small ones — a single sentence is not acceptable. Match the economic class implied by the lorebook (or default to modest lower-middle class). Never return null or empty string.
 
@@ -783,8 +717,8 @@ Set has_changes: true ONLY if you found at least one definitive change.`;
 
 // ─── CONTEXT-AWARE NPC FLAG EVALUATION ────────────────────────────────────────
 export async function evaluateNpcFlagsInContext(npc, prose, hoursElapsed) {
-  const groqKey = localStorage.getItem('GROQ_API_KEY');
-  if (!groqKey || !npc.active_flags?.length) return [];
+  const helper = getHelperSlot();
+  if (!helper.key || !helper.provider || !npc.active_flags?.length) return [];
   const prompt = `You evaluate whether NPC behavioral flags remain contextually valid after a new scene.
 
 NPC: ${npc.name} (${npc.relationship_type ?? npc.npc_class ?? 'person'})
@@ -801,20 +735,8 @@ Return ONLY valid JSON:
 Empty array if nothing should be removed.`;
 
   try {
-    const res = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        max_tokens: 80,
-      }),
-    });
-    if (!res.ok) return [];
-    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return Array.isArray(parsed.flags_to_remove) ? parsed.flags_to_remove : [];
+    const parsed = await dispatchJSON(helper.provider, helper.key, helper.model, prompt, 80);
+    return Array.isArray(parsed?.flags_to_remove) ? parsed.flags_to_remove : [];
   } catch { return []; }
 }
 

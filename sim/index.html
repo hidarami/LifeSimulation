@@ -515,6 +515,133 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .devcon-as-row{display:flex;align-items:center;gap:4px;font-size:10px;color:#333;cursor:pointer;margin-left:auto}
 .devcon-as-row input{accent-color:#27ae60;cursor:pointer}
 
+/* ── SKEUOMORPHISM & DEPTH ──────────────────────────────────────────────────── */
+
+/* Surface depth — panel headers feel like physical material */
+#char-header, .panel-header, .devcon-hdr, .console-header, .menu-head {
+  background: linear-gradient(180deg, var(--sur2) 0%, var(--sur) 100%);
+  box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 1px 3px rgba(0,0,0,.25);
+}
+
+/* Raised buttons — press effect */
+#submit-btn {
+  box-shadow: 0 3px 6px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.18) inset, 0 -2px 0 rgba(0,0,0,.25) inset;
+  text-shadow: 0 1px 1px rgba(0,0,0,.4);
+  transition: box-shadow .1s, transform .1s, opacity .15s;
+}
+#submit-btn:not(:disabled):active {
+  box-shadow: 0 1px 2px rgba(0,0,0,.25), 0 1px 2px rgba(0,0,0,.2) inset;
+  transform: translateY(1px);
+}
+.btn-primary {
+  box-shadow: 0 2px 5px rgba(200,146,42,.3), 0 1px 0 rgba(255,255,255,.2) inset;
+}
+.btn-primary:not(:disabled):active { box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.15) inset; transform:translateY(1px); }
+.btn { box-shadow: 0 1px 3px rgba(0,0,0,.2), 0 1px 0 rgba(255,255,255,.05) inset; }
+.btn:active { box-shadow: 0 0 1px rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.15) inset; transform:translateY(1px); }
+
+/* Inset input fields — embedded look */
+#action-input, #console-input {
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.22), inset 0 0 0 1px rgba(0,0,0,.12);
+}
+#action-input:focus, #console-input:focus {
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.22), inset 0 0 0 1px rgba(200,146,42,.35), 0 0 0 2px rgba(200,146,42,.1);
+}
+.field-input {
+  box-shadow: inset 0 1px 4px rgba(0,0,0,.18), inset 0 0 0 1px rgba(0,0,0,.1);
+}
+.field-input:focus {
+  box-shadow: inset 0 1px 4px rgba(0,0,0,.18), inset 0 0 0 1px rgba(200,146,42,.3), 0 0 0 2px rgba(200,146,42,.08);
+}
+
+/* NPC cards — floating with elevation */
+.npc-card {
+  box-shadow: 0 2px 8px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.04) inset;
+  border-top: 1px solid rgba(255,255,255,.04);
+}
+
+/* Stat bar tracks — recessed channel */
+.sbt, .cstat-track, .mt, .trait-track, .tr-t, .init-progress {
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.45), inset 0 0 0 1px rgba(0,0,0,.12);
+}
+/* Stat fills — slightly raised */
+.sbf, .cstat-fill, .mf, .tr-f {
+  box-shadow: 0 1px 0 rgba(255,255,255,.18);
+}
+
+/* Modal — elevated dialog */
+.modal-box {
+  box-shadow: 0 8px 32px rgba(0,0,0,.65), 0 2px 8px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.04) inset;
+}
+
+/* Menu drawer */
+#menu-drawer { box-shadow: -4px 0 24px rgba(0,0,0,.55); }
+
+/* Input area tray — elevated from feed */
+#input-area, #console-input-area {
+  box-shadow: 0 -1px 0 rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.02) inset;
+  background: linear-gradient(180deg, var(--sur) 0%, var(--sur2) 100%);
+}
+
+/* Status bar — recessed tray */
+#status-bar { box-shadow: inset 0 1px 2px rgba(0,0,0,.2); }
+
+/* Avatar — coin-like emboss */
+#char-avatar {
+  box-shadow: 0 2px 6px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.14) inset, 0 -1px 0 rgba(0,0,0,.2) inset;
+}
+
+/* Active tab indicator — pressed in */
+.p-tab.on {
+  background: linear-gradient(180deg, var(--bg) 0%, var(--sur) 100%);
+  box-shadow: inset 0 2px 3px rgba(0,0,0,.2), 0 -2px 0 var(--acc) inset;
+}
+
+/* Challenge notification cards */
+.challenge-card {
+  box-shadow: 0 4px 20px rgba(0,0,0,.55), 0 1px 0 rgba(255,255,255,.05) inset;
+}
+
+/* Processing bar shimmer */
+#processing-bar.active::after {
+  background: linear-gradient(90deg, transparent, rgba(200,146,42,.8), transparent);
+}
+
+/* Console bubbles — slight elevation difference */
+.console-msg.user .console-bubble {
+  box-shadow: 0 1px 4px rgba(0,0,0,.25), 0 1px 0 rgba(255,255,255,.06) inset;
+}
+.console-msg.assistant .console-bubble {
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+
+/* LIGHT MODE — more pronounced skeuomorphism (paper/card feel) */
+[data-theme="light"] #char-header,
+[data-theme="light"] .panel-header,
+[data-theme="light"] .devcon-hdr,
+[data-theme="light"] .console-header {
+  background: linear-gradient(180deg, #fff 0%, var(--sur) 100%);
+  box-shadow: 0 1px 0 rgba(0,0,0,.06), 0 2px 4px rgba(0,0,0,.06);
+}
+[data-theme="light"] #submit-btn {
+  box-shadow: 0 2px 5px rgba(184,120,32,.4), 0 1px 0 rgba(255,255,255,.7) inset, 0 -2px 0 rgba(0,0,0,.12) inset;
+}
+[data-theme="light"] .npc-card {
+  box-shadow: 0 1px 6px rgba(0,0,0,.1), 0 1px 0 rgba(255,255,255,.8) inset;
+}
+[data-theme="light"] .modal-box {
+  box-shadow: 0 8px 32px rgba(0,0,0,.2), 0 2px 8px rgba(0,0,0,.1);
+}
+[data-theme="light"] .sbt, [data-theme="light"] .cstat-track {
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.15);
+}
+[data-theme="light"] #action-input, [data-theme="light"] #console-input, [data-theme="light"] .field-input {
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.08);
+}
+[data-theme="light"] #input-area, [data-theme="light"] #console-input-area {
+  background: linear-gradient(180deg, var(--sur) 0%, #ddd8c8 100%);
+}
+
 /* ── SCROLLBAR ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -838,6 +965,7 @@ window._devlog = (function(){
     </div>
     <div class="devcon-actions">
       <button class="devcon-btn" id="btn-devcon-clear">Clear</button>
+      <button class="devcon-btn" id="btn-devcon-dump">Dump</button>
       <button class="devcon-btn" id="btn-devcon-export">Export</button>
       <button class="devcon-btn" id="btn-devcon-close">✕</button>
     </div>
@@ -966,7 +1094,11 @@ window._devlog = (function(){
         <div class="field"><label class="field-label">Country / Culture</label><input class="field-input" id="k-locale" type="text" placeholder="Philippines"></div>
         <div class="field"><label class="field-label">Local Language</label><input class="field-input" id="k-language" type="text" placeholder="Tagalog"></div>
       </div>
-      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Affects world-building and do-not-translate rules. Defaults to Philippines / Tagalog.</div>
+      <div class="field-row" style="margin-top:6px">
+        <div class="field" style="flex:0 0 120px"><label class="field-label">Currency Symbol</label><input class="field-input" id="k-currency" type="text" placeholder="₱" maxlength="4" style="font-size:16px;text-align:center"></div>
+        <div class="field"><label class="field-label">Notes</label><div style="font-size:10px;color:var(--dim);margin-top:6px;line-height:1.6">Affects UI cash display. Leave blank for ₱ (Philippine Peso).</div></div>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Affects world-building, do-not-translate rules, and currency display. Defaults to Philippines / Tagalog / ₱.</div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Content Mode</div>
       <div class="menu-toggle-row" id="btn-content-mode" style="padding:10px 0;cursor:pointer">
@@ -1487,7 +1619,7 @@ function renderSchedulePanel(job, school, container) {
     if (!isBad(job.position)) html += `<div class="sch-sub">${job.position}</div>`;
     if (job.description) html += `<div class="sch-sub" style="margin-top:4px;line-height:1.5">${job.description}</div>`;
     if (!isBad(job.schedule)) html += `<div class="sch-row"><span class="sch-key">Hours</span><span class="sch-val">${job.schedule}</span></div>`;
-    const pay = job.earnings_note ?? (job.salary_per_cycle ? `₱${job.salary_per_cycle.toLocaleString()}/${job.pay_cycle ?? 'cycle'}` : null);
+    const pay = job.earnings_note ?? (job.salary_per_cycle ? `${localStorage.getItem('CURRENCY_SYMBOL')||'₱'}${job.salary_per_cycle.toLocaleString()}/${job.pay_cycle ?? 'cycle'}` : null);
     if (pay) html += `<div class="sch-row"><span class="sch-key">Pay</span><span class="sch-val" style="color:var(--norm)">${pay}</span></div>`;
     html += `<div class="sch-row"><span class="sch-key">Days</span><span class="sch-val">${job.days_employed ?? 0}</span></div>`;
     const pf = (job.performance_flags ?? []).map(f => `<span class="sch-pflag">${f}</span>`).join('');
@@ -1556,7 +1688,7 @@ function renderAll() {
   renderSchedulePanel(WS.job, WS.school ?? null, document.getElementById('p-schedule'));
   const ts = formatTimestamp(WS.sim_time);
   document.getElementById('h-time').innerHTML = `${ts.time}<br><span style="font-size:10px">${ts.day}</span>`;
-  document.getElementById('h-cash').textContent = `₱${WS.player.cash.toLocaleString()}`;
+  document.getElementById('h-cash').textContent = `${localStorage.getItem('CURRENCY_SYMBOL')||'₱'}${WS.player.cash.toLocaleString()}`;
   const nm = WS.player.name || '—';
   document.getElementById('char-name').textContent = nm;
   document.getElementById('char-avatar').textContent = nm.charAt(0).toUpperCase();
@@ -1617,7 +1749,7 @@ function openCharModal() {
     ['Sex',      p.sex || '—'],
     ['Born',     p.birthday ? `~${p.birthday}` : '—'],
     ['Location', p.location || '—'],
-    ['Cash',     `₱${(p.cash || 0).toLocaleString()}`],
+    ['Cash',     `${localStorage.getItem('CURRENCY_SYMBOL')||'₱'}${(p.cash || 0).toLocaleString()}`],
   ];
   document.getElementById('modal-char-body').innerHTML = `
     <div id="modal-char-avatar-lg">${(p.name||'?').charAt(0).toUpperCase()}</div>
@@ -2960,6 +3092,7 @@ document.getElementById('btn-settings').addEventListener('click', () => {
   document.getElementById('k-lorebook').value        = localStorage.getItem('LOREBOOK')  ?? '';
   document.getElementById('k-locale').value          = localStorage.getItem('LOCALE')    ?? 'Philippines';
   document.getElementById('k-language').value        = localStorage.getItem('LANGUAGE')  ?? 'Tagalog';
+  document.getElementById('k-currency').value        = localStorage.getItem('CURRENCY_SYMBOL') ?? '';
   document.getElementById('auth-status').textContent = '';
   // Content mode toggle
   const _cTog = document.getElementById('content-mode-tog');
@@ -3004,6 +3137,9 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   localStorage.setItem('CONTENT_MODE',       _contentExplicit ? 'explicit' : 'filtered');
   localStorage.setItem('LOCALE',   document.getElementById('k-locale')?.value?.trim()   || 'Philippines');
   localStorage.setItem('LANGUAGE', document.getElementById('k-language')?.value?.trim() || 'Tagalog');
+  const _saveCur = document.getElementById('k-currency')?.value?.trim();
+  if (_saveCur) localStorage.setItem('CURRENCY_SYMBOL', _saveCur);
+  else localStorage.removeItem('CURRENCY_SYMBOL');
   const su = localStorage.getItem('SUPABASE_URL'), sk = localStorage.getItem('SUPABASE_ANON_KEY');
   if (su && sk && window.supabase) { _sbClient = window.supabase.createClient(su, sk); setSupabaseClient(_sbClient); }
   document.getElementById('modal').classList.remove('open');
@@ -3251,6 +3387,23 @@ async function sendConsoleMessage() {
   const content = inp.value.trim();
   if (!content) return;
   inp.value = ''; inp.style.height = 'auto';
+  // /state shortcut — instant snapshot, no API call
+  if (content.toLowerCase() === '/state' || content.toLowerCase() === 'state') {
+    const _cur = localStorage.getItem('CURRENCY_SYMBOL') || '₱';
+    const _snap = WS ? [
+      `━━ WORLD STATE — Turn ${WS.turn} ━━`,
+      `${WS.player?.name} · ${_cur}${(WS.player?.cash??0).toLocaleString()} · ${WS.player?.location??'?'}`,
+      `Stats: ${Object.entries(WS.player?.stats??{}).map(([k,v])=>`${k}:${Math.round(v)}`).join(' | ')}`,
+      `Job: ${WS.job?(WS.job.position??'Worker')+' @ '+(WS.job.employer??'?'):'Unemployed'} | School: ${WS.school?.name??'None'}`,
+      `NPCs (${Object.values(WS.npcs??{}).filter(n=>n.status==='active').length}): ${Object.values(WS.npcs??{}).filter(n=>n.status==='active').map(n=>`${n.name}[${n.relationship_meter>0?'+':''}${n.relationship_meter}]`).join(', ')||'none'}`,
+      `Issues: ${(WS.challenges??[]).filter(c=>c.active&&!c.resolved).map(c=>c.title).join(', ')||'none'}`,
+      `Diseases: ${(WS.player?.diseases??[]).map(d=>d.name+'('+d.duration_remaining+'t)').join(', ')||'none'}`,
+    ].join('\n') : 'No game loaded.';
+    appendConsoleMsg('user', '/state');
+    appendConsoleMsg('assistant', _snap, false);
+    inp.value = ''; inp.style.height = 'auto';
+    return;
+  }
   // Undo last patch
   if (content.toLowerCase() === 'undo') {
     if (_patchUndo && WS) {
@@ -3399,84 +3552,6 @@ function _showSingleChallenge(ch, onDismiss) {
   }
 }
 
-// ── CONSOLE STATE CHANGE PARSER ──────────────────────────────────────────────
-function parseAndApplyConsoleStateChange(response) {
-  const match = response.match(/<STATE_CHANGE>([\s\S]*?)<\/STATE_CHANGE>/);
-  if (!match || !WS) return response.replace(/<STATE_CHANGE>[\s\S]*?<\/STATE_CHANGE>/g, '').trim();
-  const cleanResponse = response.replace(/<STATE_CHANGE>[\s\S]*?<\/STATE_CHANGE>/g, '').trim();
-  try {
-    const cmd = JSON.parse(match[1].trim());
-    let ws = JSON.parse(JSON.stringify(WS));
-    switch (cmd.action) {
-      case 'modify_stat':
-        if (cmd.target === 'player') {
-          if (cmd.changes.cash != null) ws.player.cash = Math.max(0, Number(cmd.changes.cash));
-          if (cmd.changes.location) ws.player.location = cmd.changes.location;
-          if (cmd.changes.stats && typeof cmd.changes.stats === 'object') {
-            for (const [k, v] of Object.entries(cmd.changes.stats)) {
-              if (k in ws.player.stats) ws.player.stats[k] = Math.max(0, Math.min(100, Number(v)));
-            }
-          }
-        }
-        break;
-      case 'update_player':
-        if (cmd.changes.location) ws.player.location = cmd.changes.location;
-        if (cmd.changes.name) ws.player.name = cmd.changes.name;
-        if (cmd.changes.age) ws.player.age = Number(cmd.changes.age);
-        break;
-      case 'update_job':
-        ws.job = { performance_flags: [], days_employed: 0, ...cmd.changes };
-        break;
-      case 'clear_job':
-        ws.job = null;
-        break;
-      case 'update_school':
-        ws.school = { absence_count: 0, days_enrolled: 0, ...cmd.changes };
-        break;
-      case 'clear_school':
-        ws.school = null;
-        break;
-      case 'update_npc': {
-        const npc = ws.npcs[cmd.target];
-        if (npc) {
-          if (cmd.changes.relationship_meter != null) npc.relationship_meter = Math.max(-100, Math.min(100, Number(cmd.changes.relationship_meter)));
-          if (cmd.changes.trust_meter != null) npc.trust_meter = Math.max(-100, Math.min(100, Number(cmd.changes.trust_meter)));
-          if (cmd.changes.status) { npc.status = cmd.changes.status; }
-          if (cmd.changes.note) npc.recent_interactions = [...(npc.recent_interactions ?? []), `[Console: ${cmd.changes.note}]`].slice(-5);
-          if (cmd.changes.traits && typeof cmd.changes.traits === 'object') Object.assign(npc.traits, cmd.changes.traits);
-        }
-        break;
-      }
-      case 'npc_job_change': {
-        const npc = ws.npcs[cmd.target];
-        if (npc) ws.npcs[cmd.target] = updateNpcCareer(npc, cmd.changes);
-        break;
-      }
-      case 'add_challenge': {
-        const newCh = { id: `console_${Date.now()}`, active: true, acknowledged: false, resolved: false, created_turn: ws.turn ?? 0, ...cmd.changes };
-        ws.challenges = [...(ws.challenges ?? []), newCh];
-        showChallengeQueue([newCh]);
-        break;
-      }
-      case 'resolve_challenge': {
-        const prefix = cmd.target ?? '';
-        for (const ch of (ws.challenges ?? [])) {
-          if (ch.id.includes(prefix) || ch.title?.toLowerCase().includes(prefix.toLowerCase())) {
-            ch.resolved = true; ch.active = false;
-          }
-        }
-        break;
-      }
-    }
-    WS = ws;
-    saveWorldState(ws).catch(() => {});
-    renderAll();
-    return cleanResponse + '\n\n✓ *World state updated.*';
-  } catch (e) {
-    console.warn('[console STATE_CHANGE parse]', e.message);
-    return cleanResponse;
-  }
-}
 
 // ── DEV CONSOLE UI ────────────────────────────────────────────────────────────
 (function(){
@@ -3514,6 +3589,19 @@ function parseAndApplyConsoleStateChange(response) {
   });
   document.getElementById('btn-devcon-close')?.addEventListener('click',()=>document.getElementById('panel-devcon').classList.remove('open'));
   document.getElementById('btn-devcon-clear')?.addEventListener('click',()=>{window._devlog?.clear();_refresh();});
+  document.getElementById('btn-devcon-dump')?.addEventListener('click',()=>{
+    if(!WS){window._devlog?.log('SYSTEM','No world state loaded');_refresh();return;}
+    window._devlog?.log('SYSTEM','WORLD STATE DUMP',{
+      turn:WS.turn, player:{name:WS.player?.name,age:WS.player?.age,cash:WS.player?.cash,location:WS.player?.location,diseases:(WS.player?.diseases??[]).map(d=>d.name)},
+      stats:Object.fromEntries(Object.entries(WS.player?.stats??{}).map(([k,v])=>[k,Math.round(v)])),
+      job:WS.job?{employer:WS.job.employer,position:WS.job.position,days:WS.job.days_employed,flags:WS.job.performance_flags}:null,
+      school:WS.school?{name:WS.school.name,status:WS.school.status,absences:WS.school.absence_count}:null,
+      npcs:Object.values(WS.npcs??{}).filter(n=>n.status==='active').map(n=>({name:n.name,id:n.id,rel:n.relationship_meter,trust:n.trust_meter,flags:n.active_flags})),
+      challenges:(WS.challenges??[]).filter(c=>c.active&&!c.resolved).map(c=>({title:c.title,severity:c.severity})),
+      consequences:WS.consequences??[],
+    });
+    _refresh();
+  });
   document.getElementById('btn-devcon-export')?.addEventListener('click',()=>{
     const all=window._devlog?.entries??[];
     const fil=_filter==='ALL'?all:all.filter(e=>e.cat===_filter);

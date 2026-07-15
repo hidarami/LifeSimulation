@@ -279,3 +279,8 @@ export async function fetchModels(provider, key, baseUrl) {
     return (data.data ?? []).map(m => m.id).filter(Boolean);
   } catch { return []; }
 }
+
+// ─── CURRENCY HELPER ──────────────────────────────────────────────────────────
+export function getCurrencySymbol() {
+  return (typeof localStorage !== 'undefined' ? localStorage.getItem('CURRENCY_SYMBOL') : null) || '₱';
+}

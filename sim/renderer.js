@@ -3,6 +3,7 @@
 'use strict';
 
 import { getNpcCurrentTask } from './npc.js';
+import { getCurrencySymbol } from './providers.js';
 
 // ─── NPC LOCATION HELPERS ─────────────────────────────────────────────────────
 export function livesWithPlayer(npc) {
@@ -105,7 +106,8 @@ export function renderStatPanel(stats, cash, container) {
 
   const cashRow = document.createElement('div');
   cashRow.className = 'stat-row stat-cash';
-  cashRow.innerHTML = `<span>₱</span><span>Cash</span><span class="sv">₱${cash.toLocaleString()}</span>`;
+  const _cur = getCurrencySymbol();
+  cashRow.innerHTML = `<span>${_cur}</span><span>Cash</span><span class="sv">${_cur}${cash.toLocaleString()}</span>`;
   container.appendChild(cashRow);
 
   for (const [key, meta] of Object.entries(STAT_META)) {
@@ -258,8 +260,9 @@ export function renderJobPanel(job, school, container) {
 
   const isBadStr = v => !v || v === 'null' || v === 'undefined';
   const employer = isBadStr(job.employer) ? 'Freelance / Self-employed' : job.employer;
+  const _jobCur  = getCurrencySymbol();
   const salary   = job.salary_per_cycle
-    ? `₱${job.salary_per_cycle.toLocaleString()} / ${job.pay_cycle ?? 'cycle'}`
+    ? `${_jobCur}${job.salary_per_cycle.toLocaleString()} / ${job.pay_cycle ?? 'cycle'}`
     : (job.earnings_note ?? 'Variable earnings');
   const flags = (job.performance_flags ?? []).map(f => `<span class="jflag">${f}</span>`).join('');
 
@@ -315,7 +318,7 @@ export function renderPossessionsPanel(possessions, irreversible, container) {
       if (p.note && p.note !== condition) rows.push(`<div class="poss-detail-row"><span class="poss-detail-key">About</span><span>${p.note}</span></div>`);
       if (condition)                       rows.push(`<div class="poss-detail-row"><span class="poss-detail-key">Cond.</span><span>${condition}</span></div>`);
       if (p.acquired_method)              rows.push(`<div class="poss-detail-row"><span class="poss-detail-key">Origin</span><span>${p.acquired_method}</span></div>`);
-      if (p.value_peso != null)           rows.push(`<div class="poss-detail-row"><span class="poss-detail-key">Value</span><span class="poss-val">₱${Number(p.value_peso).toLocaleString()}</span></div>`);
+      if (p.value_peso != null)           rows.push(`<div class="poss-detail-row"><span class="poss-detail-key">Value</span><span class="poss-val">${getCurrencySymbol()}${Number(p.value_peso).toLocaleString()}</span></div>`);
 
       const body = document.createElement('div');
       body.className = 'poss-body';

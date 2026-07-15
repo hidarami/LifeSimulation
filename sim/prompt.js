@@ -132,7 +132,7 @@ WORLD AMBIENT:
 The world has its own rhythm independent of the player. Use time-of-day to add grounding to scene-setting.
 Pre-dawn (4–6 AM): Near-silence. Very few people awake. Dark outside. Even dogs are quiet.
 Early morning (6–9 AM): Community wakes. School runs, commuters departing, morning cooking smells, distant vehicles starting.
-Late morning (9 AM–12 PM): Full daytime activity outdoors. Heat building. Vendors, pedestrians, jeepneys at peak.
+Late morning (9 AM–12 PM): Full daytime activity outdoors. Heat building. Vendors, pedestrians, local transit at peak.
 Midday (12–2 PM): Lunch patterns. Some pause in outdoor sound. Peak heat.
 Afternoon (2–5 PM): Cooling begins. School-dismissal sounds. Children appearing outside. Workers starting to return.
 Evening (5–8 PM): Peak neighborhood life. Families arriving home. Cooking smells. TV and radio from nearby houses.
@@ -430,7 +430,7 @@ export function buildMetaConsolePrompt(gameState) {
   const stateBlock = ws ? [
     `Player: ${ws.player?.name}, Age ${ws.player?.age ?? '?'}, Turn ${ws.turn ?? 0}`,
     `Location: ${ws.player?.location ?? 'unknown'}`,
-    `Cash: ₱${ws.player?.cash ?? 0}`,
+    `Cash: ${(typeof localStorage !== 'undefined' ? localStorage.getItem('CURRENCY_SYMBOL') : null) || '₱'}${ws.player?.cash ?? 0}`,
     `Stats: health ${Math.round(ws.player?.stats?.health ?? 0)}, energy ${Math.round(ws.player?.stats?.energy ?? 0)}, mood ${Math.round(ws.player?.stats?.mood ?? 0)}, hunger ${Math.round(ws.player?.stats?.hunger ?? 0)} (0=full 100=starving), hygiene ${Math.round(ws.player?.stats?.hygiene ?? 0)}, social ${Math.round(ws.player?.stats?.social ?? 0)}`,
     ws.job ? `Job: ${ws.job.position ?? 'Worker'} at ${ws.job.employer ?? 'employer'}, day ${ws.job.days_employed ?? 0}` : 'Unemployed',
     ws.school?.name ? `School: ${ws.school.name} (${ws.school.grade_level ?? ''}) — ${ws.school.status ?? 'active'}` : null,
