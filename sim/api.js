@@ -637,79 +637,120 @@ If significance is not "significant", return found:false rather than creating a 
 }
 
 // ─── WORLD ENRICHMENT ─────────────────────────────────────────────────────────
-// Fills in creative details the lorebook omitted: town name, school, job specifics,
-// and starting possessions. Called once during init after lorebook parsing.
+// Always called during init. Generates creative world details even from empty lorebook.
 
 export async function enrichWorldDetails(lorebook, ws) {
   const groqKey = localStorage.getItem('GROQ_API_KEY');
   if (!groqKey) return null;
 
-  const npcNames = Object.values(ws.npcs ?? {}).map(n => `${n.name} (${n.relationship_type ?? n.npc_class})`).join(', ') || 'none';
+  const npcNames  = Object.values(ws.npcs ?? {}).map(n => `${n.name} (${n.relationship_type ?? n.npc_class}, age ${n.age})`).join(', ') || 'none';
   const startYear = ws.sim_time ? new Date(ws.sim_time).getFullYear() : new Date().getFullYear();
+  const hasJob    = !!ws.job;
+  const hasSchool = !!ws.school;
+  const lbText    = lorebook?.trim() || '';
 
-  const prompt = `You are world-building for a life simulation. Generate creative, specific details the lorebook didn't state. Match the setting's actual country, culture, and economic class accurately.
+  const prompt = `You are a world-building AI for a Filipino life simulation game. Generate complete, vivid details for this character. Fill ALL required fields — never skip or return null for required fields.
 
-Lorebook: """${lorebook.slice(0, 1500)}"""
+CHARACTER: ${ws.player?.name ?? 'Character'}, age ${ws.player?.age ?? 18}
+YEAR: ${startYear}
+${lbText ? `LOREBOOK:\n"""\n${lbText.slice(0, 1400)}\n"""` : 'NO LOREBOOK PROVIDED — invent a complete, believable Filipino life based on the name and age alone. Be creative and specific.'}
+KNOWN NPCs: ${npcNames}
+JOB ALREADY PARSED: ${hasJob ? 'YES — ' + (ws.job?.position ?? '') + ' at ' + (ws.job?.employer ?? '') : 'NO'}
+SCHOOL ALREADY PARSED: ${hasSchool ? 'YES — ' + (ws.school?.name ?? '') : 'NO'}
 
-Known context:
-- Player age: ${ws.player?.age ?? 18}, Start year: ${startYear}
-- Known NPCs: ${npcNames}
-- Has parsed job: ${ws.job ? 'yes (' + (ws.job.position ?? 'unknown') + ')' : 'no'}
+Return ONLY valid JSON. No markdown. Fill every required field — never return null for required fields.
 
-Return ONLY valid JSON (no markdown fences):
 {
-  "location_name": "full specific address — sitio/street, barangay, municipality, province (or equivalent for non-PH settings)",
-  "setting_description": "3–4 sentences describing the character's home with physical, sensory detail. Include layout, sounds, smells, economic class markers. Present tense, as if standing there now.",
-  "school": {
-    "name": "realistic school name matching the setting's country and region",
-    "grade_level": "e.g. Grade 12 - HUMSS Strand",
-    "schedule": "e.g. Mon–Fri 6:30 AM – 4:00 PM",
-    "status": "active"
-  },
-  "job_enrichment": {
-    "platform_or_employer": "specific platform or employer name",
-    "description": "1–2 sentences describing the actual day-to-day work",
-    "schedule": "e.g. Flexible, 2–3 evenings per week when not in school",
-    "earnings": "e.g. ₱150–₱400 per stream session, tips-based",
-    "days_active": 45
-  },
-  "starting_possessions": [
-    { "name": "short item name", "condition": "one phrase for current physical state", "note": "what it is used for or its story", "value_peso": null, "acquired_method": "bought|gifted|inherited|found" }
-  ],
-  "npc_descriptions": {
-    "firstname_lowercase": "2–3 sentences: physical appearance, a typical mannerism or habit, and their specific role in the character's life. Reference their age and relationship. Be concrete — no generic filler."
-  }
+  "location_name": "REQUIRED: specific Philippine address — sitio/street, barangay, municipality, province. Always generate, never null.",
+  "setting_description": "REQUIRED: 3-4 vivid sentences describing the home — layout, furniture, sounds, smells, economic class markers. Always generate, never null.",
+  "school": null,
+  "job_enrichment": null,
+  "starting_possessions": [],
+  "npc_descriptions": {}
 }
 
-Rules:
-- location_name: CRITICAL — if the lorebook names a city, town, province, or barangay, stay within that EXACT geography and add street or sitio-level detail. If the lorebook says NOTHING about location, infer from character name, language, and cultural cues — do NOT default to any preset province. Generate a plausible specific address within the inferred country and region.
-- setting_description: describe only what lorebook implies or states. If it says "cramped apartment" describe that. If "province house" describe that. Fill visual gaps with class-appropriate sensory detail. Never contradict the lorebook.
-- school: include ONLY if player is clearly an enrolled student. SHS Grade 12 = 17–18 yrs in Philippine context. Return null if not a student.
-- job_enrichment: include ONLY if lorebook mentions a job or income. Return null if none.
-- days_active: AGE-REALISTIC. A 17-yr-old in 2018 cannot have years of adult work history. Max ~200 days.
-- starting_possessions: 4–7 items matching character's economic class and lifestyle. Always generate — never return empty array.
-- npc_descriptions: generate for EVERY named NPC in the lorebook. Use their first name in lowercase as the key. Each description must be specific to their age, role, and implied personality — not generic.`;
+GENERATION RULES — read carefully:
 
-  try {
+LOCATION: Always generate a specific Philippine address. If lorebook names a place, expand it with street/sitio-level detail. If no place mentioned, invent one plausibly matching the character's name and cultural background.
+
+SETTING_DESCRIPTION: Always describe the home vividly. Match the economic class implied by the lorebook (or default to modest lower-middle class). Never return null or empty string.
+
+SCHOOL — decide based on age and lorebook:
+  - Generate IF: character is age 14–22 AND lorebook does NOT say dropped out / no school / graduated / finished school
+  - When NO lorebook: age 18 → default to Grade 12 or 1st year college (most common in Philippines for this age)
+  - When SCHOOL ALREADY PARSED = YES: return null (don't override)
+  - Schema: { "name": "realistic Philippine school name", "grade_level": "e.g. Grade 12 - HUMSS Strand OR 1st Year - BS Criminology", "schedule": "Mon-Fri 7:00 AM – 4:30 PM", "status": "active" }
+
+JOB_ENRICHMENT — reason about it:
+  - When JOB ALREADY PARSED = YES: return enrichment details to fill missing gaps — { "platform_or_employer": "...", "position": "specific job title", "description": "day-to-day work in 1-2 sentences", "schedule": "work schedule", "earnings": "e.g. ₱550/day", "days_active": realistic_number }
+  - When JOB ALREADY PARSED = NO AND lorebook says 'no job/unemployed/not working': return null
+  - When JOB ALREADY PARSED = NO AND character is full-time student (school generated above or from lorebook): REASON — does this student have a small side income? (part-time, tutoring, online selling, sari-sari store help, gigs). For most Filipino students age 16-19, maybe a small gig or none. For age 20-22, more likely a part-time job. Use judgment. Generate a small job OR return null if genuinely student-only.
+  - When JOB ALREADY PARSED = NO AND character is NOT a full-time student AND lorebook doesn't say unemployed: Generate a plausible entry-level or informal job matching their age and setting.
+  - days_active: be realistic — a fresh 18-year-old cannot have 500 days of employment history. Max 60-180 days for first jobs.
+
+STARTING_POSSESSIONS — REQUIRED, never empty:
+  - Generate 5-7 items matching the economic class
+  - Include: a phone (specify model/condition), a bag, at least one clothing item, one hygiene item, and 2-3 items specific to their lifestyle (student: notebooks, lunchbox; worker: work shoes, ID lanyard; gamer: specific device)
+  - Schema: [{ "name": "item", "condition": "physical state in one phrase", "note": "what it is for or its story", "value_peso": null, "acquired_method": "bought|gifted|inherited|found" }]
+
+NPC_DESCRIPTIONS — REQUIRED if NPCs exist, never empty:
+  - Generate for EVERY NPC listed in KNOWN NPCs
+  - Key: first name in lowercase only (e.g. "mark", "jenny", "mama", "papa")
+  - Value: 2-3 sentences covering: (1) physical appearance, (2) a specific habit or mannerism, (3) their specific role in the character's life
+  - Add concrete detail not in the lorebook — physical features, how they speak, what they always do
+  - Never restate the lorebook verbatim`;
+
+  const tryGroq = async (model) => {
     const res = await fetch(GROQ_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model,
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.7,
-        max_tokens: 900,
+        temperature: 0.72,
+        max_tokens: 1500,
       }),
     });
-    if (!res.ok) return null;
-    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    console.log('[enrich] location:', parsed.location_name, '| school:', parsed.school?.name, '| possessions:', parsed.starting_possessions?.length);
-    return parsed;
-  } catch (e) {
-    console.warn('[enrich] failed:', e.message);
-    return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = (await res.json()).choices?.[0]?.message?.content ?? '{}';
+    return JSON.parse(raw.replace(/```json|```/g, '').trim());
+  };
+
+  // Try smarter model first, fall back to fast model
+  for (const model of ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']) {
+    try {
+      const parsed = await tryGroq(model);
+      if (parsed.location_name || parsed.setting_description || parsed.starting_possessions?.length) {
+        console.log(`[enrich] ${model} OK — loc: ${parsed.location_name?.slice(0,40)} | poss: ${parsed.starting_possessions?.length} | school: ${parsed.school?.name}`);
+        return parsed;
+      }
+    } catch (e) { console.warn(`[enrich] ${model} failed:`, e.message); }
   }
+
+  // Gemini fallback
+  const gemKey = localStorage.getItem('GEMINI_API_KEY');
+  if (gemKey) {
+    try {
+      const res = await fetch(`${GEMINI_URL}?key=${gemKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.72, maxOutputTokens: 1400, response_mime_type: 'application/json' },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+        const parsed = JSON.parse(text);
+        console.log('[enrich] Gemini fallback OK — loc:', parsed.location_name?.slice(0,40));
+        return parsed;
+      }
+    } catch (e) { console.warn('[enrich] Gemini fallback failed:', e.message); }
+  }
+
+  console.warn('[enrich] all models failed');
+  return null;
 }
 
 // ─── CONTEXT-AWARE NPC FLAG EVALUATION ────────────────────────────────────────

@@ -771,6 +771,28 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
       <div class="wizard-step" id="wizard-step2">
         <div class="step-hdr"><div class="step-num">2</div><div class="step-lbl">Your World</div></div>
 
+        <!-- Lorebook Mode Selector -->
+        <div class="field" style="margin-bottom:12px">
+          <label class="field-label">Lorebook Setup Mode</label>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <label class="lb-radio-label" style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border-radius:4px">
+              <input type="radio" name="lb-mode" value="builder" checked style="margin-top:2px;flex-shrink:0">
+              <span><strong>Guided Builder</strong><span style="display:block;font-size:10px;color:var(--dim);margin-top:1px">Fill in the fields below and auto-generate a lorebook</span></span>
+            </label>
+            <label class="lb-radio-label" style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border-radius:4px">
+              <input type="radio" name="lb-mode" value="paste" style="margin-top:2px;flex-shrink:0">
+              <span><strong>Free Paste</strong><span style="display:block;font-size:10px;color:var(--dim);margin-top:1px">Paste or write your own lorebook text directly</span></span>
+            </label>
+            <label class="lb-radio-label" style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border-radius:4px">
+              <input type="radio" name="lb-mode" value="ai" style="margin-top:2px;flex-shrink:0">
+              <span><strong>AI Generates Everything</strong><span style="display:block;font-size:10px;color:var(--dim);margin-top:1px">Skip the lorebook — AI builds the world from your name, age, and sex alone</span></span>
+            </label>
+          </div>
+        </div>
+        <div id="lb-ai-notice" style="display:none;padding:12px;background:var(--acc2);border:1px solid var(--acc);border-radius:4px;font-size:12px;color:var(--dim);margin-bottom:10px;line-height:1.8">
+          ✦ The AI will invent your character's home, neighborhood, job or school, possessions, and starting relationships entirely from your name, age, and sex. You can always refine the world through the AI Console after the game starts.
+        </div>
+
         <!-- Lorebook Builder (collapsible) -->
         <div id="lb-helper">
           <div id="lb-helper-toggle">
@@ -834,7 +856,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
         </div>
 
         <!-- Final editable lorebook -->
-        <div class="field" style="margin-top:10px">
+        <div class="field" id="w-lorebook-wrap" style="margin-top:10px">
           <label class="field-label">Lorebook — the AI reads this every turn. Edit freely.</label>
           <textarea class="field-input field-textarea" id="w-lorebook" style="min-height:160px" placeholder="Describe your character, their world, situation, and the people in their life. The more detail you provide here, the more grounded and consistent the simulation will be. You can use the builder above or write freely."></textarea>
         </div>
@@ -1295,6 +1317,9 @@ document.getElementById('btn-new').addEventListener('click', () => {
   document.getElementById('w-age').value = '18';
   document.getElementById('w-sex').value = 'male';
   document.getElementById('w-lorebook').value = localStorage.getItem('LOREBOOK') || '';
+  // Reset lorebook mode to builder
+  const _defMode = document.querySelector('input[name="lb-mode"][value="builder"]');
+  if (_defMode) { _defMode.checked = true; _defMode.dispatchEvent(new Event('change')); }
   // Reset builder fields
   document.getElementById('lb-year').value = new Date().getFullYear();
   document.getElementById('lb-season').value = '';
@@ -1332,6 +1357,31 @@ document.getElementById('btn-wizard-next').addEventListener('click', async () =>
   } else if (wizardStep === 2 || (wizardStep === 3 && !initInProgress)) {
     await startNewGame();
   }
+});
+
+// ── LOREBOOK MODE TOGGLE ──────────────────────────────────────────────────────
+document.querySelectorAll('input[name="lb-mode"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const mode       = document.querySelector('input[name="lb-mode"]:checked')?.value;
+    const builderEl  = document.getElementById('lb-helper');
+    const lbWrap     = document.getElementById('w-lorebook-wrap');
+    const aiNotice   = document.getElementById('lb-ai-notice');
+    if (!builderEl || !lbWrap || !aiNotice) return;
+    if (mode === 'builder') {
+      builderEl.style.display = '';
+      lbWrap.style.display    = '';
+      aiNotice.style.display  = 'none';
+    } else if (mode === 'paste') {
+      builderEl.style.display = 'none';
+      lbWrap.style.display    = '';
+      aiNotice.style.display  = 'none';
+    } else { // ai — generates everything
+      builderEl.style.display = 'none';
+      lbWrap.style.display    = 'none';
+      aiNotice.style.display  = '';
+      document.getElementById('w-lorebook').value = '';
+    }
+  });
 });
 
 // ── LOREBOOK BUILDER ──────────────────────────────────────────────────────────
@@ -1515,19 +1565,25 @@ async function startNewGame() {
       }
     }
 
-    // Stage 1.5: AI enrichment — creative detail fill-in
-    if (lorebook) {
+    // Stage 1.5: AI enrichment — always runs to fill creative details even without lorebook
+    {
       setStage('Imagining your world...', 'Filling in missing details...', 48);
-      const enriched = await enrichWorldDetails(lorebook, ws).catch(() => null);
+      const enriched = await enrichWorldDetails(lorebook || '', ws).catch(() => null);
       if (enriched) {
         if (enriched.location_name) ws.player.location = enriched.location_name;
         if (enriched.setting_description) ws.setting_description = enriched.setting_description;
         if (enriched.npc_descriptions && typeof enriched.npc_descriptions === 'object') {
           for (const [key, bio] of Object.entries(enriched.npc_descriptions)) {
-            const _bioNpc = Object.values(ws.npcs).find(n =>
-              n.name?.toLowerCase().split(/\s+/)[0] === key.toLowerCase()
-            );
-            if (_bioNpc && ws.npcs[_bioNpc.id]) ws.npcs[_bioNpc.id].bio = bio;
+            const _k     = key.toLowerCase().replace(/[\s-]+/g, '_');
+        const _kFirst = _k.split('_')[0];
+        const _bioNpc = Object.values(ws.npcs).find(n => {
+          if (!n.name) return false;
+          const fn = n.name.toLowerCase().split(/\s+/)[0];       // "mark"
+          const fk = n.name.toLowerCase().replace(/\s+/g, '_');  // "mark_santos"
+          const id = (n.id ?? '').toLowerCase();                  // "mark_santos"
+          return fn === _kFirst || fk === _k || id === _k || id.split('_')[0] === _kFirst;
+        });
+        if (_bioNpc && ws.npcs[_bioNpc.id]) ws.npcs[_bioNpc.id].bio = bio;
           }
         }
         if (enriched.school?.name)  ws.school = enriched.school;
@@ -1540,8 +1596,8 @@ async function startNewGame() {
             ws.job.days_employed  = enriched.job_enrichment.days_active ?? ws.job.days_employed ?? 0;
           } else {
             ws.job = {
-              employer: enriched.job_enrichment.platform_or_employer,
-              position: 'Part-time Streamer',
+              employer:    enriched.job_enrichment.platform_or_employer,
+              position:    enriched.job_enrichment.position ?? 'Part-time Worker',
               description: enriched.job_enrichment.description,
               salary_per_cycle: null, pay_cycle: null,
               schedule: enriched.job_enrichment.schedule,
