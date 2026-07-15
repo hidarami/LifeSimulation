@@ -3332,13 +3332,48 @@ async function _discoverModels(prefix) {
     models.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${m}</option>`).join('');
 }
 
+// Mutual exclusion: quick-start ↔ dual-slot (narrator + classifier)
+function _updateMutualExclusion() {
+  const qsVal  = (document.getElementById('k-quickstart')?.value  ?? '').trim();
+  const narVal = (document.getElementById('k-narrator')?.value    ?? '').trim();
+  const clsVal = (document.getElementById('k-classifier')?.value  ?? '').trim();
+  const qsBadge  = document.getElementById('k-quickstart-badge');
+  const narBadge = document.getElementById('k-narrator-badge');
+  const clsBadge = document.getElementById('k-classifier-badge');
+  const _narGroup = ['k-narrator','k-narrator-model','k-narrator-model-list','k-narrator-refresh','k-narrator-provider'].map(id => document.getElementById(id)).filter(Boolean);
+  const _clsGroup = ['k-classifier','k-classifier-model','k-classifier-model-list','k-classifier-refresh','k-classifier-provider'].map(id => document.getElementById(id)).filter(Boolean);
+  const _qsInp = document.getElementById('k-quickstart');
+  if (qsVal) {
+    // Quickstart filled — lock dual-slot fields
+    [..._narGroup, ..._clsGroup].forEach(el => { el.disabled = true; el.style.opacity = '0.4'; });
+    if (_qsInp) { _qsInp.disabled = false; _qsInp.style.opacity = ''; }
+    if (qsBadge) { qsBadge.textContent = '✓ Using quick-start key for both slots'; qsBadge.style.color = 'var(--pos)'; qsBadge.style.display = 'block'; }
+    if (narBadge) narBadge.style.display = 'none';
+    if (clsBadge) clsBadge.style.display = 'none';
+  } else if (narVal || clsVal) {
+    // Dual-slot filled — lock quickstart
+    if (_qsInp) { _qsInp.disabled = true; _qsInp.style.opacity = '0.4'; }
+    [..._narGroup, ..._clsGroup].forEach(el => { el.disabled = false; el.style.opacity = ''; });
+    if (qsBadge) { qsBadge.textContent = '⚡ Using dual-slot configuration'; qsBadge.style.color = 'var(--acc)'; qsBadge.style.display = 'block'; }
+    _updateSlotDetection('narrator');
+    _updateSlotDetection('classifier');
+  } else {
+    // Nothing filled — reset everything
+    [..._narGroup, ..._clsGroup].forEach(el => { el.disabled = false; el.style.opacity = ''; });
+    if (_qsInp) { _qsInp.disabled = false; _qsInp.style.opacity = ''; }
+    if (qsBadge) qsBadge.style.display = 'none';
+    _updateSlotDetection('narrator');
+    _updateSlotDetection('classifier');
+  }
+}
+
 // Wire per-slot controls once (key input → detection, dropdown → override, Discover button).
 function _wireSlot(prefix) {
   const inp        = document.getElementById(`k-${prefix}`);
   const provSel    = document.getElementById(`k-${prefix}-provider`);
   const refreshBtn = document.getElementById(`k-${prefix}-refresh`);
   const listEl     = document.getElementById(`k-${prefix}-model-list`);
-  if (inp && !inp._slotWired) { inp._slotWired = true; inp.addEventListener('input', () => _updateSlotDetection(prefix)); }
+  if (inp && !inp._slotWired) { inp._slotWired = true; inp.addEventListener('input', () => { _updateSlotDetection(prefix); _updateMutualExclusion(); }); }
   if (provSel && !provSel._slotWired) { provSel._slotWired = true; provSel.addEventListener('change', _updateCustomBaseUrlRow); }
   if (refreshBtn && !refreshBtn._slotWired) { refreshBtn._slotWired = true; refreshBtn.addEventListener('click', () => _discoverModels(prefix)); }
   if (listEl && !listEl._slotWired) {
@@ -3378,8 +3413,50 @@ document.getElementById('btn-settings').addEventListener('click', () => {
   _seedModelList('narrator');
   _seedModelList('classifier');
   ['quickstart', 'narrator', 'classifier'].forEach(_updateSlotDetection);
-  _updateCustomBaseUrlRow();
-  document.getElementById('modal').classList.add('open');
+  // Discover models for a slot from its provider and populate the dropdown.
+async function _discoverModels(prefix) {
+  const listEl   = document.getElementById(`k-${prefix}-model-list`);
+  const key      = document.getElementById(`k-${prefix}`)?.value?.trim();
+  const provider = _effectiveProvider(prefix);
+  const baseUrl  = document.getElementById('k-custom-baseurl')?.value?.trim();
+  if (!listEl) return;
+  // Remove stale filter UI from a previous discovery run
+  document.getElementById(`k-${prefix}-model-filter`)?.remove();
+  document.getElementById(`k-${prefix}-model-count`)?.remove();
+  if (!key || !provider) { listEl.innerHTML = '<option value="">— enter a key / pick a provider first —</option>'; return; }
+  listEl.innerHTML = '<option value="">Loading…</option>';
+  const models  = await fetchModels(provider, key, baseUrl);
+  const current = localStorage.getItem(`${prefix.toUpperCase()}_MODEL`) ?? '';
+  if (!models.length) { listEl.innerHTML = '<option value="">— discovery failed, type a model below —</option>'; return; }
+  listEl.innerHTML = '<option value="">— use provider default —</option>' +
+    models.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${m}</option>`).join('');
+  // Inject filter input then count display, both inserted before the select
+  const _filterInput = document.createElement('input');
+  _filterInput.id = `k-${prefix}-model-filter`;
+  _filterInput.className = 'field-input';
+  _filterInput.placeholder = 'Filter models… (type to search)';
+  _filterInput.style.cssText = 'margin-bottom:4px;font-size:12px';
+  const _countEl = document.createElement('div');
+  _countEl.id = `k-${prefix}-model-count`;
+  _countEl.style.cssText = 'font-size:10px;color:var(--dim);margin-bottom:4px';
+  _countEl.textContent = `${models.length} models`;
+  // Order after both inserts: filterInput → countEl → select
+  listEl.parentNode.insertBefore(_filterInput, listEl);
+  listEl.parentNode.insertBefore(_countEl, listEl);
+  _filterInput.addEventListener('input', () => {
+    const q = _filterInput.value.toLowerCase();
+    let shown = 0;
+    for (const opt of listEl.options) {
+      if (!opt.value) continue; // skip "— use provider default —" placeholder
+      const match = !q || opt.value.toLowerCase().includes(q);
+      opt.style.display = match ? '' : 'none';
+      if (match) shown++;
+    }
+    _countEl.textContent = q
+      ? `Showing ${shown} of ${models.length} models`
+      : `${models.length} models`;
+  });
+}
 });
 
 // Content mode toggle handler
