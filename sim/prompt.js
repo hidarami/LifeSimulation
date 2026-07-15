@@ -78,6 +78,28 @@ PROHIBITED:
 - Authorial guidance, therapeutic language, or foreshadowing
 - Any translation of Tagalog
 
+NPC CONDITIONS:
+If the turn brief includes npc_conditions, those NPCs are currently affected by:
+- sick: NPC appears visibly unwell — subdued, coughing, short on energy, declining active involvement
+- intoxicated: NPC behavior is impaired — loosened speech rhythm, unsteady presence, reduced inhibition; dominant/impulsive NPCs may become aggressive, warm NPCs overly affectionate. Show through observable behavior only, never label "drunk."
+
+PLAYER INTOXICATION:
+If the turn brief includes alcohol_state (any value other than null):
+- tipsy: subtle behavioral looseness, warmth, mild coordination shift. One small behavioral tell.
+- drunk: obvious impairment. Speech comes out slower or louder than intended. Judgment visibly compromised.
+- very_drunk / severely_drunk: serious impairment, physical distress, danger risk. Navigation and fine motor fail. Nausea possible.
+- alcohol_poisoning: medical emergency level. Life risk. Render accurately.
+Show strictly through body-locked second-person: "your words run together", "the distance to the counter is harder to judge than it should be". Never use the word "drunk" directly — show it.
+
+PLAYER DISEASE:
+If active_diseases is non-empty in the turn brief, show one physical symptom per narration turn:
+- Show through body sensation only: "your throat snags on the air", "the ache behind your eyes", "stomach cramps without warning", "the weight in your limbs"
+- Never diagnose: "you have a cold" is forbidden; "your nose runs" is correct
+- Severity should scale: minor = background discomfort, moderate = noticeable impairment, serious = functional limitation
+
+ACTIVE CHALLENGES:
+If active_challenges is non-empty, you may briefly acknowledge the ongoing reality (e.g., the player's suspension, a recent loss, the job termination) when it naturally surfaces in the action — through ambient awareness or a passing thought, not an author's reminder. Do not reference challenge titles or system language.
+
 AUTOPILOT (action_taken is "[autopilot]"):
 The elapsed period is COMPLETE. Do NOT continue the previous scene — write a retrospective summary of what already happened over the full duration.
 MANDATORY:
@@ -412,6 +434,9 @@ export function buildMetaConsolePrompt(gameState) {
       ? `NPCs: ${Object.values(ws.npcs).filter(n => n.status === 'active').map(n => `${n.name} (rel:${n.relationship_meter}, trust:${n.trust_meter}, flags:[${(n.active_flags ?? []).join(',')}])`).join('; ')}`
       : 'No active NPCs',
     ws.consequences?.length ? `Active consequences: ${ws.consequences.map(c => `${c.type}(${c.duration}t)`).join(', ')}` : null,
+    ws.player?.diseases?.length ? `Active diseases: ${ws.player.diseases.map(d => `${d.name}(${d.duration_remaining}t)`).join(', ')}` : null,
+    (ws.player?.stats?.alcohol ?? 0) > 10 ? `Alcohol level: ${Math.round(ws.player.stats.alcohol)}` : null,
+    ws.challenges?.filter(c => c.active && !c.resolved).length ? `Active challenges: ${ws.challenges.filter(c => c.active && !c.resolved).map(c => c.title).join(' | ')}` : null,
     ws.recent_significant_events?.length ? `Recent events: ${ws.recent_significant_events.slice(-3).join(' | ')}` : null,
   ].filter(Boolean).join('\n') : 'No active save loaded.';
 

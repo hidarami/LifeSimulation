@@ -59,6 +59,8 @@ const HOUSEHOLD_WEEKDAY = [
   { start_hour: 22, end_hour: 24, task: 'winding_down', interruptible: true,  location: 'home'    },
 ];
 
+export { DEFAULT_WEEKDAY, DEFAULT_WEEKEND, STUDENT_WEEKDAY, HOUSEHOLD_WEEKDAY, PARENT_WEEKDAY };
+
 function _pickSchedule(relationship_type, npc_class, age) {
   const rt = (relationship_type ?? '').toLowerCase();
   if (rt === 'mother' || rt === 'father')                                               return PARENT_WEEKDAY;
@@ -191,6 +193,38 @@ export function driftTraits(npc, context = {}) {
     t.impulsivity = Math.min(100, (t.impulsivity ?? 50) + 2);
   }
   return { ...npc, traits: t };
+}
+
+// ─── CAREER UPDATE ────────────────────────────────────────────────────────────
+// Called when narration implies an NPC changed job, school, or living situation
+export function updateNpcCareer(npc, change) {
+  let updated = { ...npc, traits: { ...npc.traits }, schedule: { ...npc.schedule } };
+  if (change.action === 'quit_job') {
+    updated.job = null;
+    if (updated.npc_class === 'professional') updated.npc_class = 'household';
+    updated.schedule = { ...updated.schedule, weekday_routine: _pickSchedule(updated.relationship_type, updated.npc_class, updated.age) };
+    updated.recent_interactions = [...(updated.recent_interactions ?? []), `[State update: quit their job]`].slice(-5);
+  }
+  if (change.action === 'new_job') {
+    updated.job = change.details ?? {};
+    updated.npc_class = 'professional';
+    updated.schedule = { ...updated.schedule, weekday_routine: DEFAULT_WEEKDAY };
+    updated.recent_interactions = [...(updated.recent_interactions ?? []), `[State update: started new job — ${change.details?.employer ?? 'unknown employer'}]`].slice(-5);
+  }
+  if (change.action === 'enroll_school') {
+    updated.enrolled_school = change.details?.school_name ?? 'school';
+    updated.schedule = { ...updated.schedule, weekday_routine: STUDENT_WEEKDAY };
+    updated.recent_interactions = [...(updated.recent_interactions ?? []), `[State update: enrolled in school]`].slice(-5);
+  }
+  if (change.action === 'quit_school') {
+    updated.enrolled_school = null;
+    updated.schedule = { ...updated.schedule, weekday_routine: HOUSEHOLD_WEEKDAY };
+  }
+  if (change.action === 'move_away') {
+    updated.active_flags = [...new Set([...(updated.active_flags ?? []), 'moved_away'])];
+    updated.departure_reason = change.details?.destination ?? 'another city';
+  }
+  return updated;
 }
 
 export function incrementSignificance(npc) {

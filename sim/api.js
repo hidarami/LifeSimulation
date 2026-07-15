@@ -771,6 +771,65 @@ NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are liste
   return null;
 }
 
+// ─── NARRATIVE STATE EXTRACTOR ────────────────────────────────────────────────
+// After Grok generates prose, Groq checks for implied state changes
+// (NPC quits job, player moves, NPC enrolls in school, etc.)
+export async function extractNarrativeStateChanges(prose, worldState) {
+  const groqKey = localStorage.getItem('GROQ_API_KEY');
+  if (!groqKey || !prose || prose.length < 80) return null;
+  const npcList = Object.values(worldState.npcs ?? {})
+    .filter(n => n.status === 'active')
+    .map(n => `${n.id}: ${n.name} (${n.relationship_type ?? n.npc_class})`)
+    .join('\n');
+  const prompt = `Analyze this simulation narration for DEFINITIVELY STATED changes only.
+
+Narration: "${prose.slice(0, 800)}"
+
+Current context:
+- Player job: ${worldState.job ? `${worldState.job.position ?? 'worker'} at ${worldState.job.employer ?? 'unknown'}` : 'unemployed'}
+- Player school: ${worldState.school?.name ?? 'none'} (${worldState.school?.status ?? 'n/a'})
+- Player location: ${worldState.player?.location ?? 'unknown'}
+- Active NPCs:
+${npcList || 'none'}
+
+RULES: Only extract if EXPLICITLY AND DEFINITIVELY stated in the narration. "might leave" = NO. "decides to quit" = YES. "moves to Manila" = YES.
+
+Return ONLY valid JSON:
+{
+  "has_changes": boolean,
+  "player_changes": {
+    "location": string_or_null,
+    "job_lost": boolean,
+    "job_new_employer": string_or_null,
+    "school_quit": boolean,
+    "school_enrolled": string_or_null
+  },
+  "npc_changes": [
+    {
+      "npc_id": "exact_id_from_list_above",
+      "job_lost": boolean,
+      "job_new_employer": string_or_null,
+      "school_quit": boolean,
+      "school_enrolled": string_or_null,
+      "status": "active|deceased|moved_away|null"
+    }
+  ]
+}
+
+Set has_changes: true ONLY if you found at least one definitive change.`;
+  try {
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+      body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: prompt }], temperature: 0.0, max_tokens: 350 }),
+    });
+    if (!res.ok) return null;
+    const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    return parsed.has_changes ? parsed : null;
+  } catch { return null; }
+}
+
 // ─── CONTEXT-AWARE NPC FLAG EVALUATION ────────────────────────────────────────
 export async function evaluateNpcFlagsInContext(npc, prose, hoursElapsed) {
   const groqKey = localStorage.getItem('GROQ_API_KEY');
@@ -875,3 +934,4 @@ export async function callMetaConsole(messages, gameState) {
 
   throw new Error('No API available. Add a Groq, Gemini, or Grok key in Settings.');
 }
+

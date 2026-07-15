@@ -41,13 +41,15 @@ export function createInitialWorldState(playerName, startDate) {
       stats: {
         health: 80, energy: 70, hunger: 20,
         hygiene: 70, mood: 60, arousal: 0,
-        social: 50, reputation: 50,
+        social: 50, reputation: 50, alcohol: 0,
       },
-      cash:         500,
-      skills:       {},
-      habits:       [],
-      irreversible: [],
-      possessions:  [],
+      cash:              500,
+      skills:            {},
+      habits:            [],
+      irreversible:      [],
+      possessions:       [],
+      diseases:          [],
+      alcohol_tolerance: 0,
     },
 
     npcs:            {},
@@ -78,6 +80,7 @@ export function createInitialWorldState(playerName, startDate) {
     last_narration_prose: '',
     session_context_flavor: '',
     setting_description: '',
+    challenges: [],
   };
 }
 
@@ -290,6 +293,33 @@ export function assembleTurnBrief(worldState, turnData) {
     player_raw_input:   rawInput || null,
     // Upcoming schedule commitments within 2 hours
     upcoming_schedule:  _upSched.length ? _upSched : null,
+    // Active diseases (player)
+    active_diseases:    (worldState.player?.diseases ?? []).map(d => ({
+      id: d.id, name: d.name, severity: d.severity, duration: d.duration_remaining, cause: d.cause,
+    })),
+    // Intoxication level if above tipsy threshold
+    alcohol_state: (() => {
+      const a = worldState.player?.stats?.alcohol ?? 0;
+      if (a < 15) return null;
+      if (a < 25) return 'tipsy';
+      if (a < 45) return 'drunk';
+      if (a < 65) return 'very_drunk';
+      if (a < 80) return 'severely_drunk';
+      return 'alcohol_poisoning';
+    })(),
+    // NPC health/intoxication conditions relevant to this turn
+    npc_conditions: Object.values(worldState.npcs ?? {})
+      .filter(n => n.status === 'active' && ((n.diseases?.length) || (n.alcohol_level ?? 0) > 10))
+      .map(n => ({
+        id: n.id, name: n.name,
+        sick: n.diseases?.length ? n.diseases[0].name : null,
+        intoxicated: (n.alcohol_level ?? 0) > 10,
+      })),
+    // Active challenges summary (for Grok awareness)
+    active_challenges: (worldState.challenges ?? [])
+      .filter(c => c.active && !c.resolved)
+      .map(c => ({ type: c.type, title: c.title, severity: c.severity }))
+      .slice(0, 3),
   };
 }
 

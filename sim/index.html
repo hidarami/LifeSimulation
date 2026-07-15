@@ -417,6 +417,31 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .sch-pill.out{background:#3a1a1a;color:var(--low)}
 .sch-pflag{font-size:9px;padding:2px 5px;background:#3a1010;color:var(--neg);border-radius:3px;margin-right:3px}
 
+/* ── CHALLENGE CARDS ─────────────────────────────────────────────────────── */
+.challenge-card{
+  background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);
+  padding:12px 14px;animation:slideUp .35s ease;
+  box-shadow:0 4px 24px rgba(0,0,0,.45);width:100%;
+}
+.challenge-card.minor  {border-left:3px solid var(--low)}
+.challenge-card.moderate{border-left:3px solid #e67e22}
+.challenge-card.major  {border-left:3px solid var(--neg)}
+.challenge-card.critical{border-left:3px solid #8b0000;background:#1a0505}
+.challenge-card-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.challenge-card-title{flex:1;font-size:13px;font-weight:700;color:var(--txt)}
+.challenge-card-dismiss{background:none;border:none;color:var(--dim);cursor:pointer;font-size:18px;padding:0;width:22px;line-height:1}
+.challenge-card-cause{font-size:11px;color:var(--dim);margin-bottom:6px;line-height:1.55}
+.challenge-card-effects{font-size:11px;color:var(--low);margin-bottom:6px;line-height:1.55}
+.challenge-card-resolution{font-size:11px;color:var(--txt);opacity:.7;line-height:1.55;padding-top:6px;border-top:1px solid var(--bdr)}
+@keyframes slideUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+/* Sidebar challenge rows */
+.challenge-row{border-bottom:1px solid var(--bdr);padding:2px 0}
+.challenge-row:last-child{border-bottom:none}
+.challenge-row-head{display:flex;align-items:center;gap:6px;padding:6px 0;cursor:pointer}
+.challenge-row-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.challenge-row-title{flex:1;font-size:12px;color:var(--txt)}
+.challenge-row-body{padding:4px 0 10px 14px}
+
 /* ── SCROLLBAR ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -608,13 +633,15 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
       <div class="p-tab on" data-p="job">Job</div>
       <div class="p-tab" data-p="items">Items</div>
       <div class="p-tab" data-p="schedule">Schedule</div>
+      <div class="p-tab" data-p="challenges">Issues</div>
       <div class="p-tab" data-p="log">Log</div>
     </div>
     <div class="panel-scroll">
-      <div id="p-job"      class="panel-section on"></div>
-      <div id="p-items"    class="panel-section"></div>
-      <div id="p-schedule" class="panel-section"></div>
-      <div id="p-log"      class="panel-section"></div>
+      <div id="p-job"        class="panel-section on"></div>
+      <div id="p-items"      class="panel-section"></div>
+      <div id="p-schedule"   class="panel-section"></div>
+      <div id="p-challenges" class="panel-section"></div>
+      <div id="p-log"        class="panel-section"></div>
     </div>
   </div>
 
@@ -685,8 +712,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
   <div style="padding:12px 18px;font-size:10px;color:var(--dim)">v2.0 · The Sim</div>
 </div>
 
-<!-- ── META CONSOLE ──────────────────────────────────────────────────────────── -->
-<div id="panel-console">
+<!-- ── CHALLENGE NOTIFICATION OVERLAY ───────────────────────────────────────── -->
+<div id="challenge-overlay" style="display:none;position:fixed;bottom:90px;left:50%;transform:translateX(-50%);width:min(400px,calc(100% - 32px));z-index:160;display:flex;flex-direction:column;gap:8px;align-items:stretch;pointer-events:none">
+  <div id="challenge-stack" style="display:flex;flex-direction:column;gap:8px;pointer-events:all"></div>
+</div>
   <div class="console-header">
     <div class="console-brand-block">
       <div class="console-brand">AI CONSOLE</div>
@@ -918,14 +947,19 @@ import { routeInput, isExplicit, classifyExplicitActivity,
 import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversationHistory,
          callGeminiAutopilot, compressSessionContext, parseLorebookToWorldState,
          buildWorldWithMultipleAIs, evaluateDescribedNpc,
-         enrichWorldDetails, evaluateNpcFlagsInContext, callMetaConsole } from './api.js';
+         enrichWorldDetails, evaluateNpcFlagsInContext, callMetaConsole,
+         extractNarrativeStateChanges } from './api.js';
 import { renderNpcPanel, renderJobPanel,
-         renderPossessionsPanel, renderNarration, renderTurnAnchor,
+         renderPossessionsPanel, renderNarration, renderTurnAnchor, renderChallengesPanel } from './renderer.js';
          livesWithPlayer, getSmartNpcLabel } from './renderer.js';
-import { checkWorldEvents, applyEventEffect } from './events.js';
+import { checkWorldEvents, checkNpcEvents, applyEventEffect, applyNpcEventEffect,
+         progressDiseases, progressNpcDiseases, checkDiseaseContraction, checkNpcDiseaseSpread,
+         calculateAlcoholEffect, getIntoxicationLevel, tickSchoolSuspension } from './events.js';
+import { challengeFromDisease, challengeFromNpcEvent, challengeFromWorldEvent,
+         challengeFromHangover, checkChallengeResolution } from './challenges.js';
 import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
          buildNpcContextForGemini, applyRelationshipDelta, createNpc,
-         driftTraits, getNpcCurrentTask } from './npc.js';
+         driftTraits, getNpcCurrentTask, updateNpcCareer } from './npc.js';
 
          
 let WS = null;
@@ -1081,6 +1115,7 @@ const CSTAT_META = {
   arousal:    { label: 'Arousal',  icon: '◈',  invert: false },
   social:     { label: 'Social',   icon: '◎',  invert: false },
   reputation: { label: 'Rep',      icon: '★',  invert: false },
+  alcohol:    { label: 'Alcohol',  icon: '🍺', invert: false },
 };
 function cstatColor(v) {
   return v <= 20 ? 'sc-crit' : v <= 40 ? 'sc-low' : v >= 80 ? 'sc-high' : 'sc-norm';
@@ -1092,6 +1127,7 @@ function renderCenterStats(stats) {
   for (const [key, meta] of Object.entries(CSTAT_META)) {
     if (!(key in stats)) continue;
     if (key === 'arousal' && stats[key] === 0) continue;
+    if (key === 'alcohol' && (stats[key] ?? 0) < 5) continue;
     const val  = Math.round(stats[key]);
     const fill = meta.invert ? 100 - val : val;
     const disp = meta.invert ? (100 - val) : val;
@@ -1199,6 +1235,7 @@ function renderAll() {
   renderNpcPanel(WS.npcs, document.getElementById('npc-cards'), WS.sim_time, WS.player.name, WS.player.location ?? 'home');
   renderJobPanel(WS.job, WS.school ?? null, document.getElementById('p-job'));
   renderPossessionsPanel(WS.player.possessions, WS.player.irreversible, document.getElementById('p-items'));
+  renderChallengesPanel(WS.challenges, document.getElementById('p-challenges'));
   renderSchedulePanel(WS.job, WS.school ?? null, document.getElementById('p-schedule'));
   const ts = formatTimestamp(WS.sim_time);
   document.getElementById('h-time').innerHTML = `${ts.time}<br><span style="font-size:10px">${ts.day}</span>`;
@@ -2076,11 +2113,118 @@ async function processTurn(input) {
     
     if (locationChange) ws.player.location = locationChange;
 
+    // ── School suspension countdown ─────────────────────────────────────────
+    ws = tickSchoolSuspension(ws);
+
+    // ── School days tracking ─────────────────────────────────────────────────
+    if (ws.school?.status === 'active') {
+      const _sdDow = new Date(ws.sim_time).getDay();
+      if (_sdDow >= 1 && _sdDow <= 5 && timeCost >= 0.5) {
+        ws.school.days_enrolled = (ws.school.days_enrolled ?? 0) + Math.min(1, timeCost / 6);
+      }
+    }
+
+    // ── Alcohol detection from Gemini classify ───────────────────────────────
+    if (route === ROUTE.PATH_2_NOVEL) {
+      const cls_ref = await classifyAction(input, sanitizeStateForGemini(ws)).catch(() => null);
+      if (cls_ref?.alcohol_consumed?.detected && cls_ref.alcohol_consumed.drink_type !== 'none') {
+        const alcoholInc = calculateAlcoholEffect(cls_ref.alcohol_consumed.drink_type, ws.player)
+          * (cls_ref.alcohol_consumed.quantity ?? 1);
+        ws.player.stats.alcohol = Math.min(100, (ws.player.stats.alcohol ?? 0) + alcoholInc);
+        if ((ws.player.stats.alcohol ?? 0) > 20) {
+          ws.player.alcohol_tolerance = Math.min(100, (ws.player.alcohol_tolerance ?? 0) + 0.5);
+        }
+      }
+    }
+
+    // ── Hangover from sleeping with high alcohol ──────────────────────────────
+    if (route === ROUTE.PATH_3_AUTOPILOT && /sleep|nap/i.test(input)) {
+      if ((ws.player.stats.alcohol ?? 0) > 30 && !(ws.player.diseases ?? []).some(d => d.id === 'hangover')) {
+        const hangoverDisease = { id: 'hangover', name: 'Hangover', severity: 'minor', duration_remaining: 2,
+          cause: 'heavy drinking', per_turn_effects: { health: -2, energy: -15, mood: -20, hygiene: -3 },
+          resolution: 'Rest and hydrate. Passes in a day or two.', challenge_title: 'Nursing a Hangover',
+          challenge_effects_text: 'Energy -15, Mood -20 per turn. Sensitivity to light and noise.' };
+        ws.player.diseases = [...(ws.player.diseases ?? []), hangoverDisease];
+        hangoverChallengePending = challengeFromHangover(ws.turn + 1);
+      }
+    }
+
+    // ── Disease progression ───────────────────────────────────────────────────
+    ws = progressDiseases(ws);
+    ws = progressNpcDiseases(ws);
+
+    // ── Context tag extraction for disease contraction ────────────────────────
+    const _contextTags = [];
+    if (/crowd|mall|market|school|church|public|fiesta|concert/i.test(input)) _contextTags.push('crowded_place');
+    if (/rain|wet|storm|baha|ulan/i.test(input)) _contextTags.push('rain_exposure');
+    if (/outside|outdoors|park|street/i.test(input)) _contextTags.push('outdoor');
+
+    // ── Disease contraction from environment ─────────────────────────────────
+    let hangoverChallengePending = null;
+    const newChallenges = [];
+    const _envDisease = checkDiseaseContraction(ws, _contextTags);
+    if (_envDisease) {
+      const { disease, cause } = _envDisease;
+      ws.player.diseases = [...(ws.player.diseases ?? []), {
+        id: disease.id, name: disease.name, severity: disease.severity,
+        duration_remaining: disease.base_duration, cause,
+        per_turn_effects: disease.per_turn_effects, resolution: disease.resolution,
+        challenge_title: disease.challenge_title, challenge_effects_text: disease.challenge_effects_text,
+      }];
+      await logEvent({ turn: ws.turn, category: 'health', description: `Contracted ${disease.name} — ${cause}` });
+      const ch = challengeFromDisease(disease, cause, ws.turn);
+      ws.challenges = [...(ws.challenges ?? []), ch];
+      newChallenges.push(ch);
+    }
+
+    // ── Disease spread from NPC interaction ──────────────────────────────────
+    if (npcReactions.length) {
+      const _spread = checkNpcDiseaseSpread(ws, npcReactions.map(r => r.npc_id));
+      if (_spread) {
+        ws.player.diseases = [...(ws.player.diseases ?? []), {
+          id: _spread.disease.id, name: _spread.disease.name, severity: _spread.disease.severity,
+          duration_remaining: _spread.disease.base_duration, cause: _spread.cause,
+          per_turn_effects: _spread.disease.per_turn_effects, resolution: _spread.disease.resolution,
+          challenge_title: _spread.disease.challenge_title, challenge_effects_text: _spread.disease.challenge_effects_text,
+        }];
+        const _sch = challengeFromDisease(_spread.disease, _spread.cause, ws.turn);
+        ws.challenges = [...(ws.challenges ?? []), _sch];
+        newChallenges.push(_sch);
+      }
+    }
+
+    // ── World events ─────────────────────────────────────────────────────────
     for (const ev of checkWorldEvents(ws)) {
       ws = applyEventEffect(ws, ev);
-      await logEvent({turn:ws.turn, category:ev.category, description:ev.label});
+      await logEvent({ turn: ws.turn, category: ev.category, description: ev.label });
       ws = updateEventIndex(ws, `last_${ev.category}`, ev.label, ws.turn);
+      if (ev.challenge_trigger) {
+        const ch = challengeFromWorldEvent(ev, ws);
+        if (ch) { ws.challenges = [...(ws.challenges ?? []), ch]; newChallenges.push(ch); }
+      }
     }
+
+    // ── NPC events ───────────────────────────────────────────────────────────
+    for (const npcEv of checkNpcEvents(ws)) {
+      ws = applyNpcEventEffect(ws, npcEv);
+      await logEvent({ turn: ws.turn, category: 'npc_event', description: `${npcEv.npc_name}: ${npcEv.label}` });
+      ws = appendSignificantEvent(ws, `Turn ${ws.turn}: ${npcEv.npc_name} ${npcEv.label}`);
+      if (npcEv.creates_player_challenge) {
+        const npc = ws.npcs[npcEv.npc_id];
+        if (npc) {
+          const ch = challengeFromNpcEvent(npcEv, npc, ws.turn);
+          if (ch) { ws.challenges = [...(ws.challenges ?? []), ch]; newChallenges.push(ch); }
+        }
+      }
+    }
+
+    // ── Challenge resolution check ────────────────────────────────────────────
+    for (const ch of (ws.challenges ?? [])) {
+      if (ch.active && !ch.resolved && checkChallengeResolution(ch, ws)) {
+        ch.resolved = true; ch.active = false;
+      }
+    }
+
     ws.consequences = advanceConsequences(ws.consequences);
     if (ws.consequences.length) consequenceUpd = ws.consequences[0];
 
@@ -2167,6 +2311,51 @@ async function processTurn(input) {
     setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
     // Auto-refresh log tab if currently open
     if (document.querySelector('.p-tab[data-p="log"]')?.classList.contains('on')) renderActionLog();
+    // ── Show new challenge cards ──────────────────────────────────────────────
+    if (newChallenges.length) showChallengeQueue(newChallenges);
+    if (hangoverChallengePending) showChallengeQueue([hangoverChallengePending]);
+
+    // ── Narrative state extractor (non-blocking) ──────────────────────────────
+    // Detects when Grok's prose implies state changes (NPC quits job, moves, etc.)
+    if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
+      extractNarrativeStateChanges(prose, WS).then(changes => {
+        if (!changes || !WS) return;
+        let _nsWs = JSON.parse(JSON.stringify(WS));
+        let _nsChanged = false;
+        // Player changes
+        const pc = changes.player_changes ?? {};
+        if (pc.location) { _nsWs.player.location = pc.location; _nsChanged = true; }
+        if (pc.job_lost) { _nsWs.job = null; _nsChanged = true; }
+        if (pc.job_new_employer) {
+          _nsWs.job = { employer: pc.job_new_employer, position: 'Worker', performance_flags: [], days_employed: 0, salary_per_cycle: null, pay_cycle: null, schedule: null };
+          _nsChanged = true;
+        }
+        if (pc.school_quit && _nsWs.school) { _nsWs.school.status = 'dropped_out'; _nsChanged = true; }
+        if (pc.school_enrolled) {
+          _nsWs.school = { name: pc.school_enrolled, status: 'active', grade_level: null, schedule: null, absence_count: 0, days_enrolled: 0 };
+          _nsChanged = true;
+        }
+        // NPC changes
+        for (const nc of (changes.npc_changes ?? [])) {
+          if (!nc.npc_id || !_nsWs.npcs[nc.npc_id]) continue;
+          if (nc.job_lost) { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'quit_job' }); _nsChanged = true; }
+          if (nc.job_new_employer) { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'new_job', details: { employer: nc.job_new_employer } }); _nsChanged = true; }
+          if (nc.school_quit) { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'quit_school' }); _nsChanged = true; }
+          if (nc.school_enrolled) { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'enroll_school', details: { school_name: nc.school_enrolled } }); _nsChanged = true; }
+          if (nc.status && nc.status !== 'null' && nc.status !== 'active') {
+            if (nc.status === 'deceased') { _nsWs.npcs[nc.npc_id].status = 'inactive'; _nsWs.npcs[nc.npc_id].departure_reason = 'deceased'; }
+            else if (nc.status === 'moved_away') { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'move_away' }); }
+            _nsChanged = true;
+          }
+        }
+        if (_nsChanged) {
+          WS = _nsWs;
+          saveWorldState(WS).catch(() => {});
+          renderAll();
+          console.log('[narrative parser] Applied state changes from prose');
+        }
+      }).catch(() => {});
+    }
     // PATH_1 deferred NPC registration — WS already committed, no race condition
     if (_p1ShouldDetectNpc) {
       evaluateDescribedNpc(input).then(nd => {
@@ -2570,6 +2759,139 @@ document.getElementById('console-input').addEventListener('keydown', e => {
 document.getElementById('console-input').addEventListener('input', function() {
   this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 130) + 'px';
 });
+
+// ── CHALLENGE DISPLAY ────────────────────────────────────────────────────────
+let _pendingChallengeQueue = [];
+
+function showChallengeQueue(challenges) {
+  if (!challenges?.length) return;
+  _pendingChallengeQueue.push(...challenges);
+  _drainChallengeQueue();
+}
+
+function _drainChallengeQueue() {
+  if (!_pendingChallengeQueue.length) return;
+  const ch = _pendingChallengeQueue.shift();
+  _showSingleChallenge(ch, () => {
+    setTimeout(_drainChallengeQueue, 300);
+  });
+}
+
+function _showSingleChallenge(ch, onDismiss) {
+  const stack = document.getElementById('challenge-stack');
+  const overlay = document.getElementById('challenge-overlay');
+  if (!stack || !overlay) { onDismiss?.(); return; }
+  overlay.style.display = '';
+  const card = document.createElement('div');
+  card.className = `challenge-card ${ch.severity ?? 'minor'}`;
+  const sIcon = { minor: '⚠', moderate: '⚠', major: '🔴', critical: '🚨' };
+  card.innerHTML = `
+    <div class="challenge-card-hdr">
+      <span style="font-size:14px">${sIcon[ch.severity] ?? '⚠'}</span>
+      <span class="challenge-card-title">${ch.title}</span>
+      <button class="challenge-card-dismiss" title="Dismiss">×</button>
+    </div>
+    <div class="challenge-card-cause">${ch.cause}</div>
+    <div class="challenge-card-effects">${ch.effects_text}</div>
+    <div class="challenge-card-resolution">${ch.resolution_steps}</div>`;
+  card.querySelector('.challenge-card-dismiss').addEventListener('click', () => {
+    card.style.animation = 'none'; card.style.opacity = '0'; card.style.transform = 'translateY(-8px)';
+    card.style.transition = 'opacity .2s, transform .2s';
+    setTimeout(() => {
+      card.remove();
+      if (!stack.children.length) overlay.style.display = 'none';
+      if (WS?.challenges) {
+        const idx = WS.challenges.findIndex(c => c.id === ch.id);
+        if (idx !== -1) { WS.challenges[idx].acknowledged = true; saveWorldState(WS).catch(() => {}); }
+      }
+      onDismiss?.();
+    }, 220);
+  });
+  stack.appendChild(card);
+  // Auto-dismiss minor challenges after 8 seconds
+  if (ch.severity === 'minor') {
+    setTimeout(() => card.querySelector('.challenge-card-dismiss')?.click(), 8000);
+  }
+}
+
+// ── CONSOLE STATE CHANGE PARSER ──────────────────────────────────────────────
+function parseAndApplyConsoleStateChange(response) {
+  const match = response.match(/<STATE_CHANGE>([\s\S]*?)<\/STATE_CHANGE>/);
+  if (!match || !WS) return response.replace(/<STATE_CHANGE>[\s\S]*?<\/STATE_CHANGE>/g, '').trim();
+  const cleanResponse = response.replace(/<STATE_CHANGE>[\s\S]*?<\/STATE_CHANGE>/g, '').trim();
+  try {
+    const cmd = JSON.parse(match[1].trim());
+    let ws = JSON.parse(JSON.stringify(WS));
+    switch (cmd.action) {
+      case 'modify_stat':
+        if (cmd.target === 'player') {
+          if (cmd.changes.cash != null) ws.player.cash = Math.max(0, Number(cmd.changes.cash));
+          if (cmd.changes.location) ws.player.location = cmd.changes.location;
+          if (cmd.changes.stats && typeof cmd.changes.stats === 'object') {
+            for (const [k, v] of Object.entries(cmd.changes.stats)) {
+              if (k in ws.player.stats) ws.player.stats[k] = Math.max(0, Math.min(100, Number(v)));
+            }
+          }
+        }
+        break;
+      case 'update_player':
+        if (cmd.changes.location) ws.player.location = cmd.changes.location;
+        if (cmd.changes.name) ws.player.name = cmd.changes.name;
+        if (cmd.changes.age) ws.player.age = Number(cmd.changes.age);
+        break;
+      case 'update_job':
+        ws.job = { performance_flags: [], days_employed: 0, ...cmd.changes };
+        break;
+      case 'clear_job':
+        ws.job = null;
+        break;
+      case 'update_school':
+        ws.school = { absence_count: 0, days_enrolled: 0, ...cmd.changes };
+        break;
+      case 'clear_school':
+        ws.school = null;
+        break;
+      case 'update_npc': {
+        const npc = ws.npcs[cmd.target];
+        if (npc) {
+          if (cmd.changes.relationship_meter != null) npc.relationship_meter = Math.max(-100, Math.min(100, Number(cmd.changes.relationship_meter)));
+          if (cmd.changes.trust_meter != null) npc.trust_meter = Math.max(-100, Math.min(100, Number(cmd.changes.trust_meter)));
+          if (cmd.changes.status) { npc.status = cmd.changes.status; }
+          if (cmd.changes.note) npc.recent_interactions = [...(npc.recent_interactions ?? []), `[Console: ${cmd.changes.note}]`].slice(-5);
+          if (cmd.changes.traits && typeof cmd.changes.traits === 'object') Object.assign(npc.traits, cmd.changes.traits);
+        }
+        break;
+      }
+      case 'npc_job_change': {
+        const npc = ws.npcs[cmd.target];
+        if (npc) ws.npcs[cmd.target] = updateNpcCareer(npc, cmd.changes);
+        break;
+      }
+      case 'add_challenge': {
+        const newCh = { id: `console_${Date.now()}`, active: true, acknowledged: false, resolved: false, created_turn: ws.turn ?? 0, ...cmd.changes };
+        ws.challenges = [...(ws.challenges ?? []), newCh];
+        showChallengeQueue([newCh]);
+        break;
+      }
+      case 'resolve_challenge': {
+        const prefix = cmd.target ?? '';
+        for (const ch of (ws.challenges ?? [])) {
+          if (ch.id.includes(prefix) || ch.title?.toLowerCase().includes(prefix.toLowerCase())) {
+            ch.resolved = true; ch.active = false;
+          }
+        }
+        break;
+      }
+    }
+    WS = ws;
+    saveWorldState(ws).catch(() => {});
+    renderAll();
+    return cleanResponse + '\n\n✓ *World state updated.*';
+  } catch (e) {
+    console.warn('[console STATE_CHANGE parse]', e.message);
+    return cleanResponse;
+  }
+}
 
 boot();
 </script>

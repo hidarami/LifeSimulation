@@ -29,6 +29,7 @@ export const STATS = {
   arousal:    { min: 0, max: 100, decay: 0.60 },
   social:     { min: 0, max: 100, decay: 0.20 },
   reputation: { min: 0, max: 100, decay: 0.00 },
+  alcohol:    { min: 0, max: 100, decay: 2.50 },
 };
 
 // ─── STAT FORMULAS ────────────────────────────────────────────────────────────
@@ -205,6 +206,10 @@ export function applyCascadingEffects(stats) {
   // High arousal → mood, social (can be distracting)
   if (s.arousal >= 80)       { c.mood = (c.mood ?? 0) - 3; c.social = (c.social ?? 0) - 5; }
   else if (s.arousal >= 60)  { c.mood = (c.mood ?? 0) - 1; c.social = (c.social ?? 0) - 2; }
+  // Alcohol → tiered cascade effects
+  if ((s.alcohol ?? 0) >= 80) { c.health = (c.health ?? 0) - 3; c.mood = (c.mood ?? 0) - 10; }
+  else if ((s.alcohol ?? 0) >= 45) { c.hygiene = (c.hygiene ?? 0) - 1; c.mood = (c.mood ?? 0) + 3; }
+  else if ((s.alcohol ?? 0) >= 15) { c.social = (c.social ?? 0) + 4; c.mood = (c.mood ?? 0) + 6; }
 
   // POSITIVE CASCADES (recovery mechanics)
   // High mood → social, energy

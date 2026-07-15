@@ -350,3 +350,56 @@ export function renderNarration(prose, anchorEl, feed, turn) {
   wrapper.appendChild(proseEl);
   feed.appendChild(wrapper);
 }
+
+// ─── CHALLENGES PANEL ─────────────────────────────────────────────────────────
+export function renderChallengesPanel(challenges, container) {
+  container.innerHTML = '';
+  const active = (challenges ?? []).filter(c => c.active && !c.resolved);
+  const resolved = (challenges ?? []).filter(c => c.resolved);
+  if (!active.length && !resolved.length) {
+    container.innerHTML = '<p class="empty">No active challenges.</p>';
+    return;
+  }
+  if (active.length) {
+    const hdr = document.createElement('div');
+    hdr.className = 'psub'; hdr.textContent = `Active (${active.length})`;
+    container.appendChild(hdr);
+    for (const ch of active) container.appendChild(buildChallengeRow(ch, false));
+  }
+  if (resolved.length) {
+    const hdr = document.createElement('div');
+    hdr.className = 'psub'; hdr.style.marginTop = '14px'; hdr.textContent = `Resolved (${resolved.length})`;
+    container.appendChild(hdr);
+    for (const ch of resolved.slice(-5)) container.appendChild(buildChallengeRow(ch, true));
+  }
+}
+
+function buildChallengeRow(ch, isResolved) {
+  const el = document.createElement('div');
+  el.className = 'challenge-row';
+  el.dataset.open = 'false';
+  const severityColor = { minor: 'var(--low)', moderate: '#e67e22', major: 'var(--neg)', critical: '#c0392b' };
+  const head = document.createElement('div');
+  head.className = 'challenge-row-head';
+  head.innerHTML = `
+    <span class="challenge-row-dot" style="background:${severityColor[ch.severity] ?? 'var(--dim)'}"></span>
+    <span class="challenge-row-title" style="${isResolved ? 'opacity:.5;text-decoration:line-through' : ''}">${ch.title}</span>
+    <span style="font-size:9px;color:var(--dim);flex-shrink:0">${isResolved ? '✓' : ch.severity}</span>
+    <span class="challenge-expand-icon" style="font-size:9px;color:var(--dim);flex-shrink:0">▶</span>`;
+  const body = document.createElement('div');
+  body.className = 'challenge-row-body';
+  body.style.display = 'none';
+  body.innerHTML = `
+    <div style="font-size:11px;color:var(--dim);margin-bottom:5px;line-height:1.55">${ch.cause}</div>
+    <div style="font-size:11px;color:var(--low);margin-bottom:5px;line-height:1.55">${ch.effects_text}</div>
+    <div style="font-size:11px;color:var(--txt);opacity:.7;line-height:1.55;padding-top:5px;border-top:1px solid var(--bdr)">${ch.resolution_steps}</div>`;
+  head.addEventListener('click', () => {
+    const open = el.dataset.open === 'true';
+    el.dataset.open = open ? 'false' : 'true';
+    body.style.display = open ? 'none' : 'block';
+    head.querySelector('.challenge-expand-icon').textContent = open ? '▶' : '▼';
+  });
+  el.appendChild(head);
+  el.appendChild(body);
+  return el;
+}
