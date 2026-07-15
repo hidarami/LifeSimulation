@@ -32,8 +32,6 @@ function getKey(name) {
 }
 
 // ─── GROK ─────────────────────────────────────────────────────────────────────
-const GROK_URL   = 'https://api.x.ai/v1/chat/completions';
-const GROK_MODEL = 'grok-4.20-non-reasoning';
 let _convId = null;
 let _conversationHistory = []; // Store last 5 turns for narrative continuity
 export function resetConvId() { _convId = null; _conversationHistory = []; }
@@ -187,7 +185,7 @@ export async function callGeminiAutopilot(sanitizedState, hours, activityLabel) 
       const useModel = model || cfg?.default_helper_model || null;
       const text = await dispatchChat(provider, key, useModel, msgs, 150, 12000);
       if (text && text.length > 20) return text;
-    } catch {}
+    } catch (e) { window._devlog?.error?.('dispatch fallback failed', e); }
   }
   return `${hrLabel} passed.`;
 }
@@ -215,7 +213,7 @@ export async function compressSessionContext(last10Events) {
         const text = (await res.json()).choices?.[0]?.message?.content?.trim();
         if (text) return text;
       }
-    } catch {}
+    } catch (e) { window._devlog?.error?.('dispatch fallback failed', e); }
   }
 
   const key = localStorage.getItem('GEMINI_API_KEY');

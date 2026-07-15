@@ -30,7 +30,7 @@ db.version(4).stores({
 // ─── INITIAL WORLD STATE ──────────────────────────────────────────────────────
 export function createInitialWorldState(playerName, startDate) {
   return {
-    version: 2,
+    version: 4,
     turn:    0,
     sim_time: startDate ?? new Date().toISOString(),
 
@@ -101,7 +101,8 @@ export function migrateSaveState(state) {
     last_sexual_encounter: null, last_new_relationship: null,
     current_relationship: null, current_job_summary: null,
   };
-  // Player fields
+  // Player fields  
+  if (!state.player)                              state.player                   = {};  
   if (!Array.isArray(state.player.diseases))      state.player.diseases          = [];
   if (!Array.isArray(state.player.possessions))   state.player.possessions       = [];
   if (!Array.isArray(state.player.irreversible))  state.player.irreversible      = [];
