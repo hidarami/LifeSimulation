@@ -14,6 +14,13 @@ import {
   getNarratorFallbacks, PROVIDER_ENDPOINTS, getProviderDisplayName,
 } from './providers.js';
 
+// ─── BACKGROUND MODEL CONSTANTS ──────────────────────────────────────────────
+// Single place to update when providers rename or retire models.
+// Narrator / classifier use the slot system; these are for lightweight background tasks only.
+const BG_GROQ_FAST   = 'llama-3.1-8b-instant';     // compression, flag checks, NPC extraction
+const BG_GROQ_SMART  = 'llama-3.3-70b-versatile';  // console chat, NPC trait depth, enrichment
+const BG_GEMINI_FAST = 'gemini-2.0-flash';          // Gemini JSON tasks and autopilot
+
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 // Fix #4: true means fallback is only triggered on genuine outages
 const FALLBACK_ON_OUTAGE_ONLY = true;
@@ -116,7 +123,7 @@ async function _callNarratorFallback(systemPrompt, userMessage) {
 }
 
 // ─── GEMINI ───────────────────────────────────────────────────────────────────
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${BG_GEMINI_FAST}:generateContent`;
 const GROQ_URL   = 'https://api.groq.com/openai/v1/chat/completions';
 
 async function geminiRaw(prompt, maxTokens = 400) {
@@ -548,6 +555,59 @@ If significance is not "significant", return found:false rather than creating a 
 // ─── WORLD ENRICHMENT ─────────────────────────────────────────────────────────
 // Always called during init. Generates creative world details even from empty lorebook.
 
+// ── Internal helpers for post-parse validation ────────────────────────────────
+function _wc(str) { return str ? String(str).trim().split(/\s+/).filter(Boolean).length : 0; }
+
+// Ensures required display fields are never left blank regardless of which model
+// generated the enrichment. Applied to EVERY result before returning — no retry call.
+function _backfillEnrichment(parsed, ws) {
+  if (!parsed) return parsed;
+
+  // setting_description: 3-sentence / ~25-word minimum
+  if (!parsed.setting_description || _wc(parsed.setting_description) < 25) {
+    const loc = (ws.player?.location ?? 'a modest home').replace(/_/g, ' ');
+    parsed.setting_description =
+      `The home at ${loc} is modest but functional, typical of a Filipino lower-middle-class household. ` +
+      `Worn furniture fills the main living area alongside a small television and basic kitchen equipment. ` +
+      `Sounds from the surrounding neighbourhood — passing jeepneys, the occasional bark of a dog — filter in through thin concrete walls.`;
+  }
+
+  // job_enrichment: description (≥2 sentences / ~12 words), schedule, and earnings required
+  if (parsed.job_enrichment && typeof parsed.job_enrichment === 'object') {
+    const je = parsed.job_enrichment;
+    if (!je.description || _wc(String(je.description)) < 12) {
+      je.description =
+        `The role involves carrying out regular daily tasks appropriate to the position and employer. ` +
+        `Work follows a structured schedule and is performed on-site according to standard expectations.`;
+    }
+    if (!je.schedule || String(je.schedule).trim() === '' || je.schedule === 'null') {
+      je.schedule = 'Mon–Fri 8:00 AM – 5:00 PM';
+    }
+    if (!je.earnings || String(je.earnings).trim() === '' || je.earnings === 'null') {
+      je.earnings = 'Variable earnings';
+    }
+  }
+
+  // npc_descriptions: each bio must be at least 2 short sentences (~15 words)
+  if (parsed.npc_descriptions && typeof parsed.npc_descriptions === 'object') {
+    for (const [key, bio] of Object.entries(parsed.npc_descriptions)) {
+      if (!bio || _wc(String(bio)) < 15) {
+        const _npcMatch = Object.values(ws.npcs ?? {}).find(n => {
+          if (!n.name) return false;
+          return n.name.toLowerCase().split(/\s+/)[0] === key.toLowerCase().split('_')[0] || n.id === key;
+        });
+        const _relLabel = (_npcMatch?.relationship_type ?? 'acquaintance').replace(/_/g, ' ');
+        const _nameStr  = _npcMatch?.name ?? key;
+        parsed.npc_descriptions[key] =
+          `${_nameStr} is a ${_relLabel} in the character's life, familiar from shared routines and close daily proximity. ` +
+          `They move through their shared spaces with a quiet ease that comes from long familiarity, their presence a reliable constant.`;
+      }
+    }
+  }
+
+  return parsed;
+}
+
 export async function enrichWorldDetails(lorebook, ws) {
   const _helper = getHelperSlot();
   if (!_helper.key || !_helper.provider) return null;
@@ -583,7 +643,7 @@ GENERATION RULES — read carefully:
 
 LOCATION: Always generate a specific Philippine address. If lorebook names a place, expand it with street/sitio-level detail. If no place mentioned, invent one plausibly matching the character's name and cultural background.
 
-SETTING_DESCRIPTION: Always describe the home vividly. Match the economic class implied by the lorebook (or default to modest lower-middle class). Never return null or empty string.
+SETTING_DESCRIPTION: Always describe the home vividly. MINIMUM 3 full sentences, each covering a different dimension: (1) physical layout and key furniture, (2) economic-class markers and visible condition, (3) sensory atmosphere — sounds, smells, or quality of light. This 3-sentence minimum is MANDATORY for all models including fast or small ones — a single sentence is not acceptable. Match the economic class implied by the lorebook (or default to modest lower-middle class). Never return null or empty string.
 
 SCHOOL — decide based on age and lorebook:
   - Generate IF: character is age 14–22 AND lorebook does NOT say dropped out / no school / graduated / finished school
@@ -592,7 +652,7 @@ SCHOOL — decide based on age and lorebook:
   - Schema: { "name": "realistic Philippine school name", "grade_level": "e.g. Grade 12 - HUMSS Strand OR 1st Year - BS Criminology", "schedule": "Mon-Fri 7:00 AM – 4:30 PM", "status": "active" }
 
 JOB_ENRICHMENT — reason about it:
-  - When JOB ALREADY PARSED = YES: return enrichment details to fill missing gaps — { "platform_or_employer": "...", "position": "specific job title", "description": "day-to-day work in 1-2 sentences", "schedule": "work schedule", "earnings": "e.g. ₱550/day", "days_active": realistic_number }
+  - When JOB ALREADY PARSED = YES: return enrichment details to fill missing gaps — { "platform_or_employer": "...", "position": "specific job title", "description": "REQUIRED — exactly 2 full sentences describing daily tasks and work environment; never omit or leave blank", "schedule": "REQUIRED — e.g. Mon–Fri 8:00 AM – 5:00 PM; never null or empty string", "earnings": "REQUIRED — e.g. ₱550/day or ₱12,000/month; never null or empty string", "days_active": realistic_number }
   - When JOB ALREADY PARSED = NO AND lorebook says 'no job/unemployed/not working': return null
   - When JOB ALREADY PARSED = NO AND character is full-time student (school generated above or from lorebook): REASON — does this student have a small side income? (part-time, tutoring, online selling, sari-sari store help, gigs). For most Filipino students age 16-19, maybe a small gig or none. For age 20-22, more likely a part-time job. Use judgment. Generate a small job OR return null if genuinely student-only.
   - When JOB ALREADY PARSED = NO AND character is NOT a full-time student AND lorebook doesn't say unemployed: Generate a plausible entry-level or informal job matching their age and setting.
@@ -609,6 +669,7 @@ NPC_DESCRIPTIONS — REQUIRED if NPCs exist, never empty:
   - Value: 2-3 sentences covering: (1) physical appearance, (2) a specific habit or mannerism, (3) their specific role in the character's life
   - Add concrete detail not in the lorebook — physical features, how they speak, what they always do
   - Never restate the lorebook verbatim
+  - MINIMUM 2 full sentences per NPC — mandatory for ALL models including fast or small ones; a one-line label or single fragment is not acceptable
 
 NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are listed:
   - Generate a PERSONALIZED weekly schedule for EVERY NPC in KNOWN NPCs
@@ -627,8 +688,15 @@ NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are liste
   - Weekend routines should differ: no school/work blocks unless role requires (e.g. retail, construction sometimes Sat)
   - interruptible: false for sleeping, morning_prep, work, school, commuting. true for leisure, errands, winding_down, studying, store_duty`;
 
-  // Helper slot first (Groq by default), classifier slot as fallback — both via dispatchJSON.
-  const slots = [getHelperSlot(), getClassifierSlot()];
+  // For enrichment: try the smarter Groq model (70b) first for richer text, then fall
+  // through to Gemini (classifier slot). The 8b helper slot is listed so _seenProviders
+  // skips it if 70b already ran on Groq, avoiding a redundant same-provider call.
+  const _enrichGroqKey = typeof localStorage !== 'undefined' ? localStorage.getItem('GROQ_API_KEY')?.trim() : null;
+  const slots = [
+    _enrichGroqKey ? { key: _enrichGroqKey, provider: 'groq', model: BG_GROQ_SMART } : null,
+    getHelperSlot(),
+    getClassifierSlot(),
+  ].filter(Boolean);
   const _seenProviders = new Set();
   for (const { key, provider, model } of slots) {
     if (!key || !provider || _seenProviders.has(provider)) continue;
@@ -636,8 +704,9 @@ NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are liste
     try {
       const parsed = await dispatchJSON(provider, key, model, prompt, 2000);
       if (parsed && (parsed.location_name || parsed.setting_description || parsed.starting_possessions?.length)) {
-        console.log(`[enrich] ${provider} OK — loc: ${parsed.location_name?.slice(0,40)} | poss: ${parsed.starting_possessions?.length} | school: ${parsed.school?.name}`);
-        return parsed;
+        const _filled = _backfillEnrichment(parsed, ws);
+        console.log(`[enrich] ${provider} OK — loc: ${_filled.location_name?.slice(0,40)} | poss: ${_filled.starting_possessions?.length} | school: ${_filled.school?.name}`);
+        return _filled;
       }
     } catch (e) { console.warn(`[enrich] ${provider} failed:`, e.message); }
   }
@@ -755,7 +824,7 @@ export async function callMetaConsole(messages, gameState) {
 
   // Helper slot (Groq) — fast and capable for structured tasks
   const helperSlot = getHelperSlot();
-  const HELPER_CHAT_MODELS = { groq: 'llama-3.3-70b-versatile', openai: 'gpt-4o-mini', gemini: 'gemini-2.0-flash' };
+  const HELPER_CHAT_MODELS = { groq: BG_GROQ_SMART, openai: 'gpt-4o-mini', gemini: BG_GEMINI_FAST };
   if (helperSlot.key && helperSlot.provider && helperSlot.provider !== narratorSlot.provider) {
     const model = helperSlot.model || HELPER_CHAT_MODELS[helperSlot.provider] || null;
     for (const m of model ? [model, HELPER_CHAT_MODELS[helperSlot.provider]].filter(Boolean) : [HELPER_CHAT_MODELS[helperSlot.provider]]) {
