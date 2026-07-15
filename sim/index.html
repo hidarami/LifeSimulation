@@ -1437,9 +1437,10 @@ async function startNewGame() {
   const lorebook = document.getElementById('w-lorebook').value.trim();
 
   if (!confirm(`Start new game as "${name}"? This creates a new save slot.`)) return;
+  if (initInProgress) return;
 
-  showWizardStep(3);
   initInProgress = true;
+  showWizardStep(3);
   document.getElementById('wizard-footer').style.display = 'none';
   if (lorebook) localStorage.setItem('LOREBOOK', lorebook);
 
@@ -1682,8 +1683,9 @@ function autopilotHours(i) {
   return 1;
 }
 function autopilotDeltas(i, h) {
-  if (/sleep|nap/i.test(i)) return { energy: Math.min(h*8,80), mood: Math.min(h*3,30), hunger: h*0.3 };
-  return { energy: -(h*4), hunger: h*0.5 };
+  // hunger is now handled uniformly by applyDecay — no double-count
+  if (/sleep|nap/i.test(i)) return { energy: Math.min(h*8,80), mood: Math.min(h*3,30) };
+  return { energy: -(h*4) };
 }
 
 async function processTurn(input) {
@@ -1696,6 +1698,7 @@ async function processTurn(input) {
     let riskResult={roll:100,severity:null,event:null}, consequenceUpd=null;
     let actionDesc = input;
     let _mentionedNpc = null; // NPC explicitly named in player input — set in PATH_1 block
+    let _p1ShouldDetectNpc = false; // deferred flag — registration runs after WS commit
     const route = routeInput(input);
 
     if (route === ROUTE.PATH_1_EXPLICIT) {
@@ -1973,6 +1976,25 @@ async function processTurn(input) {
     setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
     // Auto-refresh log tab if currently open
     if (document.querySelector('.p-tab[data-p="log"]')?.classList.contains('on')) renderActionLog();
+    // PATH_1 deferred NPC registration — WS already committed, no race condition
+    if (_p1ShouldDetectNpc) {
+      evaluateDescribedNpc(input).then(nd => {
+        const _p1NpcNameExists = Object.values(WS?.npcs ?? {}).some(n =>
+          n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim()
+        );
+        const _p1NH = ['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf'];
+        const _p1Human = nd?.name && /^[A-Z]/.test(nd.name) && nd.name.split(/\s+/).length <= 3 && nd.name.length <= 28 && !_p1NH.some(w => nd.name.toLowerCase().includes(w));
+        if (nd?.id && !WS?.npcs?.[nd.id] && !_p1NpcNameExists && _p1Human && nd.significance !== 'none') {
+          const newNpc = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} });
+          newNpc.relationship_meter = nd.relationship_meter ?? 20;
+          newNpc.trust_meter = nd.trust_meter ?? 10;
+          newNpc.significance = 1;
+          WS.npcs[nd.id] = newNpc;
+          saveWorldState(WS).catch(() => {});
+          renderAll();
+        }
+      }).catch(() => {});
+    }
     // Context-aware NPC flag cleanup — non-blocking, runs after display
     if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
       const _cfNpcs = Object.entries(WS.npcs).filter(([, n]) => n.active_flags?.length > 0);
@@ -2005,7 +2027,7 @@ async function processTurn(input) {
     setStatus(`Error: ${err.message}`, 'err');
     console.error('[processTurn]', err);
   } finally {
-    if (WS?.player?.stats?.health > 0) setProcessing(false);
+    if (!WS || WS.player?.stats?.health > 0) setProcessing(false);
   }
 }
 

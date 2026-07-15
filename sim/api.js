@@ -103,6 +103,7 @@ export async function callGrok(turnBrief, mode) {
     // Add this turn to conversation history for continuity
     _conversationHistory.push({ role: 'user', content: usr });
     _conversationHistory.push({ role: 'assistant', content: prose });
+    if (_conversationHistory.length > 20) _conversationHistory = _conversationHistory.slice(-20);
 
     return prose;
   } catch (err) {

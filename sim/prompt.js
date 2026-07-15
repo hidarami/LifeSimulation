@@ -268,6 +268,7 @@ Rules:
   * Extended activities (work shift, long trip, studying session, cooking full meal): 2.0–4.0
   * CRITICAL: "Use bathroom/pee" = 0.08–0.10. "Check on someone in next room" = 0.15–0.25. Any brief reaction or check = NEVER exceed 0.5. Default when uncertain = 0.25. Never exceed 4.0.
 - stat_deltas: include only stats that actually change
+- HUNGER DIRECTION: hunger=0 means COMPLETELY FULL, hunger=100 means STARVING. Eating or drinking = NEGATIVE hunger delta (full meal: hunger: -30; snack: hunger: -12; drink: hunger: -8). Skip hunger in deltas for non-eating actions — applyDecay handles passive hunger increase automatically.
 - CONTEXT-AWARE STAT SPIKES: Stat changes must reflect emotional and situational severity:
   * Routine activities: ±1–5
   * Minor social interactions: ±2–8
