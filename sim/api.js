@@ -105,8 +105,10 @@ export async function callGrok(turnBrief, mode) {
     _conversationHistory.push({ role: 'assistant', content: prose });
     if (_conversationHistory.length > 20) _conversationHistory = _conversationHistory.slice(-20);
 
+    window._devlog?.api(`Grok narration OK`, { model: GROK_MODEL, chars: prose.length, refusal: _refused });
     return prose;
   } catch (err) {
+    window._devlog?.error('callGrok error', { message: err.message });
     const isOutage = !navigator.onLine
       || err.message?.includes('502')
       || err.message?.includes('503')
@@ -166,14 +168,25 @@ async function geminiRaw(prompt, maxTokens = 400) {
 }
 
 export async function classifyAction(input, sanitizedState) {
-  return geminiRaw(buildGeminiClassifyPrompt(input, sanitizedState)).catch(() => ({
-    action_type: 'unknown', time_cost_hours: 0.5, stat_deltas: {}, risk_class: 'none',
-    location_change: null, npc_ids_involved: [],
-  }));
+  try {
+    const result = await geminiRaw(buildGeminiClassifyPrompt(input, sanitizedState));
+    window._devlog?.api('Gemini classify', { action_type: result.action_type, time_cost: result.time_cost_hours, risk: result.risk_class, deltas: result.stat_deltas });
+    return result;
+  } catch(e) {
+    window._devlog?.error('Gemini classify failed — using fallback', { error: e.message });
+    return { action_type: 'unknown', time_cost_hours: 0.5, stat_deltas: {}, risk_class: 'none', location_change: null, npc_ids_involved: [] };
+  }
 }
 
 export async function evaluateNpcReaction(npcContext, actionDescription, playerStats) {
-  return geminiRaw(buildGeminiNpcPrompt(npcContext, actionDescription, playerStats)).catch(() => null);
+  try {
+    const r = await geminiRaw(buildGeminiNpcPrompt(npcContext, actionDescription, playerStats));
+    window._devlog?.npc(`${npcContext.name} NPC eval`, { rel_delta: r.relationship_delta, trust_delta: r.trust_delta, summary: r.reaction_summary, flags: r.flags_to_add });
+    return r;
+  } catch(e) {
+    window._devlog?.error(`NPC eval failed for ${npcContext?.name}`, { error: e.message });
+    return null;
+  }
 }
 
 // Fix #3: autopilot narration — Gemini with strict style guide; prose mode (no JSON)
@@ -872,10 +885,92 @@ const GROQ_CONSOLE_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile
 
 export async function callMetaConsole(messages, gameState) {
   const systemPrompt = buildMetaConsolePrompt(gameState);
+  window._devlog?.patch('Console API call', { models: 'grok→groq→gemini', msgs: messages.length });
 
+  // Try Grok FIRST — far better instruction-following for SIM_PATCH format
+  const grokKey = localStorage.getItem('GROK_API_KEY');
+  if (grokKey) {
+    try {
+      const res = await fetch(GROK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${grokKey}` },
+        body: JSON.stringify({
+          model: GROK_MODEL,
+          max_tokens: 800,
+          messages: [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)],
+          stream: false,
+        }),
+      });
+      if (res.ok) {
+        const text = (await res.json()).choices?.[0]?.message?.content?.trim();
+        if (text && text.length > 20) {
+          window._devlog?.patch('Console: Grok responded', { chars: text.length, hasPatch: /<SIM_PATCH>/i.test(text) });
+          return text;
+        }
+      } else {
+        window._devlog?.error('Console: Grok HTTP error', { status: res.status });
+      }
+    } catch (e) {
+      window._devlog?.error('Console: Grok exception', { error: e.message });
+    }
+  }
+
+  // Groq fallback
   const groqKey = localStorage.getItem('GROQ_API_KEY');
   if (groqKey) {
     for (const model of GROQ_CONSOLE_MODELS) {
+      try {
+        const res = await fetch(GROQ_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)],
+            temperature: 0.65,
+            max_tokens: 800,
+          }),
+        });
+        if (res.ok) {
+          const text = (await res.json()).choices?.[0]?.message?.content?.trim();
+          if (text) {
+            window._devlog?.patch(`Console: Groq(${model}) responded`, { chars: text.length, hasPatch: /<SIM_PATCH>/i.test(text) });
+            return text;
+          }
+        }
+      } catch (e) {
+        window._devlog?.error(`Console: Groq(${model}) failed`, { error: e.message });
+      }
+    }
+  }
+
+  // Gemini last resort
+  const gemKey = localStorage.getItem('GEMINI_API_KEY');
+  if (gemKey) {
+    try {
+      const conversation = messages.slice(-10).map(m => `${m.role === 'user' ? 'Player' : 'Assistant'}: ${m.content}`).join('\n\n');
+      const res = await fetch(`${GEMINI_URL}?key=${gemKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\n${conversation}\n\nAssistant:` }] }],
+          generationConfig: { temperature: 0.65, maxOutputTokens: 800 },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+        if (text) {
+          window._devlog?.patch('Console: Gemini responded', { chars: text.length });
+          return text;
+        }
+      }
+    } catch (e) {
+      window._devlog?.error('Console: Gemini failed', { error: e.message });
+    }
+  }
+
+  throw new Error('No API available for console. Add a Grok, Groq, or Gemini key in Settings.');
+}
       try {
         const res = await fetch(GROQ_URL, {
           method: 'POST',

@@ -435,7 +435,7 @@ export function buildMetaConsolePrompt(gameState) {
     ws.job ? `Job: ${ws.job.position ?? 'Worker'} at ${ws.job.employer ?? 'employer'}, day ${ws.job.days_employed ?? 0}` : 'Unemployed',
     ws.school?.name ? `School: ${ws.school.name} (${ws.school.grade_level ?? ''}) — ${ws.school.status ?? 'active'}` : null,
     Object.values(ws.npcs ?? {}).filter(n => n.status === 'active').length
-      ? `NPCs: ${Object.values(ws.npcs).filter(n => n.status === 'active').map(n => `${n.name} (rel:${n.relationship_meter}, trust:${n.trust_meter}, flags:[${(n.active_flags ?? []).join(',')}])`).join('; ')}`
+      ? `NPCs (use the exact [id:xxx] in patches):\n${Object.values(ws.npcs).filter(n => n.status === 'active').map(n => `  ${n.name} [id:${n.id}] rel:${n.relationship_meter} trust:${n.trust_meter}${n.active_flags?.length?' flags:['+n.active_flags.slice(0,3).join(',')+']':''}`).join('\n')}`
       : 'No active NPCs',
     ws.consequences?.length ? `Active consequences: ${ws.consequences.map(c => `${c.type}(${c.duration}t)`).join(', ')}` : null,
     ws.player?.diseases?.length ? `Active diseases: ${ws.player.diseases.map(d => `${d.name}(${d.duration_remaining}t)`).join(', ')}` : null,
@@ -470,10 +470,20 @@ ${stateBlock}
 Speak plainly and helpfully. Be direct. You can answer anything, not just game questions.
 
 APPLYING CHANGES — when the player asks you to modify the world and confirms it:
-1. Explain what you're changing in 1-3 sentences.
-2. Append ONE <SIM_PATCH> block at the very end. Never output it for hypothetical examples or questions.
+1. Explain what you're changing in 1-2 sentences.
+2. IMMEDIATELY output a <SIM_PATCH> block. This is the ONLY mechanism by which changes take effect — the game engine reads the JSON, not your prose. If you do not output the block, the change did NOT happen regardless of what you say.
+3. Include ONLY fields that are actually changing — omit everything else.
+4. NPC keys MUST be the exact [id:xxx] shown in CURRENT GAME STATE above — never use display names.
+5. NEVER output SIM_PATCH for questions, hypotheticals, or when just explaining something.
 
-PATCH FORMAT (include ONLY fields actually changing — omit null/empty):
+MINIMAL EXAMPLES (only include what changes):
+- Add cash:         <SIM_PATCH>{"player_updates":{"cash":5500}}</SIM_PATCH>
+- Set NPC rel:      <SIM_PATCH>{"npc_updates":{"mark_santos":{"relationship_meter":60}}}</SIM_PATCH>
+- Remove job:       <SIM_PATCH>{"job_update":null}</SIM_PATCH>
+- Change location:  <SIM_PATCH>{"player_updates":{"location":"mall"}}</SIM_PATCH>
+- Set a stat:       <SIM_PATCH>{"player_updates":{"stats":{"mood":80}}}</SIM_PATCH>
+
+PATCH FORMAT (include ONLY fields actually changing — omit everything else):
 <SIM_PATCH>
 {"npc_updates":{"EXACT_NPC_ID":{"schedule":{"weekday_routine":[{"start_hour":0,"end_hour":6,"task":"sleeping","interruptible":false,"location":"home"}],"weekend_routine":[...]},"relationship_meter":null,"trust_meter":null,"traits":{},"active_flags":[],"bio":null,"npc_class":null,"relationship_type":null}},"player_updates":{"cash":null,"location":null,"stats":{}},"job_update":null,"school_update":null,"setting_description":null,"add_npcs":[],"remove_npcs":[],"add_interruptions":[{"npc_id":"string","interruption":{"start":"ISO_datetime","end":"ISO_datetime","task":"string","interruptible":false,"available":true,"location":"outside","note":"string"}}]}
 </SIM_PATCH>

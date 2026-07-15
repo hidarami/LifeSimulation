@@ -442,6 +442,79 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .challenge-row-title{flex:1;font-size:12px;color:var(--txt)}
 .challenge-row-body{padding:4px 0 10px 14px}
 
+/* ── DEV CONSOLE ─────────────────────────────────────────────────────────── */
+#panel-devcon{
+  display:none;position:fixed;inset:0;z-index:145;
+  flex-direction:column;font-family:'IBM Plex Mono','Courier New',monospace;
+  background:#060606;
+}
+#panel-devcon.open{display:flex}
+.devcon-hdr{
+  display:flex;align-items:center;gap:8px;flex-shrink:0;
+  padding:9px 14px;border-bottom:1px solid #1a1a1a;background:#0d0d0d;
+}
+.devcon-title{font-size:11px;font-weight:700;letter-spacing:.12em;color:#27ae60;flex-shrink:0}
+.devcon-filters{display:flex;gap:3px;flex-wrap:wrap;flex:1;margin:0 6px}
+.devcon-filter{
+  font-size:9px;padding:2px 6px;border-radius:3px;cursor:pointer;
+  border:1px solid #2a2a2a;background:transparent;color:#555;
+  font-family:inherit;transition:all .12s;
+}
+.devcon-filter.on{color:#fff}
+.devcon-filter[data-cat="ALL"].on{background:#333;border-color:#555}
+.devcon-filter[data-cat="ERROR"].on{background:#922b21;border-color:#c0392b}
+.devcon-filter[data-cat="API"].on{background:#1a5276;border-color:#2980b9}
+.devcon-filter[data-cat="ROUTE"].on{background:#784212;border-color:#d35400}
+.devcon-filter[data-cat="TURN"].on{background:#6c3483;border-color:#8e44ad}
+.devcon-filter[data-cat="NPC"].on{background:#784212;border-color:#e67e22}
+.devcon-filter[data-cat="STAT"].on{background:#2e4057;border-color:#616a6b}
+.devcon-filter[data-cat="PATCH"].on{background:#0e6655;border-color:#1abc9c}
+.devcon-filter[data-cat="SYSTEM"].on{background:#2e4057;border-color:#5d6d7e}
+.devcon-actions{display:flex;gap:5px;flex-shrink:0}
+.devcon-btn{
+  font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;
+  border:1px solid #2a2a2a;background:transparent;color:#555;
+  font-family:inherit;white-space:nowrap;transition:color .12s,border-color .12s;
+}
+.devcon-btn:hover{color:#aaa;border-color:#555}
+#devcon-feed{
+  flex:1;overflow-y:auto;padding:6px 8px;
+  display:flex;flex-direction:column;gap:1px;
+}
+.devcon-entry{
+  display:flex;align-items:flex-start;gap:6px;padding:2px 3px;border-radius:2px;
+  font-size:11px;line-height:1.55;cursor:pointer;transition:background .1s;
+}
+.devcon-entry:hover{background:rgba(255,255,255,0.03)}
+.devcon-entry.expanded .devcon-data{display:block}
+.devcon-ts{color:#2a2a2a;width:50px;flex-shrink:0;font-size:10px;padding-top:1px}
+.devcon-cat{
+  font-size:9px;font-weight:700;width:46px;flex-shrink:0;
+  padding-top:1px;text-align:right;letter-spacing:.04em;
+}
+.devcon-cat[data-cat="ERROR"]{color:#c0392b}
+.devcon-cat[data-cat="API"]{color:#2980b9}
+.devcon-cat[data-cat="ROUTE"]{color:#d35400}
+.devcon-cat[data-cat="TURN"]{color:#8e44ad}
+.devcon-cat[data-cat="NPC"]{color:#d68910}
+.devcon-cat[data-cat="STAT"]{color:#566573}
+.devcon-cat[data-cat="PATCH"]{color:#1abc9c}
+.devcon-cat[data-cat="SYSTEM"]{color:#424949}
+.devcon-msg{flex:1;color:#7f7f7f;word-break:break-word}
+.devcon-data{
+  display:none;margin:3px 0 4px 96px;padding:5px 7px;
+  background:#0a0a0a;border:1px solid #1a1a1a;border-radius:2px;
+  font-size:10px;color:#5a5a5a;white-space:pre-wrap;word-break:break-all;
+  max-height:160px;overflow-y:auto;width:calc(100% - 100px);
+}
+.devcon-footer{
+  display:flex;align-items:center;gap:8px;padding:5px 12px;
+  border-top:1px solid #1a1a1a;background:#0d0d0d;flex-shrink:0;
+}
+#devcon-count{font-size:10px;color:#333}
+.devcon-as-row{display:flex;align-items:center;gap:4px;font-size:10px;color:#333;cursor:pointer;margin-left:auto}
+.devcon-as-row input{accent-color:#27ae60;cursor:pointer}
+
 /* ── SCROLLBAR ───────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar{width:3px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -620,6 +693,36 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 #console-submit:active{transform:scale(.95)}
 #console-submit:disabled{opacity:.35;cursor:not-allowed;transform:none}
 </style>
+
+</style>
+<script>
+// ── DEV LOG SYSTEM — available to all modules via window._devlog ──────────────
+window._devlog = (function(){
+  const MAX = 1000, _e = [], _l = [];
+  let _c = 0;
+  const COLORS = { ERROR:'color:#e74c3c;font-weight:bold', API:'color:#5dade2',
+    ROUTE:'color:#f39c12;font-weight:bold', TURN:'color:#a569bd', NPC:'color:#e67e22',
+    STAT:'color:#808b96', PATCH:'color:#1abc9c;font-weight:bold', SYSTEM:'color:#717d7e' };
+  function log(cat, msg, data){
+    const entry = {id:++_c, ts:Date.now(), cat, msg, data:data??null};
+    _e.push(entry);
+    if(_e.length>MAX)_e.shift();
+    _l.forEach(fn=>{try{fn(entry);}catch{}});
+    console.log('%c['+cat+']', COLORS[cat]??'', msg, data!==null?data:'');
+  }
+  return {
+    error: (m,d)=>log('ERROR', m,d), api:   (m,d)=>log('API',   m,d),
+    route: (m,d)=>log('ROUTE', m,d), turn:  (m,d)=>log('TURN',  m,d),
+    npc:   (m,d)=>log('NPC',   m,d), stat:  (m,d)=>log('STAT',  m,d),
+    patch: (m,d)=>log('PATCH', m,d), system:(m,d)=>log('SYSTEM',m,d),
+    log,
+    get entries(){ return [..._e]; },
+    on(fn){ _l.push(fn); },
+    off(fn){ const i=_l.indexOf(fn); if(i>=0)_l.splice(i,1); },
+    clear(){ _e.splice(0); },
+  };
+})();
+</script>
 </head>
 <body>
 
@@ -701,6 +804,7 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
   <button class="menu-item" id="btn-load"><span class="menu-icon">↻</span>Load Save</button>
   <button class="menu-item" id="btn-logs"><span class="menu-icon">📋</span>Action Log</button>
   <button class="menu-item" id="btn-console"><span class="menu-icon">⌘</span>AI Console</button>
+  <button class="menu-item" id="btn-devconsole"><span class="menu-icon">🔧</span>Dev Console</button>
   <div class="menu-divider"></div>
   <div class="menu-section">Settings</div>
   <button class="menu-item" id="btn-settings"><span class="menu-icon">⚙</span>API Keys</button>
@@ -715,6 +819,36 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 <!-- ── CHALLENGE NOTIFICATION OVERLAY ───────────────────────────────────────── -->
 <div id="challenge-overlay" style="display:none;position:fixed;bottom:90px;left:50%;transform:translateX(-50%);width:min(400px,calc(100% - 32px));z-index:160;display:flex;flex-direction:column;gap:8px;align-items:stretch;pointer-events:none">
   <div id="challenge-stack" style="display:flex;flex-direction:column;gap:8px;pointer-events:all"></div>
+</div>
+
+<!-- ── DEV CONSOLE ───────────────────────────────────────────────────────────── -->
+<div id="panel-devcon">
+  <div class="devcon-hdr">
+    <span class="devcon-title">⚙ DEV CONSOLE</span>
+    <div class="devcon-filters">
+      <button class="devcon-filter on" data-cat="ALL">ALL</button>
+      <button class="devcon-filter" data-cat="ERROR">ERR</button>
+      <button class="devcon-filter" data-cat="API">API</button>
+      <button class="devcon-filter" data-cat="ROUTE">ROUTE</button>
+      <button class="devcon-filter" data-cat="TURN">TURN</button>
+      <button class="devcon-filter" data-cat="NPC">NPC</button>
+      <button class="devcon-filter" data-cat="STAT">STAT</button>
+      <button class="devcon-filter" data-cat="PATCH">PATCH</button>
+      <button class="devcon-filter" data-cat="SYSTEM">SYS</button>
+    </div>
+    <div class="devcon-actions">
+      <button class="devcon-btn" id="btn-devcon-clear">Clear</button>
+      <button class="devcon-btn" id="btn-devcon-export">Export</button>
+      <button class="devcon-btn" id="btn-devcon-close">✕</button>
+    </div>
+  </div>
+  <div id="devcon-feed">
+    <div style="color:#2a2a2a;padding:24px;text-align:center;font-size:11px">No entries yet — events appear here as the simulation runs.</div>
+  </div>
+  <div class="devcon-footer">
+    <span id="devcon-count">0 entries</span>
+    <label class="devcon-as-row"><input type="checkbox" id="devcon-autoscroll" checked> auto-scroll</label>
+  </div>
 </div>
 
 <!-- ── UPDATE BANNER ─────────────────────────────────────────────────────────── -->
@@ -985,12 +1119,115 @@ let _sbClient = null;
 let initInProgress = false;
 
 // ── SIM PATCH APPLIER ─────────────────────────────────────────────────────────
+function _resolveNpcPatchKey(key) {
+  if (WS.npcs[key]) return key;
+  const kl = key.toLowerCase().replace(/[\s-]+/g, '_');
+  const kFirst = kl.split('_')[0];
+  return Object.keys(WS.npcs).find(id => {
+    const npc = WS.npcs[id];
+    const nl = (npc.name ?? '').toLowerCase().replace(/[\s-]+/g, '_');
+    const nlFirst = nl.split('_')[0];
+    return id.toLowerCase() === kl
+      || nl === kl
+      || nlFirst === kFirst
+      || id.split('_')[0] === kFirst;
+  }) ?? null;
+}
+
+function _tryParsePatchJson(raw) {
+  try { return JSON.parse(raw); } catch {}
+  const c1 = raw.replace(/```json|```/g, '').trim();
+  try { return JSON.parse(c1); } catch {}
+  const c2 = c1
+    .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":')
+    .replace(/,(\s*[}\]])/g, '$1')
+    .replace(/:\s*undefined\b/g, ':null');
+  try { return JSON.parse(c2); } catch {}
+  return null;
+}
+
 function _applySimPatch(patch) {
   if (!WS || !patch) return;
+  window._devlog?.patch('SIM_PATCH received', patch);
+  const _changed = [];
   try {
     if (patch.npc_updates) {
-      for (const [id, upd] of Object.entries(patch.npc_updates)) {
-        if (!WS.npcs[id]) { console.warn('[patch] Unknown NPC id:', id); continue; }
+      for (const [rawId, upd] of Object.entries(patch.npc_updates)) {
+        const id = _resolveNpcPatchKey(rawId);
+        if (!id) {
+          window._devlog?.error(`SIM_PATCH: Cannot resolve NPC "${rawId}"`, { available: Object.keys(WS.npcs) });
+          console.warn('[patch] Unknown NPC id:', rawId, '— known:', Object.keys(WS.npcs));
+          continue;
+        }
+        if (upd.schedule?.weekday_routine?.length) {
+          WS.npcs[id].schedule = {
+            weekday_routine: upd.schedule.weekday_routine,
+            weekend_routine: upd.schedule.weekend_routine ?? WS.npcs[id].schedule?.weekend_routine ?? upd.schedule.weekday_routine,
+            interruptions:   WS.npcs[id].schedule?.interruptions ?? [],
+          };
+        }
+        if (upd.relationship_meter != null) WS.npcs[id].relationship_meter = Math.max(-100, Math.min(100, Number(upd.relationship_meter)));
+        if (upd.trust_meter       != null) WS.npcs[id].trust_meter         = Math.max(-100, Math.min(100, Number(upd.trust_meter)));
+        if (upd.traits)            WS.npcs[id].traits            = { ...WS.npcs[id].traits, ...upd.traits };
+        if (upd.active_flags)      WS.npcs[id].active_flags      = upd.active_flags;
+        if (upd.bio)               WS.npcs[id].bio               = upd.bio;
+        if (upd.npc_class)         WS.npcs[id].npc_class         = upd.npc_class;
+        if (upd.relationship_type) WS.npcs[id].relationship_type = upd.relationship_type;
+        _changed.push(`NPC:${WS.npcs[id].name}`);
+      }
+    }
+    if (patch.player_updates) {
+      if (patch.player_updates.cash     != null) { WS.player.cash     = Number(patch.player_updates.cash); _changed.push('cash'); }
+      if (patch.player_updates.location)          { WS.player.location = patch.player_updates.location; _changed.push('location'); }
+      if (patch.player_updates.stats && typeof patch.player_updates.stats === 'object') {
+        WS.player.stats = { ...WS.player.stats, ...patch.player_updates.stats };
+        _changed.push('stats');
+      }
+    }
+    if ('job_update'    in patch) { WS.job    = patch.job_update;    _changed.push('job'); }
+    if ('school_update' in patch) { WS.school = patch.school_update; _changed.push('school'); }
+    if (patch.setting_description) { WS.setting_description = patch.setting_description; _changed.push('setting'); }
+    if (patch.add_npcs?.length) {
+      for (const nd of patch.add_npcs) {
+        if (!nd.id || WS.npcs[nd.id]) continue;
+        const _pn = createNpc({ id: nd.id, name: nd.name, age: nd.age ?? 20, npc_class: nd.npc_class ?? 'household', relationship_type: nd.relationship_type ?? null, traits: nd.traits ?? {} });
+        _pn.relationship_meter = nd.relationship_meter ?? 0;
+        _pn.trust_meter        = nd.trust_meter        ?? 0;
+        _pn.significance       = nd.significance       ?? 2;
+        WS.npcs[nd.id]         = _pn;
+        _changed.push(`add_npc:${nd.name}`);
+      }
+    }
+    if (patch.remove_npcs?.length) {
+      for (const rid of patch.remove_npcs) {
+        const id = _resolveNpcPatchKey(rid);
+        if (id && WS.npcs[id]) { WS.npcs[id].status = 'inactive'; _changed.push(`remove_npc:${id}`); }
+      }
+    }
+    if (patch.add_interruptions?.length) {
+      for (const { npc_id, interruption } of patch.add_interruptions) {
+        const id = _resolveNpcPatchKey(npc_id ?? '');
+        if (!id || !WS.npcs[id] || !interruption?.start || !interruption?.end) continue;
+        WS.npcs[id].schedule = WS.npcs[id].schedule ?? { weekday_routine: [], weekend_routine: [], interruptions: [] };
+        WS.npcs[id].schedule.interruptions = WS.npcs[id].schedule.interruptions ?? [];
+        const _newS = new Date(interruption.start).getTime();
+        const _newE = new Date(interruption.end).getTime();
+        const _noOverlap = WS.npcs[id].schedule.interruptions.every(ex => {
+          const _exS = new Date(ex.start).getTime(), _exE = new Date(ex.end).getTime();
+          return _newE <= _exS || _newS >= _exE;
+        });
+        if (_noOverlap) { WS.npcs[id].schedule.interruptions.push(interruption); _changed.push(`interruption:${id}`); }
+      }
+    }
+    saveWorldState(WS).catch(() => {});
+    renderAll();
+    window._devlog?.patch('SIM_PATCH applied', { changed: _changed });
+    console.log('[patch] Applied:', _changed);
+  } catch(e) {
+    window._devlog?.error('SIM_PATCH apply error', { error: e.message });
+    console.error('[patch] Apply failed:', e);
+  }
+}
         if (upd.schedule?.weekday_routine?.length) {
           WS.npcs[id].schedule = {
             weekday_routine: upd.schedule.weekday_routine,
@@ -1903,6 +2140,7 @@ async function processTurn(input) {
     let _cls2Result = null; // Cached PATH_2 classify result — reused for alcohol + context
     const route = routeInput(input);
 
+    window._devlog?.system(`processTurn start T${(WS?.turn??0)+1}`, { input: input.slice(0,80), route });
     if (route === ROUTE.PATH_1_EXPLICIT) {
       let type = classifyExplicitActivity(input);
       const NEEDS_PARTNER = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
@@ -1980,6 +2218,7 @@ async function processTurn(input) {
       const safe = sanitizeStateForGemini(ws);
     const cls  = await classifyAction(input, safe);
     _cls2Result = cls;
+    window._devlog?.turn('Gemini classify result', { action_type: cls.action_type, time_cost_hours: cls.time_cost_hours, risk_class: cls.risk_class, stat_deltas: cls.stat_deltas, npc_ids: cls.npc_ids_involved });
     statDeltas=cls.stat_deltas??{}; timeCost=Math.min(Math.max(cls.time_cost_hours??0.25, 0.08), 4.0);
     locationChange=cls.location_change??null; actionDesc=`[${cls.action_type??'action'}]`;
     riskResult=rollRisk(cls.risk_class??'none', ws.player.stats);
@@ -1988,6 +2227,7 @@ async function processTurn(input) {
         const ctx = buildNpcContextForGemini(ws.npcs[npcId], ws.sim_time);
         const rxn = await evaluateNpcReaction(ctx, input, ws.player.stats).catch(()=>null);
         if (!rxn) continue;
+        window._devlog?.npc(`${ws.npcs[npcId].name} reacted`, { rel_delta: rxn.relationship_delta, trust_delta: rxn.trust_delta, summary: rxn.reaction_summary, flags: rxn.flags_to_add });
         ws.npcs[npcId] = applyRelationshipDelta(ws.npcs[npcId], rxn.relationship_delta??0, rxn.trust_delta??null);
         for (const f of rxn.flags_to_add??[]) ws.npcs[npcId] = addFlag(ws.npcs[npcId], f.flag, FLAG_DECAY[f.decay_rate]??FLAG_DECAY.medium);
         ws.npcs[npcId] = incrementSignificance(ws.npcs[npcId]);
@@ -2121,6 +2361,8 @@ async function processTurn(input) {
     ws.player.stats = applyDeltas(ws.player.stats, statDeltas);
     ws.player.stats = applyCascadingEffects(ws.player.stats);
     
+    window._devlog?.stat(`T${ws.turn+1} stats post-cascade`, { ...ws.player.stats });
+    
     // Cascade effects: clear dynamic flags each turn then re-evaluate — prevents accumulation
     const _CASC = new Set(['too_sick_to_work','too_sick_to_attend','reduced_performance_health','exhausted_at_work','exhausted_at_school','low_energy_performance','severely_depressed','depressed_performance','excellent_mood','poor_hygiene','below_average_hygiene','poor_reputation','excellent_reputation']);
     if (ws.job)    ws.job.performance_flags    = (ws.job.performance_flags    || []).filter(f => !_CASC.has(f));
@@ -2155,6 +2397,7 @@ async function processTurn(input) {
       }
     }
 
+    let hangoverChallengePending = null; // must declare before first use (TDZ fix)
     // ── Hangover from sleeping with high alcohol ──────────────────────────────
     if (route === ROUTE.PATH_3_AUTOPILOT && /sleep|nap/i.test(input)) {
       if ((ws.player.stats.alcohol ?? 0) > 30 && !(ws.player.diseases ?? []).some(d => d.id === 'hangover')) {
@@ -2178,7 +2421,6 @@ async function processTurn(input) {
     if (!_contextTags.includes('outdoor') && /outside|outdoors|park|street/i.test(input)) _contextTags.push('outdoor');
 
     // ── Disease contraction from environment ─────────────────────────────────
-    let hangoverChallengePending = null;
     const newChallenges = [];
     const _envDisease = checkDiseaseContraction(ws, _contextTags);
     if (_envDisease) {
@@ -2276,8 +2518,8 @@ async function processTurn(input) {
       }
       const mode = { [TURN_CLASSIFICATION.ROUTINE]:'notable', [TURN_CLASSIFICATION.NOTABLE]:'notable', [TURN_CLASSIFICATION.CRISIS]:'crisis', [TURN_CLASSIFICATION.DEATH]:'death' }[turnClass] ?? 'notable';
       prose = await callGrok(brief, mode);
+    window._devlog?.turn(`T${ws.turn} narrated`, { class: turnClass, route, chars: prose.length, first50: prose.slice(0,50) });
     }
-
     // Auto-create NPCs Grok introduces that aren't in the system yet
     if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
       const _knownNames = new Set(Object.values(ws.npcs).map(n => n.name?.toLowerCase()).filter(Boolean));
@@ -2422,6 +2664,7 @@ async function processTurn(input) {
       document.getElementById('action-input').disabled = true;
     }
   } catch(err) {
+    window._devlog?.error(`processTurn error`, { message: err.message, stack: err.stack?.slice(0,400) });
     setStatus(`Error: ${err.message}`, 'err');
     console.error('[processTurn]', err);
   } finally {
@@ -2741,21 +2984,53 @@ async function sendConsoleMessage() {
   appendConsoleMsg('user', content, true);
   showConsoleThinking();
   try {
+    window._devlog?.patch('Console request', { msg: content.slice(0, 100) });
     let reply = await callMetaConsole(_consoleMessages.slice(-24), WS ?? null);
     removeConsoleThinking();
-    // Extract and apply SIM_PATCH if present
-    const _patchMatch = reply.match(/<SIM_PATCH>\s*([\s\S]*?)\s*<\/SIM_PATCH>/i);
-    if (_patchMatch) {
-      reply = reply.replace(/<SIM_PATCH>[\s\S]*?<\/SIM_PATCH>/i, '').trim();
-      try {
-        const _patch = JSON.parse(_patchMatch[1].trim());
-        _applySimPatch(_patch);
-        reply += '\n\n✓ Changes applied to game world.';
-      } catch (_pe) {
-        reply += '\n\n⚠ Patch present but failed to parse — changes not applied. Check console for details.';
-        console.warn('[console patch] parse failed:', _pe.message, '\nRaw:', _patchMatch[1].slice(0, 300));
+    window._devlog?.patch('Console raw reply', { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
+
+    // ── Extract SIM_PATCH (multi-strategy) ───────────────────────────────
+    const _extractAndApplyPatch = (rawReply) => {
+      const m = rawReply.match(/<SIM_PATCH>\s*([\s\S]*?)\s*<\/SIM_PATCH>/i);
+      if (!m) return false;
+      const parsed = _tryParsePatchJson(m[1].trim());
+      if (!parsed) {
+        window._devlog?.error('SIM_PATCH parse failed', { raw: m[1].slice(0, 300) });
+        return false;
+      }
+      _applySimPatch(parsed);
+      return true;
+    };
+
+    let _patchApplied = _extractAndApplyPatch(reply);
+    reply = reply.replace(/<SIM_PATCH>[\s\S]*?<\/SIM_PATCH>/i, '').trim();
+
+    // ── Second pass: if reply claims a change but no patch found ─────────
+    if (!_patchApplied && WS) {
+      const _userLast = _consoleMessages.filter(m => m.role === 'user').at(-1)?.content ?? '';
+      const _isChangeReq = /\b(give|set|change|update|add|remove|make|fix|adjust|modify|increase|decrease|boost|reset|delete|clear)\b/i.test(_userLast);
+      const _replyAcks = /\b(i['']ve|i have|i['']ll|updated?|changed?|applied|modified|adjusted|done|set|added|removed)\b/i.test(reply);
+      if (_isChangeReq && _replyAcks) {
+        window._devlog?.patch('No patch found — attempting second pass extraction');
+        try {
+          const _p2 = await callMetaConsole([
+            ..._consoleMessages.slice(-18),
+            { role: 'assistant', content: reply },
+            { role: 'user', content: '(SYSTEM) Output the <SIM_PATCH> JSON block now to commit your changes. Output ONLY the opening tag, the JSON object, and the closing tag — nothing else.' }
+          ], WS);
+          if (_extractAndApplyPatch(_p2)) {
+            _patchApplied = true;
+            window._devlog?.patch('Second pass succeeded');
+          } else {
+            window._devlog?.patch('Second pass: still no valid patch', { preview: _p2.slice(0, 100) });
+          }
+        } catch (_sp) {
+          window._devlog?.error('Second pass error', { error: _sp.message });
+        }
       }
     }
+
+    if (_patchApplied) reply += '\n\n✓ Changes applied to game world.';
     _consoleMessages.push({ role: 'assistant', content: reply });
     appendConsoleMsg('assistant', reply, true);
   } catch(err) {
@@ -2910,6 +3185,72 @@ function parseAndApplyConsoleStateChange(response) {
     return cleanResponse;
   }
 }
+
+// ── DEV CONSOLE UI ────────────────────────────────────────────────────────────
+(function(){
+  let _filter='ALL', _autoScroll=true;
+
+  function _entryEl(e){
+    const el=document.createElement('div');
+    el.className='devcon-entry';
+    const d=new Date(e.ts);
+    const ts=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    const ds=e.data!==null?(typeof e.data==='string'?e.data:JSON.stringify(e.data,null,2)):'';
+    el.innerHTML=`<span class="devcon-ts">${ts}</span><span class="devcon-cat" data-cat="${e.cat}">${e.cat}</span><div style="flex:1;min-width:0"><div class="devcon-msg">${String(e.msg).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>${ds?`<pre class="devcon-data">${ds.replace(/</g,'&lt;')}</pre>`:''}</div>`;
+    if(ds) el.addEventListener('click',()=>el.classList.toggle('expanded'));
+    return el;
+  }
+
+  function _refresh(){
+    const feed=document.getElementById('devcon-feed');
+    const cnt=document.getElementById('devcon-count');
+    if(!feed) return;
+    const all=window._devlog?.entries??[];
+    const fil=_filter==='ALL'?all:all.filter(e=>e.cat===_filter);
+    cnt.textContent=`${fil.length} entr${fil.length===1?'y':'ies'}`;
+    feed.innerHTML='';
+    if(!fil.length){feed.innerHTML='<div style="color:#2a2a2a;padding:24px;text-align:center;font-size:11px">No entries.</div>';return;}
+    const frag=document.createDocumentFragment();
+    for(const e of fil) frag.appendChild(_entryEl(e));
+    feed.appendChild(frag);
+    if(_autoScroll) feed.scrollTop=feed.scrollHeight;
+  }
+
+  document.getElementById('btn-devconsole')?.addEventListener('click',()=>{
+    document.getElementById('panel-devcon').classList.add('open');
+    closeMenu(); _refresh();
+  });
+  document.getElementById('btn-devcon-close')?.addEventListener('click',()=>document.getElementById('panel-devcon').classList.remove('open'));
+  document.getElementById('btn-devcon-clear')?.addEventListener('click',()=>{window._devlog?.clear();_refresh();});
+  document.getElementById('btn-devcon-export')?.addEventListener('click',()=>{
+    const all=window._devlog?.entries??[];
+    const fil=_filter==='ALL'?all:all.filter(e=>e.cat===_filter);
+    const txt=JSON.stringify(fil,null,2);
+    navigator.clipboard?.writeText(txt).then(()=>setStatus('Dev log copied to clipboard.')).catch(()=>{
+      const a=document.createElement('a');a.href='data:text/json;charset=utf-8,'+encodeURIComponent(txt);a.download='devlog.json';a.click();
+    });
+  });
+  document.getElementById('devcon-autoscroll')?.addEventListener('change',e=>{_autoScroll=e.target.checked;});
+  document.querySelectorAll('.devcon-filter').forEach(btn=>btn.addEventListener('click',()=>{
+    document.querySelectorAll('.devcon-filter').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on'); _filter=btn.dataset.cat; _refresh();
+  }));
+
+  // Live append when panel is open
+  window._devlog?.on(e=>{
+    const panel=document.getElementById('panel-devcon');
+    if(!panel?.classList.contains('open')) return;
+    if(_filter!=='ALL' && e.cat!==_filter) return;
+    const feed=document.getElementById('devcon-feed');
+    const cnt=document.getElementById('devcon-count');
+    feed?.querySelector('[style*="No entries"]')?.remove();
+    const all=window._devlog?.entries??[];
+    const fil=_filter==='ALL'?all:all.filter(x=>x.cat===_filter);
+    if(cnt) cnt.textContent=`${fil.length} entr${fil.length===1?'y':'ies'}`;
+    feed?.appendChild(_entryEl(e));
+    if(_autoScroll&&feed) feed.scrollTop=feed.scrollHeight;
+  });
+})();
 
 // ── UPDATE SYSTEM ─────────────────────────────────────────────────────────────
 async function checkForUpdate() {
