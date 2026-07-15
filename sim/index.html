@@ -2123,6 +2123,24 @@ document.getElementById('lb-generate').addEventListener('click', () => {
 
 // Pre-fill year when wizard opens (handled in btn-new listener — see below)
 
+function compileLorebook(lorebookText, playerName) {
+  const warnings = [];
+  if (!lorebookText?.trim()) return { warnings };
+  if (lorebookText.trim().length < 60) {
+    warnings.push('Lorebook is very short — AI may not extract NPCs accurately. Add more context.');
+  }
+  const BAD_CLASSES = ['family','relative','friend','romantic','sibling'];
+  for (const bad of BAD_CLASSES) {
+    if (new RegExp(`npc_class[\\s"':]+${bad}`, 'i').test(lorebookText)) {
+      warnings.push(`Contains invalid npc_class "${bad}" — will be defaulted to "household"`);
+    }
+  }
+  if (playerName && lorebookText.toLowerCase().includes(playerName.toLowerCase())) {
+    warnings.push(`Player name "${playerName}" appears in lorebook — if NPCs go missing, check one wasn't named the same as your character.`);
+  }
+  return { warnings };
+}
+
 async function startNewGame() {
   const name     = document.getElementById('w-name').value.trim();
   const age      = parseInt(document.getElementById('w-age').value) || 18;
@@ -2156,8 +2174,22 @@ async function startNewGame() {
   try {
     // Stage 1: Parse lorebook with Gemini
     if (lorebook) {
+      // FIX 1F: Deterministic lorebook validation (no API call)
+      const { warnings } = compileLorebook(lorebook, name);
+      for (const w of warnings) {
+        setStage('Validating lorebook...', '⚠ ' + w, 5);
+        await new Promise(r => setTimeout(r, 2000));
+      }
       setStage('Parsing your world...', 'AI is reading your lorebook...', 10);
       const parsed = await buildWorldWithMultipleAIs(lorebook).catch(() => null);
+      // FIX 1A: Surface parse failures visibly to user
+      if (!parsed || !parsed.npcs?.length) {
+        setStage('Parsing your world...', parsed
+          ? '⚠ Lorebook parsed but no NPCs were extracted. Check your API key or rewrite the lorebook.'
+          : '⚠ Lorebook parsing failed entirely. Game will start with an empty world.',
+          10);
+        await new Promise(r => setTimeout(r, 3500));
+      }
       if (parsed) {
         setStage('Building world state...', 'Initializing characters and relationships...', 32);
         if (parsed.player?.location) ws.player.location = parsed.player.location;
@@ -3460,12 +3492,32 @@ function closeConsole() {
   document.getElementById('panel-console').classList.remove('open');
 }
 
+function renderMarkdown(text) {
+  let s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s = s.replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg);padding:8px;border-radius:4px;font-size:11px;overflow-x:auto;margin:6px 0;border:1px solid var(--bdr)"><code>$1</code></pre>');
+  s = s.replace(/`([^`]+)`/g, '<code style="background:var(--bg);padding:1px 5px;border-radius:3px;font-size:12px;border:1px solid var(--bdr)">$1</code>');
+  s = s.replace(/^### (.+)$/gm, '<div style="font-size:12px;font-weight:700;color:var(--acc);margin:10px 0 4px;text-transform:uppercase;letter-spacing:.06em">$1</div>');
+  s = s.replace(/^## (.+)$/gm,  '<div style="font-size:13px;font-weight:700;color:var(--txt);margin:10px 0 4px">$1</div>');
+  s = s.replace(/^# (.+)$/gm,   '<div style="font-size:14px;font-weight:700;color:var(--txt);margin:10px 0 5px">$1</div>');
+  s = s.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  s = s.replace(/\*\*(.+?)\*\*/g,     '<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g,         '<em>$1</em>');
+  s = s.replace(/^[-*] (.+)$/gm, '<li style="margin:2px 0;padding-left:4px">$1</li>');
+  s = s.replace(/(<li[^>]*>[\s\S]*?<\/li>\n?)+/g, '<ul style="margin:6px 0;padding-left:18px;list-style:disc">$&</ul>');
+  s = s.replace(/^---+$/gm, '<hr style="border:none;border-top:1px solid var(--bdr);margin:10px 0">');
+  s = s.replace(/\n\n+/g, '</p><p style="margin:6px 0">');
+  s = s.replace(/\n/g, '<br>');
+  return '<p style="margin:0">' + s + '</p>';
+}
+
 function _consoleBubble(role, content) {
-  const ts    = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  const el    = document.createElement('div');
+  const ts   = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const el   = document.createElement('div');
   el.className = `console-msg ${role}`;
-  const safe  = content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-  el.innerHTML = `<div class="console-bubble">${safe}</div><div class="console-ts">${ts}</div>`;
+  const body = role === 'assistant'
+    ? renderMarkdown(content)
+    : content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  el.innerHTML = `<div class="console-bubble">${body}</div><div class="console-ts">${ts}</div>`;
   return el;
 }
 

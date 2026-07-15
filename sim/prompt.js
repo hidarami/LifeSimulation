@@ -433,15 +433,24 @@ export function buildMetaConsolePrompt(gameState) {
     `Cash: ${(typeof localStorage !== 'undefined' ? localStorage.getItem('CURRENCY_SYMBOL') : null) || '₱'}${ws.player?.cash ?? 0}`,
     `Stats: health ${Math.round(ws.player?.stats?.health ?? 0)}, energy ${Math.round(ws.player?.stats?.energy ?? 0)}, mood ${Math.round(ws.player?.stats?.mood ?? 0)}, hunger ${Math.round(ws.player?.stats?.hunger ?? 0)} (0=full 100=starving), hygiene ${Math.round(ws.player?.stats?.hygiene ?? 0)}, social ${Math.round(ws.player?.stats?.social ?? 0)}`,
     ws.job ? `Job: ${ws.job.position ?? 'Worker'} at ${ws.job.employer ?? 'employer'}, day ${ws.job.days_employed ?? 0}` : 'Unemployed',
-    ws.school?.name ? `School: ${ws.school.name} (${ws.school.grade_level ?? ''}) — ${ws.school.status ?? 'active'}` : null,
+    ws.school?.name ? `School: ${ws.school.name} | grade: ${ws.school.grade_level ?? 'unset'} | status: ${ws.school.status ?? 'active'} | absences: ${ws.school.absence_count ?? 0} | days enrolled: ${Math.round(ws.school.days_enrolled ?? 0)}` : null,
     Object.values(ws.npcs ?? {}).filter(n => n.status === 'active').length
-      ? `NPCs (use the exact [id:xxx] in patches):\n${Object.values(ws.npcs).filter(n => n.status === 'active').map(n => `  ${n.name} [id:${n.id}] rel:${n.relationship_meter} trust:${n.trust_meter}${n.active_flags?.length?' flags:['+n.active_flags.slice(0,3).join(',')+']':''}`).join('\n')}`
+      ? `NPCs (use the exact [id:xxx] in patches):\n${Object.values(ws.npcs).filter(n => n.status === 'active').map(n => {
+          const flagStr = n.active_flags?.length
+            ? ` flags:[${n.active_flags.map(f => `${f}${n.flag_timers?.[f] != null ? `(${n.flag_timers[f]}t)` : ''}`).join(',')}]`
+            : '';
+          const bioStr = n.bio ? ` bio:"${n.bio.slice(0, 90).replace(/`/g, "'")}"` : '';
+          const schedBlocks = n.schedule?.weekday_routine?.length ?? 0;
+          return `  ${n.name} [id:${n.id}] age:${n.age ?? '?'} type:${n.relationship_type ?? n.npc_class ?? '?'} rel:${n.relationship_meter} trust:${n.trust_meter}${flagStr}${bioStr} sched:${schedBlocks}blocks`;
+        }).join('\n')}`
       : 'No active NPCs',
     ws.consequences?.length ? `Active consequences: ${ws.consequences.map(c => `${c.type}(${c.duration}t)`).join(', ')}` : null,
     ws.player?.diseases?.length ? `Active diseases: ${ws.player.diseases.map(d => `${d.name}(${d.duration_remaining}t)`).join(', ')}` : null,
     (ws.player?.stats?.alcohol ?? 0) > 10 ? `Alcohol level: ${Math.round(ws.player.stats.alcohol)}` : null,
     ws.challenges?.filter(c => c.active && !c.resolved).length ? `Active challenges: ${ws.challenges.filter(c => c.active && !c.resolved).map(c => c.title).join(' | ')}` : null,
     ws.recent_significant_events?.length ? `Recent events: ${ws.recent_significant_events.slice(-3).join(' | ')}` : null,
+    ws.sim_time ? `Sim time (ISO): ${ws.sim_time}` : null,
+    `Lorebook:\n${(typeof localStorage !== 'undefined' ? localStorage.getItem('LOREBOOK') : null) ?? 'None set'}`,
   ].filter(Boolean).join('\n') : 'No active save loaded.';
 
   return `You are the AI Console for "The Sim" — a text-based life simulation game. You are a meta-layer tool above the simulation. You are NOT in-character and you are NOT the narrator.
@@ -463,6 +472,27 @@ ARCHITECTURE:
 - Lorebook: static context block injected into every Grok system prompt
 - Persistence: IndexedDB via Dexie.js (world, events, actions, sim_console tables)
 - Files: index.html (main app), state.js (persistence), engine.js (stat math, turn class), api.js (all API calls), prompt.js (system prompts), renderer.js (UI), npc.js (NPC logic), sanitizer.js (routing), events.js (world events)
+
+CAPABILITY BOUNDARIES — READ BEFORE RESPONDING:
+You are a text-based console layer. You have EXACTLY these capabilities:
+- Read the CURRENT GAME STATE block provided below
+- Read the LOREBOOK block provided below
+- Output SIM_PATCH JSON to modify world state
+- Answer questions about game mechanics from your training
+
+You CANNOT:
+- Call Gemini, Groq, OpenRouter, or any external API
+- Trigger background processes, integrity checks, or enrichment passes
+- Force-regenerate NPC cards or bios
+- Read IndexedDB, Dexie tables, or any live database
+- Execute code in the simulation engine
+- Access any information not in the state blocks below
+
+If asked to do something outside these limits:
+- Say clearly what you cannot do
+- Say what the user CAN do instead (e.g. "To rebuild NPCs, start a new game with a corrected lorebook")
+- NEVER claim to have executed an operation you did not execute via SIM_PATCH
+- NEVER output SIM_PATCH and then claim the patch "triggered" an external call
 
 CURRENT GAME STATE:
 ${stateBlock}

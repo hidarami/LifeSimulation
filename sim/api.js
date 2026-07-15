@@ -745,25 +745,34 @@ export async function callMetaConsole(messages, gameState) {
   const systemPrompt = buildMetaConsolePrompt(gameState);
   window._devlog?.patch('Console API call', { msgs: messages.length });
 
-  // Narrator slot first — meta console is a sophisticated chat task (best for SIM_PATCH)
-  const narratorSlot = getNarratorSlot();
-  if (narratorSlot.key && narratorSlot.provider) {
+  const classifierSlot = getClassifierSlot();
+  const helperSlot     = getHelperSlot();
+  const narratorSlot   = getNarratorSlot();
+  const _tried = new Set();
+
+  // Classifier slot first — console is a structured reasoning task, not prose
+  if (classifierSlot.key && classifierSlot.provider) {
+    const _model = classifierSlot.model || PROVIDER_ENDPOINTS[classifierSlot.provider]?.default_helper_model || null;
+    _tried.add(classifierSlot.provider);
+    window._devlog?.system('Console using slot', { provider: classifierSlot.provider, model: _model });
     try {
       const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
-      const reply = await dispatchChat(narratorSlot.provider, narratorSlot.key, narratorSlot.model, allMsgs, 800, 30000);
+      const reply = await dispatchChat(classifierSlot.provider, classifierSlot.key, _model, allMsgs, 800, 25000);
       if (reply && reply.length > 20) {
-        window._devlog?.patch(`Console: ${narratorSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
+        window._devlog?.patch(`Console: ${classifierSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
         return reply;
       }
-    } catch (e) { window._devlog?.error('Console: narrator slot failed', { error: e.message }); }
+    } catch (e) { window._devlog?.error('Console: classifier slot failed', { error: e.message }); }
   }
 
-  // Helper slot (Groq) — fast and capable for structured tasks
-  const helperSlot = getHelperSlot();
-  const HELPER_CHAT_MODELS = { groq: BG_GROQ_SMART, openai: 'gpt-4o-mini', gemini: BG_GEMINI_FAST };
-  if (helperSlot.key && helperSlot.provider && helperSlot.provider !== narratorSlot.provider) {
+  // Helper slot second (Groq/fast) — structured tasks
+  if (helperSlot.key && helperSlot.provider && !_tried.has(helperSlot.provider)) {
+    _tried.add(helperSlot.provider);
+    const HELPER_CHAT_MODELS = { groq: BG_GROQ_SMART, openai: 'gpt-4o-mini', gemini: BG_GEMINI_FAST };
     const model = helperSlot.model || HELPER_CHAT_MODELS[helperSlot.provider] || null;
-    for (const m of model ? [model, HELPER_CHAT_MODELS[helperSlot.provider]].filter(Boolean) : [HELPER_CHAT_MODELS[helperSlot.provider]]) {
+    window._devlog?.system('Console using slot', { provider: helperSlot.provider, model });
+    const _modelList = [...new Set([model, HELPER_CHAT_MODELS[helperSlot.provider]].filter(Boolean))];
+    for (const m of _modelList) {
       try {
         const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
         const reply = await dispatchChat(helperSlot.provider, helperSlot.key, m, allMsgs, 800, 25000);
@@ -775,18 +784,17 @@ export async function callMetaConsole(messages, gameState) {
     }
   }
 
-  // Classifier slot last resort
-  const classifierSlot = getClassifierSlot();
-  if (classifierSlot.key && classifierSlot.provider && classifierSlot.provider !== narratorSlot.provider) {
+  // Narrator slot last resort — expensive, avoid for console tasks
+  if (narratorSlot.key && narratorSlot.provider && !_tried.has(narratorSlot.provider)) {
+    window._devlog?.system('Console using slot', { provider: narratorSlot.provider, model: narratorSlot.model });
     try {
-      const conv = messages.slice(-10).map(m => `${m.role === 'user' ? 'Player' : 'Assistant'}: ${m.content}`).join('\n\n');
-      const gemMsg = [{ role: 'user', content: `${systemPrompt}\n\n${conv}\n\nAssistant:` }];
-      const reply = await dispatchChat(classifierSlot.provider, classifierSlot.key, classifierSlot.model, gemMsg, 800, 20000);
+      const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
+      const reply = await dispatchChat(narratorSlot.provider, narratorSlot.key, narratorSlot.model, allMsgs, 800, 30000);
       if (reply && reply.length > 20) {
-        window._devlog?.patch(`Console: ${classifierSlot.provider} responded`, { chars: reply.length });
+        window._devlog?.patch(`Console: ${narratorSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
         return reply;
       }
-    } catch (e) { window._devlog?.error('Console: classifier slot failed', { error: e.message }); }
+    } catch (e) { window._devlog?.error('Console: narrator slot failed', { error: e.message }); }
   }
 
   throw new Error('No API available for console. Configure a Narrator Key in ⚙ Settings.');
