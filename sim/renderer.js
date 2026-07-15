@@ -355,11 +355,55 @@ export function renderNarration(prose, anchorEl, feed, turn) {
 }
 
 // ─── CHALLENGES PANEL ─────────────────────────────────────────────────────────
-export function renderChallengesPanel(challenges, container) {
+export function renderChallengesPanel(challenges, debts, fame, container) {
+  if (!container) return;
   container.innerHTML = '';
-  const active = (challenges ?? []).filter(c => c.active && !c.resolved);
+  const cur = getCurrencySymbol();
+
+  // ── Fame tier display ──────────────────────────────────────────────────────
+  if (fame && fame.level >= 1) {
+    const fameColors = { local:'#c8922a', regional:'#e67e22', national:'#e74c3c', celebrity:'#8e44ad' };
+    const fameIcons  = { local:'🌟', regional:'⭐', national:'🏆', celebrity:'👑' };
+    const fc = document.createElement('div');
+    fc.style.cssText = 'margin-bottom:12px;padding:8px 10px;border:1px solid var(--bdr);border-radius:4px;background:var(--sur)';
+    fc.innerHTML = `
+      <div style="font-size:9px;color:var(--acc);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px">Fame Status</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:18px">${fameIcons[fame.label] ?? '🌟'}</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:${fameColors[fame.label] ?? 'var(--acc)'};text-transform:capitalize">${fame.label}</div>
+          <div style="font-size:10px;color:var(--dim)">${(fame.followers ?? 0).toLocaleString()} followers</div>
+        </div>
+      </div>
+      ${fame.unlocked_perks?.length ? `<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:3px">${fame.unlocked_perks.slice(0,4).map(p => `<span style="font-size:9px;padding:1px 5px;background:var(--acc2);border:1px solid var(--acc);border-radius:3px;color:var(--acc)">${p.replace(/_/g,' ')}</span>`).join('')}</div>` : ''}`;
+    container.appendChild(fc);
+  }
+
+  // ── Debts display ──────────────────────────────────────────────────────────
+  const activeDebts = (debts ?? []).filter(d => d.status === 'active' || d.status === 'overdue');
+  if (activeDebts.length) {
+    const dh = document.createElement('div');
+    dh.className = 'psub'; dh.textContent = `Debts (${activeDebts.length})`;
+    container.appendChild(dh);
+    for (const debt of activeDebts) {
+      const de = document.createElement('div');
+      de.style.cssText = 'border-bottom:1px solid var(--bdr);padding:6px 0 8px';
+      const isOverdue = debt.status === 'overdue';
+      de.innerHTML = `
+        <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:2px">
+          <span style="font-size:12px;font-weight:600;color:${isOverdue ? 'var(--neg)' : 'var(--txt)'}">${debt.creditor}</span>
+          <span style="font-size:9px;padding:1px 5px;border-radius:3px;${isOverdue ? 'background:#3a1010;color:var(--neg)' : 'background:var(--sur2);color:var(--dim)'}">${isOverdue ? 'OVERDUE' : debt.type}</span>
+        </div>
+        <div style="font-size:11px;color:var(--low);font-weight:600">${cur}${(debt.amount ?? 0).toLocaleString()}</div>
+        ${debt.description ? `<div style="font-size:10px;color:var(--dim);margin-top:1px">${debt.description}</div>` : ''}
+        <div style="font-size:10px;color:var(--dim);margin-top:2px">${isOverdue ? '⚠ Overdue' : `${debt.turns_remaining ?? 0} turns remaining`}</div>`;
+      container.appendChild(de);
+    }
+  }
+
+  const active   = (challenges ?? []).filter(c => c.active && !c.resolved);
   const resolved = (challenges ?? []).filter(c => c.resolved);
-  if (!active.length && !resolved.length) {
+  if (!active.length && !resolved.length && !activeDebts.length && (!fame || fame.level === 0)) {
     container.innerHTML = '<p class="empty">No active challenges.</p>';
     return;
   }

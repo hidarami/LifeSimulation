@@ -26,6 +26,13 @@ db.version(4).stores({
   actions:    '++id, turn, saveId',
   sim_console:'++id, saveId, timestamp',
 });
+db.version(5).stores({
+  world:      '++id, timestamp',
+  events:     '++id, category, turn, saveId',
+  actions:    '++id, turn, saveId',
+  sim_console:'++id, saveId, timestamp',
+  images:     '++id, key, saveId',
+});
 
 // ─── INITIAL WORLD STATE ──────────────────────────────────────────────────────
 export function createInitialWorldState(playerName, startDate) {
@@ -81,6 +88,10 @@ export function createInitialWorldState(playerName, startDate) {
     session_context_flavor: '',
     setting_description: '',
     challenges: [],
+    debts: [],
+    criminal_record: { wanted_level: 0, crimes: [], has_record: false },
+    fame: { level: 0, label: 'unknown', followers: 0, unlocked_perks: [], perk_notified: [] },
+    addictions: [],
   };
 }
 
@@ -91,6 +102,20 @@ export function migrateSaveState(state) {
   if (!state) return state;
   // Top-level fields
   if (!Array.isArray(state.challenges))                state.challenges               = [];
+  if (!Array.isArray(state.debts))                     state.debts                    = [];
+  if (!state.criminal_record)                          state.criminal_record          = { wanted_level: 0, crimes: [], has_record: false };
+  else {
+    if (!Array.isArray(state.criminal_record.crimes))  state.criminal_record.crimes   = [];
+    if (state.criminal_record.wanted_level == null)    state.criminal_record.wanted_level = 0;
+    if (state.criminal_record.has_record   == null)    state.criminal_record.has_record   = false;
+  }
+  if (!state.fame)                                     state.fame                     = { level: 0, label: 'unknown', followers: 0, unlocked_perks: [], perk_notified: [] };
+  else {
+    if (!Array.isArray(state.fame.unlocked_perks))     state.fame.unlocked_perks      = [];
+    if (!Array.isArray(state.fame.perk_notified))      state.fame.perk_notified       = [];
+    if (state.fame.followers == null)                  state.fame.followers           = 0;
+  }
+  if (!Array.isArray(state.addictions))                state.addictions               = [];
   if (state.setting_description    == null)            state.setting_description      = '';
   if (state.session_context_flavor == null)            state.session_context_flavor   = '';
   if (!Array.isArray(state.recent_significant_events)) state.recent_significant_events = [];
@@ -446,4 +471,105 @@ export async function loadConsoleHistory(saveId) {
 export async function clearConsoleHistory(saveId) {
   if (saveId === null || saveId === undefined) return;
   await db.sim_console.where('saveId').equals(saveId).delete();
+}
+
+// ─── IMAGE STORAGE ────────────────────────────────────────────────────────────
+export async function saveImage(key, dataUrl) {
+  try {
+    const sid = _worldId;
+    const existing = await db.images.where('key').equals(key).and(i => i.saveId === sid).first().catch(() => null);
+    if (existing) await db.images.update(existing.id, { dataUrl, timestamp: new Date().toISOString() });
+    else await db.images.add({ key, dataUrl, saveId: sid, timestamp: new Date().toISOString() });
+  } catch(e) { console.warn('[image] save failed:', e.message); }
+}
+
+export async function loadImage(key) {
+  try {
+    const sid = _worldId;
+    const img = await db.images.where('key').equals(key).and(i => i.saveId === sid).first().catch(() => null);
+    return img?.dataUrl ?? null;
+  } catch { return null; }
+}
+
+export async function loadAllImages() {
+  try {
+    const sid = _worldId;
+    if (sid === null || sid === undefined) return {};
+    const imgs = await db.images.where('saveId').equals(sid).toArray().catch(() => []);
+    const result = {};
+    for (const img of imgs) result[img.key] = img.dataUrl;
+    return result;
+  } catch { return {}; }
+}
+
+// ─── DEBT HELPERS ─────────────────────────────────────────────────────────────
+export function addDebt(worldState, { creditor, amount, type = 'personal', turns_due = 30, interest_rate = 0.05, description = '' }) {
+  const ws = JSON.parse(JSON.stringify(worldState));
+  ws.debts = ws.debts ?? [];
+  ws.debts.push({
+    id: `debt_${Date.now()}`,
+    creditor, amount, type,
+    turns_remaining: turns_due,
+    original_amount: amount,
+    interest_rate, description,
+    status: 'active',
+    interest_turns: 0,
+    created_turn: ws.turn,
+  });
+  return ws;
+}
+
+export function payDebt(worldState, debtId, amount) {
+  const ws = JSON.parse(JSON.stringify(worldState));
+  const debt = (ws.debts ?? []).find(d => d.id === debtId);
+  if (!debt || ws.player.cash < amount) return ws;
+  ws.player.cash -= amount;
+  debt.amount = Math.max(0, debt.amount - amount);
+  if (debt.amount <= 0) {
+    debt.status = 'paid';
+    ws.player.stats.mood       = Math.min(100, ws.player.stats.mood       + 15);
+    ws.player.stats.reputation = Math.min(100, ws.player.stats.reputation + 5);
+    if (ws.challenges) {
+      for (const ch of ws.challenges) {
+        if (ch.active && !ch.resolved && ch.id.startsWith('debt_') && ch.id.includes(debtId)) {
+          ch.resolved = true; ch.active = false;
+        }
+      }
+    }
+  }
+  return ws;
+}
+
+// ─── FAME HELPERS ─────────────────────────────────────────────────────────────
+export const FAME_TIERS = [
+  { level: 0, label: 'unknown',   min_rep: 0,  min_followers: 0,      perks: [] },
+  { level: 1, label: 'local',     min_rep: 55, min_followers: 100,    perks: ['local_fan_encounters', 'small_brand_deals'] },
+  { level: 2, label: 'regional',  min_rep: 70, min_followers: 5000,   perks: ['media_coverage', 'event_invites', 'regional_fan_encounters'] },
+  { level: 3, label: 'national',  min_rep: 82, min_followers: 50000,  perks: ['talk_show_invites', 'major_brand_deals', 'paparazzi', 'national_fan_encounters'] },
+  { level: 4, label: 'celebrity', min_rep: 90, min_followers: 500000, perks: ['viral_status', 'global_brand_deals', 'constant_attention', 'scandal_risk'] },
+];
+
+export function computeFameTier(reputation, followers) {
+  let tier = FAME_TIERS[0];
+  for (const t of FAME_TIERS) {
+    if (reputation >= t.min_rep && (followers ?? 0) >= t.min_followers) tier = t;
+  }
+  return tier;
+}
+
+export function updateFame(worldState) {
+  let ws = JSON.parse(JSON.stringify(worldState));
+  if (!ws.fame) ws.fame = { level: 0, label: 'unknown', followers: 0, unlocked_perks: [], perk_notified: [] };
+  const tier = computeFameTier(ws.player.stats.reputation, ws.fame.followers ?? 0);
+  const prevLevel = ws.fame.level;
+  ws.fame.level = tier.level;
+  ws.fame.label = tier.label;
+  const newPerks = tier.perks.filter(p => !(ws.fame.unlocked_perks ?? []).includes(p));
+  if (newPerks.length) ws.fame.unlocked_perks = [...(ws.fame.unlocked_perks ?? []), ...newPerks];
+  // Passive follower growth for known characters
+  if (tier.level >= 1) {
+    const growthRate = [0, 2, 15, 80, 500][tier.level] ?? 0;
+    ws.fame.followers = (ws.fame.followers ?? 0) + growthRate;
+  }
+  return ws;
 }

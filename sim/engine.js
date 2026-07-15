@@ -368,9 +368,15 @@ export function computeCharacterEmotions(stats, consequences = [], npcContext = 
   else if (stats.arousal >= 30) e.push({ label: 'Restless',  cause: 'Mild tension' });
   // Consequences
   const ill = consequences.find(c => c.type === 'illness' || c.type === 'hospitalization');
-  if (ill)   e.push({ label: 'Ill',      cause: `${ill.type.replace(/_/g,' ')} — ${ill.duration}t left` });
+  if (ill)   e.push({ label: 'Ill',       cause: `${ill.type.replace(/_/g,' ')} — ${ill.duration}t left` });
   const unemp = consequences.find(c => c.type === 'unemployment');
-  if (unemp) e.push({ label: 'Stressed', cause: 'Out of work' });
+  if (unemp) e.push({ label: 'Stressed',  cause: 'Out of work' });
+  const debtP = consequences.find(c => c.type === 'debt_pressure' || c.type === 'physical_threat');
+  if (debtP) e.push({ label: 'Anxious',   cause: debtP.type === 'physical_threat' ? 'Being threatened' : 'Debt pressure mounting' });
+  const withd = consequences.find(c => c.type === 'withdrawal');
+  if (withd) e.push({ label: 'Craving',   cause: 'Fighting withdrawal' });
+  const scand = consequences.find(c => c.type === 'public_scandal');
+  if (scand) e.push({ label: 'Exposed',   cause: 'Caught in a public scandal' });
   // Add baseline emotion if no strong emotions present
   if (e.length === 0) {
     if (stats.mood >= 65 && stats.health >= 65 && stats.energy >= 55) {

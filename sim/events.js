@@ -224,6 +224,307 @@ export const WORLD_EVENT_TABLE = [
     effect: () => ({ stat_deltas: { mood: -8, energy: -5 }, time_cost_extra: 1 }),
     challenge_trigger: false,
   },
+  // ── DEBT ────────────────────────────────────────────────────────────────────
+  {
+    id: 'debt_collector_visit',
+    category: 'financial',
+    label: 'Debt collector demands payment',
+    condition: ws => (ws.debts ?? []).some(d => d.status === 'overdue'),
+    probability: 0.35,
+    effect: ws => {
+      const debt = (ws.debts ?? []).find(d => d.status === 'overdue');
+      return {
+        stat_deltas: { mood: -20, reputation: -8, social: -10 },
+        consequence: { type: 'debt_pressure', severity: 'moderate', duration: 5 },
+        debt_event: { type: 'collector_visit', debt_id: debt?.id },
+      };
+    },
+    challenge_trigger: true,
+    challenge_type: 'financial',
+  },
+  {
+    id: 'loan_shark_threat',
+    category: 'danger',
+    label: 'Loan shark sends threatening message',
+    condition: ws => (ws.debts ?? []).some(d => d.type === 'loan_shark' && d.status === 'overdue'),
+    probability: 0.55,
+    effect: () => ({
+      stat_deltas: { mood: -30, health: -5, social: -15 },
+      consequence: { type: 'physical_threat', severity: 'major', duration: 10 },
+    }),
+    challenge_trigger: true,
+    challenge_type: 'danger',
+  },
+  {
+    id: 'debt_accumulation',
+    category: 'financial',
+    label: 'Unpaid bills pile up into debt',
+    condition: ws => ws.player.cash < 200 && ws.job === null && !(ws.debts ?? []).some(d => d.status === 'active' && d.type === 'rent'),
+    probability: 0.10,
+    effect: () => ({
+      stat_deltas: { mood: -10, reputation: -3 },
+      add_debt: { creditor: 'Landlord', amount: 2000, type: 'rent', turns_due: 20, interest_rate: 0.02, description: 'Overdue rent and utilities' },
+    }),
+    challenge_trigger: true,
+    challenge_type: 'financial',
+  },
+  {
+    id: 'debt_lawsuit',
+    category: 'legal',
+    label: 'Creditor files lawsuit',
+    condition: ws => (ws.debts ?? []).some(d => d.status === 'overdue' && (d.turns_remaining ?? 0) <= -20),
+    probability: 0.15,
+    effect: () => ({
+      stat_deltas: { mood: -35, reputation: -20, social: -15 },
+      cash_delta: -5000,
+      consequence: { type: 'lawsuit', severity: 'critical', duration: 30 },
+    }),
+    challenge_trigger: true,
+    challenge_type: 'legal',
+  },
+  {
+    id: 'unexpected_windfall',
+    category: 'financial',
+    label: 'Unexpected money arrives',
+    condition: ws => ws.player.stats.reputation > 60 && ws.player.stats.mood > 65,
+    probability: 0.02,
+    effect: () => ({
+      cash_delta: Math.floor(Math.random() * 3000) + 500,
+      stat_deltas: { mood: 20 },
+    }),
+    challenge_trigger: false,
+  },
+  // ── CRIMINALITY ─────────────────────────────────────────────────────────────
+  {
+    id: 'police_patrol_encounter',
+    category: 'legal',
+    label: 'Police stops and questions you',
+    condition: ws => (ws.criminal_record?.wanted_level ?? 0) >= 1,
+    probability: 0.14,
+    effect: ws => {
+      const wl = ws.criminal_record?.wanted_level ?? 0;
+      return {
+        stat_deltas: { mood: -15, social: -8 },
+        consequence: { type: 'police_encounter', severity: wl >= 3 ? 'major' : 'moderate', duration: 2 },
+        criminal_event: { type: 'stopped', escalate: wl >= 4 },
+      };
+    },
+    challenge_trigger: true,
+    challenge_type: 'legal',
+  },
+  {
+    id: 'criminal_record_rejection',
+    category: 'legal',
+    label: 'Criminal record blocks an opportunity',
+    condition: ws => ws.criminal_record?.has_record && ws.player.stats.reputation < 50,
+    probability: 0.09,
+    effect: () => ({
+      stat_deltas: { mood: -15, reputation: -5 },
+      consequence: { type: 'record_stigma', severity: 'moderate', duration: 15 },
+    }),
+    challenge_trigger: true,
+    challenge_type: 'legal',
+  },
+  {
+    id: 'bystander_robbery',
+    category: 'danger',
+    label: 'Mugged on the street',
+    condition: ws => ws.player.cash > 500 && (ws.criminal_record?.wanted_level ?? 0) === 0 && ws.player.stats.social < 30 && ws.player.stats.mood < 40,
+    probability: 0.04,
+    effect: ws => {
+      const lost = Math.min(ws.player.cash, Math.floor(ws.player.cash * 0.35));
+      return {
+        stat_deltas: { health: -10, mood: -25, social: -15 },
+        cash_delta: -lost,
+        consequence: { type: 'robbery_victim', severity: 'major', duration: 10 },
+      };
+    },
+    challenge_trigger: true,
+    challenge_type: 'danger',
+  },
+  {
+    id: 'wanted_level_decay',
+    category: 'legal',
+    label: 'Police heat fades over time',
+    condition: ws => (ws.criminal_record?.wanted_level ?? 0) >= 1,
+    probability: 0.08,
+    effect: () => ({ criminal_wanted_decrease: 1 }),
+    challenge_trigger: false,
+  },
+  // ── FAME ────────────────────────────────────────────────────────────────────
+  {
+    id: 'fan_recognition',
+    category: 'fame',
+    label: 'Recognized by a fan in public',
+    condition: ws => (ws.fame?.level ?? 0) >= 1,
+    probability: 0.18,
+    effect: ws => {
+      const fl = ws.fame?.level ?? 0;
+      return {
+        stat_deltas: { mood: fl >= 3 ? 18 : 10, social: 12, reputation: 2 },
+        fame_followers: fl >= 2 ? 500 : 50,
+      };
+    },
+    challenge_trigger: false,
+  },
+  {
+    id: 'media_scandal',
+    category: 'fame',
+    label: 'Caught in a public scandal',
+    condition: ws => (ws.fame?.level ?? 0) >= 2 && ws.player.stats.reputation < 65,
+    probability: 0.09,
+    effect: ws => {
+      const fl = ws.fame?.level ?? 0;
+      return {
+        stat_deltas: { mood: -30, reputation: -20 - fl * 4, social: -18 },
+        fame_followers: -Math.floor((ws.fame?.followers ?? 0) * 0.12),
+        consequence: { type: 'public_scandal', severity: 'major', duration: 20 },
+      };
+    },
+    challenge_trigger: true,
+    challenge_type: 'fame',
+  },
+  {
+    id: 'brand_deal_offer',
+    category: 'fame',
+    label: 'Brand reaches out with endorsement deal',
+    condition: ws => (ws.fame?.level ?? 0) >= 1 && ws.player.stats.reputation >= 60,
+    probability: 0.07,
+    effect: ws => {
+      const fl = ws.fame?.level ?? 0;
+      const amount = fl >= 3 ? 50000 : fl >= 2 ? 10000 : 2000;
+      return {
+        cash_delta: amount,
+        stat_deltas: { mood: 20, reputation: 5 },
+        fame_followers: fl >= 2 ? 2000 : 300,
+      };
+    },
+    challenge_trigger: false,
+  },
+  {
+    id: 'viral_moment',
+    category: 'fame',
+    label: 'Something you did goes viral',
+    condition: ws => ws.player.stats.mood > 75 && ws.player.stats.social > 65,
+    probability: 0.02,
+    effect: () => ({
+      stat_deltas: { mood: 25, reputation: 12, social: 18 },
+      fame_followers: 8000,
+    }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'paparazzi_encounter',
+    category: 'fame',
+    label: 'Paparazzi follows you around',
+    condition: ws => (ws.fame?.level ?? 0) >= 3,
+    probability: 0.22,
+    effect: () => ({
+      stat_deltas: { mood: -12, social: -8, energy: -5 },
+      fame_followers: 1200,
+    }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'celebrity_event_invite',
+    category: 'fame',
+    label: 'Invited to exclusive celebrity event',
+    condition: ws => (ws.fame?.level ?? 0) >= 3,
+    probability: 0.10,
+    effect: () => ({
+      stat_deltas: { mood: 22, social: 28, reputation: 10 },
+      cash_delta: 8000,
+      fame_followers: 3500,
+    }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'talk_show_invite',
+    category: 'fame',
+    label: 'Invited to appear on a talk show',
+    condition: ws => (ws.fame?.level ?? 0) >= 3 && ws.player.stats.reputation >= 75,
+    probability: 0.06,
+    effect: () => ({
+      stat_deltas: { mood: 30, reputation: 15, social: 20 },
+      cash_delta: 25000,
+      fame_followers: 15000,
+    }),
+    challenge_trigger: false,
+  },
+  // ── ADDICTION ───────────────────────────────────────────────────────────────
+  {
+    id: 'addiction_withdrawal',
+    category: 'health',
+    label: 'Experiencing withdrawal symptoms',
+    condition: ws => (ws.addictions ?? []).some(a => a.status === 'withdrawing'),
+    probability: 0.65,
+    effect: ws => {
+      const levels = ['mild','moderate','severe'];
+      const worst = (ws.addictions ?? []).filter(a => a.status === 'withdrawing')
+        .sort((a,b) => levels.indexOf(b.severity) - levels.indexOf(a.severity))[0];
+      const sev = worst?.severity ?? 'mild';
+      return {
+        stat_deltas: sev === 'severe' ? { health: -8, energy: -20, mood: -25, social: -15 }
+          : sev === 'moderate' ? { health: -4, energy: -12, mood: -15, social: -8 }
+          : { health: -1, energy: -6, mood: -8 },
+        consequence: { type: 'withdrawal', severity: sev === 'severe' ? 'major' : 'moderate', duration: 3 },
+      };
+    },
+    challenge_trigger: true,
+    challenge_type: 'health',
+  },
+  {
+    id: 'addiction_craving',
+    category: 'health',
+    label: 'Intense craving hits unexpectedly',
+    condition: ws => (ws.addictions ?? []).some(a => a.status === 'active' && a.severity !== 'mild'),
+    probability: 0.22,
+    effect: () => ({ stat_deltas: { mood: -14, energy: -8, social: -5 } }),
+    challenge_trigger: false,
+  },
+  // ── SOCIAL / MISC EXTRAS ────────────────────────────────────────────────────
+  {
+    id: 'community_event',
+    category: 'social',
+    label: 'Local community event nearby',
+    condition: ws => {
+      const dow = new Date(ws.sim_time).getDay();
+      return (dow === 6 || dow === 0) && ws.player.stats.social < 60;
+    },
+    probability: 0.12,
+    effect: () => ({ stat_deltas: { mood: 10, social: 18, reputation: 2 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'unexpected_praise',
+    category: 'misc',
+    label: 'Received unexpected praise from someone',
+    condition: ws => ws.player.stats.reputation > 55 && ws.player.stats.mood < 50,
+    probability: 0.08,
+    effect: () => ({ stat_deltas: { mood: 15, reputation: 3, social: 8 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'surprise_expense',
+    category: 'financial',
+    label: 'Surprise expense — phone breaks, appliance fails',
+    condition: ws => ws.player.cash > 800,
+    probability: 0.04,
+    effect: () => ({
+      cash_delta: -(Math.floor(Math.random() * 500) + 200),
+      stat_deltas: { mood: -12 },
+    }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'bad_news_call',
+    category: 'misc',
+    label: 'Received distressing news',
+    condition: ws => ws.player.stats.mood > 55 && ws.player.stats.social > 40,
+    probability: 0.04,
+    effect: () => ({ stat_deltas: { mood: -20, social: -10, energy: -8 } }),
+    challenge_trigger: false,
+  },
 ];
 
 // ─── NPC EVENT TABLE ──────────────────────────────────────────────────────────
@@ -462,6 +763,31 @@ export function applyEventEffect(worldState, eventResult) {
       }];
     }
   }
+  if (ef.fame_followers != null && ws.fame) {
+    ws.fame.followers = Math.max(0, (ws.fame.followers ?? 0) + ef.fame_followers);
+  }
+  if (ef.add_debt) {
+    ws.debts = ws.debts ?? [];
+    ws.debts.push({
+      id: `debt_${Date.now()}`,
+      ...ef.add_debt,
+      original_amount: ef.add_debt.amount,
+      status: 'active',
+      interest_turns: 0,
+      created_turn: ws.turn,
+    });
+  }
+  if (ef.criminal_event) {
+    ws.criminal_record = ws.criminal_record ?? { wanted_level: 0, crimes: [], has_record: false };
+    if (ef.criminal_event.escalate) {
+      ws.criminal_record.wanted_level = Math.min(5, (ws.criminal_record.wanted_level ?? 0) + 1);
+    }
+  }
+  if (ef.criminal_wanted_decrease) {
+    if (ws.criminal_record) {
+      ws.criminal_record.wanted_level = Math.max(0, (ws.criminal_record.wanted_level ?? 0) - ef.criminal_wanted_decrease);
+    }
+  }
   return ws;
 }
 
@@ -565,6 +891,112 @@ export function tickSchoolSuspension(worldState) {
       ws.school.status = 'active';
       ws.player.stats.mood = Math.min(100, (ws.player.stats.mood ?? 50) + 5);
     }
+  }
+  return ws;
+}
+
+// ─── DEBT TICK ─────────────────────────────────────────────────────────────────
+export function tickDebts(worldState) {
+  let ws = JSON.parse(JSON.stringify(worldState));
+  if (!ws.debts?.length) return ws;
+  for (const debt of ws.debts) {
+    if (debt.status === 'paid' || debt.status === 'forgiven') continue;
+    debt.turns_remaining = (debt.turns_remaining ?? 30) - 1;
+    // Weekly interest accumulation
+    debt.interest_turns = (debt.interest_turns ?? 0) + 1;
+    if (debt.interest_turns >= 7) {
+      debt.interest_turns = 0;
+      const rate = debt.type === 'loan_shark' ? 0.15 : (debt.interest_rate ?? 0.05);
+      debt.amount = Math.ceil(debt.amount * (1 + rate));
+    }
+    if (debt.turns_remaining <= 0 && debt.status === 'active') {
+      debt.status = 'overdue';
+      ws.player.stats.reputation = Math.max(0, ws.player.stats.reputation - 8);
+      ws.player.stats.mood       = Math.max(0, ws.player.stats.mood       - 10);
+    }
+  }
+  return ws;
+}
+
+// ─── ADDICTION MANAGEMENT ─────────────────────────────────────────────────────
+export function addAddiction(worldState, { type, severity = 'mild', source = 'unknown' }) {
+  let ws = JSON.parse(JSON.stringify(worldState));
+  ws.addictions = ws.addictions ?? [];
+  const existing = ws.addictions.find(a => a.type === type && a.status !== 'recovered');
+  if (existing) {
+    const levels = ['mild', 'moderate', 'severe'];
+    const idx = levels.indexOf(existing.severity);
+    if (idx < 2) existing.severity = levels[idx + 1];
+    existing.status = 'active';
+  } else {
+    ws.addictions.push({
+      id: `addiction_${type}_${Date.now()}`,
+      type, severity, source,
+      status: 'active',
+      days_active: 0,
+      withdrawal_turns: 0,
+      last_fed_turn: ws.turn,
+    });
+  }
+  return ws;
+}
+
+export function feedAddiction(worldState, type) {
+  let ws = JSON.parse(JSON.stringify(worldState));
+  ws.addictions = ws.addictions ?? [];
+  const addiction = ws.addictions.find(a => a.type === type && a.status !== 'recovered');
+  if (!addiction) {
+    if (Math.random() < 0.12) return addAddiction(ws, { type, severity: 'mild', source: 'repeated_use' });
+    return ws;
+  }
+  addiction.last_fed_turn = ws.turn;
+  addiction.status        = 'active';
+  addiction.withdrawal_turns = 0;
+  addiction.days_active      = (addiction.days_active ?? 0) + 1;
+  if (addiction.days_active > 90 && addiction.severity === 'moderate') addiction.severity = 'severe';
+  else if (addiction.days_active > 30 && addiction.severity === 'mild')  addiction.severity = 'moderate';
+  return ws;
+}
+
+export function tickAddictions(worldState) {
+  let ws = JSON.parse(JSON.stringify(worldState));
+  if (!ws.addictions?.length) return ws;
+  for (const addiction of ws.addictions) {
+    if (addiction.status === 'recovered') continue;
+    const turnsSinceFed = (ws.turn ?? 0) - (addiction.last_fed_turn ?? ws.turn ?? 0);
+    const threshold = addiction.severity === 'severe' ? 4 : addiction.severity === 'moderate' ? 10 : 20;
+    if (turnsSinceFed > threshold) {
+      addiction.status = 'withdrawing';
+      addiction.withdrawal_turns = (addiction.withdrawal_turns ?? 0) + 1;
+      if (addiction.withdrawal_turns > 60  && addiction.severity === 'mild')     addiction.status = 'recovered';
+      if (addiction.withdrawal_turns > 120 && addiction.severity === 'moderate') { addiction.severity = 'mild'; addiction.withdrawal_turns = 0; }
+    } else {
+      addiction.status           = 'active';
+      addiction.withdrawal_turns = 0;
+    }
+  }
+  return ws;
+}
+
+// ─── CRIMINAL RECORD ──────────────────────────────────────────────────────────
+export function addCrime(worldState, { type, severity = 'minor', description = '' }) {
+  let ws = JSON.parse(JSON.stringify(worldState));
+  ws.criminal_record = ws.criminal_record ?? { wanted_level: 0, crimes: [], has_record: false };
+  ws.criminal_record.crimes = [...(ws.criminal_record.crimes ?? []), {
+    id: `crime_${Date.now()}`, type, severity, description, turn: ws.turn, status: 'active',
+  }];
+  ws.criminal_record.has_record = true;
+  const wlInc = severity === 'minor' ? 1 : severity === 'moderate' ? 2 : severity === 'major' ? 3 : 5;
+  ws.criminal_record.wanted_level = Math.min(5, (ws.criminal_record.wanted_level ?? 0) + wlInc);
+  ws.player.stats.reputation = Math.max(0, ws.player.stats.reputation - wlInc * 5);
+  ws.player.stats.mood       = Math.max(0, ws.player.stats.mood - 10);
+  return ws;
+}
+
+export function decreaseWantedLevel(worldState, amount = 1) {
+  let ws = JSON.parse(JSON.stringify(worldState));
+  if (ws.criminal_record) {
+    ws.criminal_record.wanted_level = Math.max(0, (ws.criminal_record.wanted_level ?? 0) - amount);
   }
   return ws;
 }
