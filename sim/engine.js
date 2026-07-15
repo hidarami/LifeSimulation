@@ -36,7 +36,11 @@ export function applyDecay(stats, hoursElapsed) {
   const s = { ...stats };
   for (const [key, def] of Object.entries(STATS)) {
     if (def.decay === 0) continue;
-    s[key] = Math.max(def.min, Math.min(def.max, s[key] - def.decay * hoursElapsed));
+    // hunger increases over time (0=full, 100=starving); all other stats decrease
+    const delta = key === 'hunger'
+      ? def.decay * hoursElapsed
+      : -(def.decay * hoursElapsed);
+    s[key] = Math.max(def.min, Math.min(def.max, s[key] + delta));
   }
   return s;
 }

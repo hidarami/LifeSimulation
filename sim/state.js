@@ -121,11 +121,9 @@ export async function listSaves() {
 
 export async function deleteSave(id) {
   await db.world.delete(id);
-  // Also delete associated events
-  const events = await db.events.where('saveId').equals(id).toArray();
-  for (const ev of events) {
-    await db.events.delete(ev.id);
-  }
+  await db.events.where('saveId').equals(id).delete();
+  await db.actions.where('saveId').equals(id).delete();
+  await db.sim_console.where('saveId').equals(id).delete();
 }
 
 export async function resetWorldState() {

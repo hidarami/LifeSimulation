@@ -219,5 +219,6 @@ export function buildNpcContextForGemini(npc, currentDate) {
     available:           task.available,
     interruptible:       task.interruptible,
     recent_interactions: npc.recent_interactions.slice(-3),
+    bio: npc.bio ?? null,
   };
 }

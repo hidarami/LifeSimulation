@@ -904,7 +904,9 @@ import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
          buildNpcContextForGemini, applyRelationshipDelta, createNpc,
          driftTraits, getNpcCurrentTask } from './npc.js';
 
+         
 let WS = null;
+let _processTurnCounter = 0; // race condition guard for non-blocking NPC callbacks
 let _sbClient = null;
 let initInProgress = false;
 
@@ -1686,6 +1688,7 @@ function autopilotDeltas(i, h) {
 
 async function processTurn(input) {
   if (!WS) { alert('Start a new game first.'); return; }
+  const _turnToken = ++_processTurnCounter;
   setStatus('Processing…', 'load'); setProcessing(true);
   try {
     let ws = JSON.parse(JSON.stringify(WS));
@@ -1749,6 +1752,7 @@ async function processTurn(input) {
       // Auto-register described third party via Groq (async, non-blocking)
       if (thirdParty && !hasActiveNpc && NEEDS_PARTNER.includes(type)) {
         evaluateDescribedNpc(input).then(nd => {
+          if (_turnToken !== _processTurnCounter) return;
           const _p1NpcNameExists = Object.values(WS?.npcs ?? {}).some(n =>
             n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim()
           );
@@ -1934,6 +1938,7 @@ async function processTurn(input) {
       const _candidateName = _newName || (_relTerm ? _relTerm.charAt(0).toUpperCase() + _relTerm.slice(1) : null);
       if (_candidateName) {
         evaluateDescribedNpc(prose.slice(0, 500)).then(nd => {
+          if (_turnToken !== _processTurnCounter) return;
           const _proseNpcExists = Object.values(WS?.npcs ?? {}).some(n =>
             n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim()
           );
@@ -1984,6 +1989,7 @@ async function processTurn(input) {
             };
           }).catch(() => {})
         )).then(() => {
+          if (_turnToken !== _processTurnCounter) return;
           saveWorldState(WS).catch(() => {});
           renderAll();
         });
@@ -2187,7 +2193,13 @@ async function boot() {
     const { data: { user } } = await _sbClient.auth.getUser();
     if (user) { signedIn = true; setStatus(`Signed in: ${user.email}`); }
   }
-  WS = (await loadWorldStateCloud()) ?? (await loadWorldState());
+  // Load local first so _worldId is always established, then overlay cloud state if available
+  WS = await loadWorldState();
+  const _bootCloud = await loadWorldStateCloud();
+  if (_bootCloud) {
+    WS = _bootCloud;
+    await saveWorldState(WS); // updates the local slot (_worldId already set above)
+  }
   if (WS) {
     loadConsoleHistoryForCurrentSave(getCurrentSaveId()).catch(() => {});
     renderAll();
