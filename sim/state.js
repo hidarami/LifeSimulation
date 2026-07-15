@@ -573,3 +573,104 @@ export function updateFame(worldState) {
   }
   return ws;
 }
+
+// ─── CONSOLE READ API ─────────────────────────────────────────────────────────
+export function exportNpc(ws, npcId) {
+  if (!ws?.npcs?.[npcId]) return null;
+  const npc = ws.npcs[npcId];
+  return {
+    id: npc.id, name: npc.name, age: npc.age,
+    npc_class: npc.npc_class, relationship_type: npc.relationship_type,
+    relationship_meter: npc.relationship_meter, trust_meter: npc.trust_meter,
+    traits: npc.traits, active_flags: npc.active_flags, flag_timers: npc.flag_timers,
+    bio: npc.bio ?? 'No bio set', significance: npc.significance, status: npc.status,
+    schedule_summary: {
+      weekday_blocks: npc.schedule?.weekday_routine?.length ?? 0,
+      has_interruptions: (npc.schedule?.interruptions?.length ?? 0) > 0,
+      current_task: null,
+    },
+    recent_interactions: npc.recent_interactions ?? [],
+  };
+}
+
+export function exportWorldSummary(ws) {
+  if (!ws) return null;
+  return {
+    turn: ws.turn, sim_time: ws.sim_time,
+    player: {
+      name: ws.player.name, age: ws.player.age,
+      location: ws.player.location, cash: ws.player.cash,
+      stats: Object.fromEntries(Object.entries(ws.player.stats).map(([k,v]) => [k, Math.round(v)])),
+      diseases: (ws.player.diseases ?? []).map(d => d.name),
+      possessions_count: (ws.player.possessions ?? []).length,
+    },
+    job: ws.job ? { employer: ws.job.employer, position: ws.job.position,
+      days: ws.job.days_employed, flags: ws.job.performance_flags } : null,
+    school: ws.school ? { name: ws.school.name, status: ws.school.status,
+      absences: ws.school.absence_count } : null,
+    npcs: Object.values(ws.npcs ?? {})
+      .filter(n => n.status === 'active')
+      .map(n => ({
+        id: n.id, name: n.name, age: n.age,
+        relationship_type: n.relationship_type,
+        relationship_meter: n.relationship_meter, trust_meter: n.trust_meter,
+        npc_class: n.npc_class, bio_set: !!n.bio, flags: n.active_flags ?? [],
+      })),
+    active_challenges: (ws.challenges ?? []).filter(c => c.active && !c.resolved).length,
+    active_debts: (ws.debts ?? []).filter(d => d.status === 'active' || d.status === 'overdue').length,
+    consequences: (ws.consequences ?? []).map(c => ({ type: c.type, duration: c.duration })),
+  };
+}
+
+export function exportLorebook() {
+  return localStorage.getItem('LOREBOOK') ?? '';
+}
+
+export async function exportClassifierHistory(limit = 10, saveId = null) {
+  const rows = await db.events
+    .where('category').equals('classifier_output')
+    .and(ev => saveId === null || ev.saveId === saveId)
+    .reverse().limit(limit).toArray();
+  return rows.reverse();
+}
+
+export async function exportPatchAuditLog(limit = 20, saveId = null) {
+  const rows = await db.events
+    .where('category').equals('patch_applied')
+    .and(ev => saveId === null || ev.saveId === saveId)
+    .reverse().limit(limit).toArray();
+  return rows.reverse();
+}
+
+export async function savePatchAuditEntry(patchId, patch, changed, rejected, violations) {
+  await db.events.add({
+    turn: null,
+    category: 'patch_applied',
+    description: rejected
+      ? `PATCH ${patchId} REJECTED: ${violations[0]}`
+      : `PATCH ${patchId} APPLIED: ${changed.join(', ')}`,
+    data: { patchId, patch, changed, rejected, violations },
+    timestamp: new Date().toISOString(),
+    saveId: _worldId,
+  });
+}
+
+export async function saveClassifierOutput(turn, simTime, output) {
+  await db.events.add({
+    turn,
+    category: 'classifier_output',
+    description: `Turn ${turn}: ${output.action_type ?? 'action'}`,
+    data: {
+      action_type:      output.action_type,
+      time_cost_hours:  output.time_cost_hours,
+      stat_deltas:      output.stat_deltas,
+      npc_ids_involved: output.npc_ids_involved,
+      location_change:  output.location_change,
+      risk_class:       output.risk_class,
+      alcohol_consumed: output.alcohol_consumed,
+      context_tags:     output.context_tags,
+    },
+    timestamp: simTime,
+    saveId: _worldId,
+  });
+}

@@ -1336,7 +1336,9 @@ import { loadWorldState, saveWorldState, createInitialWorldState,
          setSupabaseClient, saveWorldStateCloud, loadWorldStateCloud,
          getCurrentSaveId, saveConsoleMessage, loadConsoleHistory,
          saveImage, loadImage, loadAllImages,
-         addDebt, payDebt, computeFameTier, updateFame, FAME_TIERS } from './state.js';
+         addDebt, payDebt, computeFameTier, updateFame, FAME_TIERS,
+         exportNpc, exportWorldSummary, exportLorebook,
+         exportPatchAuditLog, savePatchAuditEntry, saveClassifierOutput } from './state.js';
 import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
          rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION,
          applyCascadingEffects, computeCharacterEmotions, applyCascadeEffectsToExternal,
@@ -1423,10 +1425,88 @@ function _tryParsePatchJson(raw) {
   return null;
 }
 
+function validatePatch(patch, ws) {
+  const violations = [];
+  const VALID_CLASSES = new Set(['intimate','household','professional','institutional']);
+  const INTIMATE_TYPES = ['lover','partner','boyfriend','girlfriend','spouse'];
+  if (patch.npc_updates) {
+    for (const [rawId, upd] of Object.entries(patch.npc_updates)) {
+      const id = _resolveNpcPatchKey(rawId);
+      if (!id) {
+        violations.push(`Cannot resolve NPC "${rawId}" — use exact ids from CURRENT GAME STATE`);
+        continue;
+      }
+      const npc = ws.npcs[id];
+      const newType  = upd.relationship_type ?? npc.relationship_type;
+      const newMeter = upd.relationship_meter ?? npc.relationship_meter;
+      const newClass = upd.npc_class ?? npc.npc_class;
+      if (INTIMATE_TYPES.includes(newType) && newMeter < 20) {
+        violations.push(`${npc.name}: Cannot set relationship_type "${newType}" with rel_meter=${newMeter} (min 20). Raise relationship_meter first.`);
+      }
+      if (newClass && !VALID_CLASSES.has(newClass)) {
+        violations.push(`${npc.name}: npc_class "${newClass}" invalid — use: intimate / household / professional / institutional`);
+      }
+      if (upd.schedule?.weekday_routine) {
+        const sorted = [...upd.schedule.weekday_routine].sort((a,b) => a.start_hour - b.start_hour);
+        if (!sorted.length || sorted[0].start_hour !== 0 || sorted.at(-1).end_hour !== 24) {
+          violations.push(`${npc.name}: schedule must cover hours 0–24 continuously`);
+        }
+      }
+      if (upd.relationship_meter != null) {
+        const v = Number(upd.relationship_meter);
+        if (v < -100 || v > 100) violations.push(`${npc.name}: relationship_meter ${v} out of -100..100`);
+      }
+    }
+  }
+  if (patch.player_updates?.stats) {
+    for (const [stat, val] of Object.entries(patch.player_updates.stats)) {
+      if (typeof val === 'number' && (val < 0 || val > 100)) {
+        violations.push(`Player stat "${stat}": ${val} out of 0..100`);
+      }
+    }
+  }
+  return violations;
+}
+
+function _resolveEnrichmentKey(key, npcs) {
+  const k = key.toLowerCase().replace(/[\s-]+/g, '_');
+  const kFirst = k.split('_')[0];
+  const FAMILY_TERM_MAP = {
+    'mama':'mother', 'mommy':'mother', 'nanay':'mother', 'inay':'mother',
+    'papa':'father', 'daddy':'father', 'tatay':'father', 'itay':'father',
+    'kuya':'brother', 'ate':'sister', 'lola':'grandmother', 'lolo':'grandfather',
+    'tita':'aunt', 'tito':'uncle', 'bro':'brother', 'sis':'sister',
+  };
+  const mappedRelType = FAMILY_TERM_MAP[kFirst] ?? null;
+  return Object.values(npcs).find(n => {
+    if (!n.name) return false;
+    const nameFirst = n.name.toLowerCase().split(/\s+/)[0];
+    const nameFull  = n.name.toLowerCase().replace(/\s+/g, '_');
+    const npcId     = (n.id ?? '').toLowerCase();
+    const relType   = (n.relationship_type ?? '').toLowerCase();
+    return (
+      nameFirst === kFirst
+      || nameFull === k
+      || npcId === k
+      || npcId.split('_')[0] === kFirst
+      || (mappedRelType && relType.includes(mappedRelType))
+      || relType === kFirst
+    );
+  }) ?? null;
+}
+
 function _applySimPatch(patch) {
   if (!WS || !patch) return;
+  const patchId = 'P-' + Date.now().toString(36).toUpperCase();
+  const _violations = validatePatch(patch, WS);
+  if (_violations.length) {
+    window._devlog?.error(`SIM_PATCH ${patchId} validation failed`, { violations: _violations });
+    setStatus('⚠ Patch rejected by engine validation', 'err');
+    savePatchAuditEntry(patchId, patch, [], true, _violations).catch(() => {});
+    return { rejected: true, violations: _violations };
+  }
   _patchUndo = JSON.parse(JSON.stringify(WS)); // snapshot before destructive change
-  window._devlog?.patch('SIM_PATCH received', patch);
+  window._devlog?.patch(`SIM_PATCH ${patchId} received`, patch);
   const _changed = [];
   try {
     if (patch.npc_updates) {
@@ -1466,13 +1546,27 @@ function _applySimPatch(patch) {
     if ('school_update' in patch) { WS.school = patch.school_update; _changed.push('school'); }
     if (patch.setting_description) { WS.setting_description = patch.setting_description; _changed.push('setting'); }
     if (patch.add_npcs?.length) {
+      const _VALID_ADD_CLASSES = new Set(['intimate','household','professional','institutional']);
       for (const nd of patch.add_npcs) {
         if (!nd.id || WS.npcs[nd.id]) continue;
-        const _pn = createNpc({ id: nd.id, name: nd.name, age: nd.age ?? 20, npc_class: nd.npc_class ?? 'household', relationship_type: nd.relationship_type ?? null, traits: nd.traits ?? {} });
+        const _npcClass = _VALID_ADD_CLASSES.has(nd.npc_class) ? nd.npc_class : 'household';
+        if (nd.npc_class && !_VALID_ADD_CLASSES.has(nd.npc_class)) {
+          window._devlog?.error(`add_npcs: invalid npc_class "${nd.npc_class}" → defaulting to household`);
+        }
+        const _pn = createNpc({ id: nd.id, name: nd.name, age: nd.age ?? 20, npc_class: _npcClass, relationship_type: nd.relationship_type ?? null, traits: nd.traits ?? {} });
         _pn.relationship_meter = nd.relationship_meter ?? 0;
         _pn.trust_meter        = nd.trust_meter        ?? 0;
-        _pn.significance       = nd.significance       ?? 2;
-        WS.npcs[nd.id]         = _pn;
+        _pn.significance       = nd.significance != null ? Math.max(1, Number(nd.significance)) : 2;
+        if (nd.bio)                                             _pn.bio          = nd.bio;
+        if (nd.active_flags && Array.isArray(nd.active_flags)) _pn.active_flags  = nd.active_flags;
+        if (nd.schedule?.weekday_routine?.length) {
+          _pn.schedule = {
+            weekday_routine: nd.schedule.weekday_routine,
+            weekend_routine: nd.schedule.weekend_routine ?? nd.schedule.weekday_routine,
+            interruptions:   [],
+          };
+        }
+        WS.npcs[nd.id] = _pn;
         _changed.push(`add_npc:${nd.name}`);
       }
     }
@@ -1499,8 +1593,10 @@ function _applySimPatch(patch) {
     }
     saveWorldState(WS).catch(() => {});
     renderAll();
-    window._devlog?.patch('SIM_PATCH applied', { changed: _changed });
+    window._devlog?.patch(`SIM_PATCH ${patchId} applied`, { changed: _changed });
     console.log('[patch] Applied:', _changed);
+    savePatchAuditEntry(patchId, patch, _changed, false, []).catch(() => {});
+    return { rejected: false, patchId };
   } catch(e) {
     window._devlog?.error('SIM_PATCH apply error', { error: e.message });
     console.error('[patch] Apply failed:', e);
@@ -2249,31 +2345,16 @@ async function startNewGame() {
         if (enriched.setting_description) ws.setting_description = enriched.setting_description;
         if (enriched.npc_descriptions && typeof enriched.npc_descriptions === 'object') {
           for (const [key, bio] of Object.entries(enriched.npc_descriptions)) {
-            const _k     = key.toLowerCase().replace(/[\s-]+/g, '_');
-        const _kFirst = _k.split('_')[0];
-        const _bioNpc = Object.values(ws.npcs).find(n => {
-          if (!n.name) return false;
-          const fn = n.name.toLowerCase().split(/\s+/)[0];       // "mark"
-          const fk = n.name.toLowerCase().replace(/\s+/g, '_');  // "mark_santos"
-          const id = (n.id ?? '').toLowerCase();                  // "mark_santos"
-          return fn === _kFirst || fk === _k || id === _k || id.split('_')[0] === _kFirst;
-        });
-        if (_bioNpc && ws.npcs[_bioNpc.id]) ws.npcs[_bioNpc.id].bio = bio;
+            if (!bio || typeof bio !== 'string') continue;
+            const _bioNpc = _resolveEnrichmentKey(key, ws.npcs);
+            if (_bioNpc && ws.npcs[_bioNpc.id]) ws.npcs[_bioNpc.id].bio = bio;
           }
         }
         // Apply per-NPC custom schedules from enrichment
         if (enriched.npc_schedules && typeof enriched.npc_schedules === 'object') {
           for (const [key, sched] of Object.entries(enriched.npc_schedules)) {
             if (!sched?.weekday_routine?.length) continue;
-            const _sk     = key.toLowerCase().replace(/[\s-]+/g, '_');
-            const _skFirst = _sk.split('_')[0];
-            const _sNpc = Object.values(ws.npcs).find(n => {
-              if (!n.name) return false;
-              const fn = n.name.toLowerCase().split(/\s+/)[0];
-              const fk = n.name.toLowerCase().replace(/\s+/g, '_');
-              const id = (n.id ?? '').toLowerCase();
-              return fn === _skFirst || fk === _sk || id === _sk || id.split('_')[0] === _skFirst;
-            });
+            const _sNpc = _resolveEnrichmentKey(key, ws.npcs);
             if (_sNpc && ws.npcs[_sNpc.id]) {
               ws.npcs[_sNpc.id].schedule = {
                 weekday_routine: sched.weekday_routine,
@@ -2627,6 +2708,7 @@ async function processTurn(input) {
     const cls  = await classifyAction(input, safe);
     _cls2Result = cls;
     window._devlog?.turn('Gemini classify result', { action_type: cls.action_type, time_cost_hours: cls.time_cost_hours, risk_class: cls.risk_class, stat_deltas: cls.stat_deltas, npc_ids: cls.npc_ids_involved });
+    saveClassifierOutput(ws.turn + 1, ws.sim_time, _cls2Result).catch(() => {});
     statDeltas=cls.stat_deltas??{}; timeCost=Math.min(Math.max(cls.time_cost_hours??0.25, 0.08), 4.0);
     locationChange=cls.location_change??null; actionDesc=`[${cls.action_type??'action'}]`;
     riskResult=rollRisk(cls.risk_class??'none', ws.player.stats);
@@ -2737,6 +2819,27 @@ async function processTurn(input) {
       statDeltas.health = (statDeltas.health ?? 0) + Math.round(timeCost * 0.4 * _eff);
     }
     ws.sim_time       = advanceTime(ws.sim_time, timeCost).toISOString();
+    // FIX 3B: Register NPC's physical presence during explicit scene as schedule interruption
+    if (route === ROUTE.PATH_1_EXPLICIT && _mentionedNpc && ws.npcs[_mentionedNpc.id]) {
+      ws.npcs[_mentionedNpc.id].schedule = ws.npcs[_mentionedNpc.id].schedule
+        ?? { weekday_routine: [], weekend_routine: [], interruptions: [] };
+      ws.npcs[_mentionedNpc.id].schedule.interruptions =
+        ws.npcs[_mentionedNpc.id].schedule.interruptions ?? [];
+      const _intS = new Date(prevSimTime).getTime();
+      const _intE = new Date(ws.sim_time).getTime();
+      const _noOv = ws.npcs[_mentionedNpc.id].schedule.interruptions.every(ex => {
+        const eS = new Date(ex.start).getTime(), eE = new Date(ex.end).getTime();
+        return _intE <= eS || _intS >= eE;
+      });
+      if (_noOv) {
+        ws.npcs[_mentionedNpc.id].schedule.interruptions.push({
+          start: prevSimTime, end: ws.sim_time,
+          task: 'with_player', interruptible: false, available: true,
+          location: 'with_player',
+          note: `Explicit scene — turn ${ws.turn + 1}`,
+        });
+      }
+    }
     ws.player.stats   = applyDecay(ws.player.stats, timeCost);
     // Circadian modifiers: time-of-day energy and mood drift
     const _circ   = getCircadianModifiers(ws.sim_time);
@@ -3575,6 +3678,56 @@ async function loadConsoleHistoryForCurrentSave(saveId) {
   } catch(e) { console.warn('[console] history load failed:', e.message); }
 }
 
+function runIntegrityCheck(ws) {
+  if (!ws) return { failed: ['No game loaded'], warnings: [] };
+  const failed = [], warnings = [];
+  const VALID_CLASSES = new Set(['intimate','household','professional','institutional']);
+  const INTIMATE_TYPES = ['lover','partner','boyfriend','girlfriend','spouse'];
+  for (const [id, npc] of Object.entries(ws.npcs ?? {})) {
+    if (npc.status !== 'active') continue;
+    if (!npc.name) failed.push(`NPC "${id}": missing name`);
+    if (!VALID_CLASSES.has(npc.npc_class)) {
+      failed.push(`${npc.name ?? id}: npc_class "${npc.npc_class}" is invalid`);
+    }
+    if (INTIMATE_TYPES.includes(npc.relationship_type) && npc.relationship_meter < 20) {
+      warnings.push(`${npc.name}: relationship_type "${npc.relationship_type}" but rel_meter=${npc.relationship_meter} (min 20 expected)`);
+    }
+    const routine = npc.schedule?.weekday_routine ?? [];
+    if (!routine.length) {
+      warnings.push(`${npc.name}: no weekday schedule blocks`);
+    } else {
+      const sorted = [...routine].sort((a,b) => a.start_hour - b.start_hour);
+      if (sorted[0].start_hour !== 0)
+        failed.push(`${npc.name}: schedule gap at start (starts at hour ${sorted[0].start_hour})`);
+      if (sorted.at(-1).end_hour !== 24)
+        failed.push(`${npc.name}: schedule gap at end (ends at hour ${sorted.at(-1).end_hour})`);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (sorted[i].end_hour !== sorted[i+1].start_hour) {
+          failed.push(`${npc.name}: schedule gap ${sorted[i].end_hour}:00–${sorted[i+1].start_hour}:00`);
+        }
+      }
+    }
+    if (npc.significance >= 2 && !npc.bio) {
+      warnings.push(`${npc.name}: significance=${npc.significance} but no bio set`);
+    }
+  }
+  for (const [stat, val] of Object.entries(ws.player?.stats ?? {})) {
+    if (typeof val === 'number' && (val < 0 || val > 100)) {
+      failed.push(`Player stat "${stat}" out of range: ${val}`);
+    }
+  }
+  const lorebook = localStorage.getItem('LOREBOOK') ?? '';
+  if (lorebook.trim() && Object.keys(ws.npcs ?? {}).length === 0) {
+    failed.push('Lorebook is set but world has zero NPCs — lorebook parsing failed at init');
+  }
+  for (const c of (ws.consequences ?? [])) {
+    if (c.duration <= 0) {
+      warnings.push(`Stale consequence "${c.type}" has duration ${c.duration} — should be cleared`);
+    }
+  }
+  return { failed, warnings };
+}
+
 async function sendConsoleMessage() {
   if (_consoleSending) return;
   const inp     = document.getElementById('console-input');
@@ -3610,6 +3763,115 @@ async function sendConsoleMessage() {
     }
     return;
   }
+  // ── DETERMINISTIC COMMANDS (bypass AI entirely) ───────────────────────────
+
+  // show npc [name or id]
+  const _npcMatch = content.match(/^\s*(?:show|read|inspect|get)\s+npc\s+(.+)/i);
+  if (_npcMatch) {
+    const _query = _npcMatch[1].trim();
+    const _resolvedId = _resolveNpcPatchKey(_query);
+    appendConsoleMsg('user', content);
+    if (_resolvedId && WS) {
+      const _npcData = exportNpc(WS, _resolvedId);
+      const _npcTask = getNpcCurrentTask(WS.npcs[_resolvedId], WS.sim_time);
+      appendConsoleMsg('assistant',
+        `**${_npcData.name}** [id: ${_npcData.id}]\n\n` +
+        `**Age:** ${_npcData.age} · **Class:** ${_npcData.npc_class} · **Type:** ${_npcData.relationship_type}\n\n` +
+        `**Relationship:** ${_npcData.relationship_meter} · **Trust:** ${_npcData.trust_meter}\n\n` +
+        `**Right Now:** ${_npcTask.task.replace(/_/g,' ')} at ${_npcTask.location} ` +
+          `(${_npcTask.available ? 'available' : 'not available'})\n\n` +
+        `**Bio:** ${_npcData.bio}\n\n` +
+        `**Flags:** ${_npcData.active_flags.length ? _npcData.active_flags.join(', ') : 'none'}\n\n` +
+        `**Traits:** ${Object.entries(_npcData.traits ?? {}).map(([k,v])=>`${k}:${v}`).join(' · ')}\n\n` +
+        `**Recent:** ${_npcData.recent_interactions.slice(-3).join(' | ') || 'none'}\n\n` +
+        `*Source: live engine data — WS.npcs["${_resolvedId}"]*`, false);
+    } else {
+      const _avail = WS ? Object.keys(WS.npcs).join(', ') : 'none';
+      appendConsoleMsg('assistant',
+        `No NPC found matching "${_query}".\n\nAvailable ids: ${_avail}`, false);
+    }
+    return;
+  }
+
+  // show world / show state / dump state
+  if (/^\s*(?:show|read|dump)\s+(?:world|state|game)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _summary = exportWorldSummary(WS);
+    appendConsoleMsg('assistant',
+      '**World State — Live Data**\n\n```\n' + JSON.stringify(_summary, null, 2) + '\n```\n\n' +
+      '*Source: live engine data — exportWorldSummary(WS)*', false);
+    return;
+  }
+
+  // show lorebook
+  if (/^\s*(?:show|read)\s+lorebook\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    const _lb = exportLorebook();
+    appendConsoleMsg('assistant',
+      _lb ? '**Lorebook:**\n\n' + _lb + '\n\n*Source: localStorage LOREBOOK*'
+          : 'No lorebook set. Configure one in ⚙ Settings → Lorebook.', false);
+    return;
+  }
+
+  // show npcs / list npcs
+  if (/^\s*(?:show|list)\s+npcs?\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _active = Object.values(WS.npcs).filter(n => n.status === 'active');
+    const _inactive = Object.values(WS.npcs).filter(n => n.status !== 'active');
+    let _report = `**Active NPCs (${_active.length}):**\n\n`;
+    for (const n of _active) {
+      _report += `- **${n.name}** [${n.id}] · ${n.relationship_type} · ` +
+        `rel:${n.relationship_meter} trust:${n.trust_meter} · bio:${n.bio ? '✓' : '✗'}\n`;
+    }
+    if (_inactive.length) {
+      _report += `\n**Inactive (${_inactive.length}):** ${_inactive.map(n=>n.name).join(', ')}`;
+    }
+    _report += '\n\n*Source: live engine data*';
+    appendConsoleMsg('assistant', _report, false);
+    return;
+  }
+
+  // check / integrity / verify / scan
+  if (/^\s*(?:check|integrity|verify|scan)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    const _iResult = runIntegrityCheck(WS);
+    let _iReport = '**Integrity Check — Deterministic Engine Rules**\n\n';
+    _iReport += '*Source: engine rules, no AI inference*\n\n';
+    if (_iResult.failed.length) {
+      _iReport += '**❌ FAILED:**\n' + _iResult.failed.map(f => '- ' + f).join('\n') + '\n\n';
+    }
+    if (_iResult.warnings.length) {
+      _iReport += '**⚠ WARNINGS:**\n' + _iResult.warnings.map(w => '- ' + w).join('\n') + '\n\n';
+    }
+    if (!_iResult.failed.length && !_iResult.warnings.length) {
+      _iReport += '**✓ All rules passed. World state is consistent.**';
+    }
+    appendConsoleMsg('assistant', _iReport, false);
+    return;
+  }
+
+  // show patches / patch log
+  if (/^\s*(?:show|list)\s+patches?\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    const _pLogs = await exportPatchAuditLog(20, getCurrentSaveId());
+    if (!_pLogs.length) {
+      appendConsoleMsg('assistant', 'No patches applied yet this save.', false);
+    } else {
+      let _pReport = `**Patch Audit Log (last ${_pLogs.length})**\n\n`;
+      for (const entry of _pLogs) {
+        const _pts = new Date(entry.timestamp).toLocaleTimeString();
+        const _pIcon = entry.data.rejected ? '❌' : '✓';
+        _pReport += `${_pIcon} **${entry.data.patchId}** · ${_pts}\n  ${entry.description}\n`;
+      }
+      _pReport += '\n*Source: events table, category:patch_applied*';
+      appendConsoleMsg('assistant', _pReport, false);
+    }
+    return;
+  }
+
+  // ── For everything else, proceed to AI ────────────────────────────────────
   _consoleSending = true;
   document.getElementById('console-submit').disabled = true;
   _consoleMessages.push({ role: 'user', content });
@@ -3630,11 +3892,17 @@ async function sendConsoleMessage() {
         window._devlog?.error('SIM_PATCH parse failed', { raw: m[1].slice(0, 300) });
         return false;
       }
-      _applySimPatch(parsed);
-      return true;
+      return _applySimPatch(parsed);
     };
 
     let _patchApplied = _extractAndApplyPatch(reply);
+    // Handle validation rejection
+    if (_patchApplied?.rejected) {
+      reply += '\n\n❌ **Patch rejected by engine:**\n' +
+        _patchApplied.violations.map(v => '- ' + v).join('\n') +
+        '\n\nFix these values and try again.';
+      _patchApplied = false;
+    }
     // Legacy STATE_CHANGE alias → SIM_PATCH
     if (!_patchApplied && /<STATE_CHANGE>/i.test(reply)) {
       _patchApplied = _extractAndApplyStateChange(reply);
@@ -3657,8 +3925,9 @@ async function sendConsoleMessage() {
             { role: 'assistant', content: reply },
             { role: 'user', content: '(SYSTEM) Output the <SIM_PATCH> JSON block now to commit your changes. Output ONLY the opening tag, the JSON object, and the closing tag — nothing else.' }
           ], WS);
-          if (_extractAndApplyPatch(_p2)) {
-            _patchApplied = true;
+          const _p2Result = _extractAndApplyPatch(_p2);
+          if (_p2Result && !_p2Result?.rejected) {
+            _patchApplied = _p2Result;
             window._devlog?.patch('Second pass succeeded');
           } else {
             window._devlog?.patch('Second pass: still no valid patch', { preview: _p2.slice(0, 100) });
@@ -3669,7 +3938,12 @@ async function sendConsoleMessage() {
       }
     }
 
-    if (_patchApplied) reply += '\n\n✓ Changes applied to game world.';
+    if (_patchApplied?.patchId) {
+      reply += `\n\n✓ Changes applied — **Patch ${_patchApplied.patchId}** · type "show patches" to audit`;
+    } else if (_patchApplied) {
+      reply += '\n\n✓ Changes applied to game world.';
+    }
+    reply += '\n\n---\n*Source: AI inference from state summary — for live data, use: `show npc [name]`, `show world`, `check`*';
     _consoleMessages.push({ role: 'assistant', content: reply });
     appendConsoleMsg('assistant', reply, true);
   } catch(err) {
