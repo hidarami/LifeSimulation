@@ -46,7 +46,21 @@ export const PROVIDER_ENDPOINTS = {
     format:                 'gemini',
     auth:                   null,
   },
+  custom: {
+    chat:                   null, // resolved from CUSTOM_BASE_URL at dispatch time
+    default_narrator_model: 'gpt-4o',
+    default_helper_model:   'gpt-4o-mini',
+    format:                 'openai',
+    auth: k => ({ 'Authorization': `Bearer ${k}` }),
+  },
 };
+
+// Base URL for a user-supplied OpenAI-compatible endpoint (localStorage CUSTOM_BASE_URL).
+// e.g. 'https://my-host/v1' — dispatch appends '/chat/completions', discovery appends '/models'.
+export function getCustomBaseUrl(baseUrl) {
+  const raw = (baseUrl || (typeof localStorage !== 'undefined' ? localStorage.getItem('CUSTOM_BASE_URL') : '') || '').trim();
+  return raw.replace(/\/+$/, '');
+}
 
 // ─── AUTO-DETECT PROVIDER FROM KEY PREFIX ─────────────────────────────────────
 export function detectProvider(key) {
@@ -58,11 +72,11 @@ export function detectProvider(key) {
   if (k.startsWith('gsk_'))    return 'groq';
   if (k.startsWith('sk-ant-')) return 'anthropic';
   if (k.startsWith('sk-'))     return 'openai';
-  return 'openrouter'; // unknown — assume openrouter-compatible
+  return null; // unknown prefix — let the UI prompt for a provider (or Custom)
 }
 
 export function getProviderDisplayName(provider) {
-  const MAP = { grok:'Grok/xAI', openai:'OpenAI', anthropic:'Anthropic', openrouter:'OpenRouter', groq:'Groq', gemini:'Google Gemini' };
+  const MAP = { grok:'Grok/xAI', openai:'OpenAI', anthropic:'Anthropic', openrouter:'OpenRouter', groq:'Groq', gemini:'Google Gemini', custom:'Custom (OpenAI-compatible)' };
   return MAP[provider] ?? provider ?? 'Unknown';
 }
 
@@ -159,8 +173,14 @@ export async function dispatchChat(provider, key, model, messages, maxTokens = 6
     return (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
   }
 
-  // OpenAI-compatible: Grok, OpenAI, OpenRouter, Groq
-  const res = await _fetch(cfg.chat, {
+  // OpenAI-compatible: Grok, OpenAI, OpenRouter, Groq, Custom
+  let chatUrl = cfg.chat;
+  if (provider === 'custom') {
+    const base = getCustomBaseUrl();
+    if (!base) throw new Error('Custom provider requires a base URL. Set it in ⚙ Settings.');
+    chatUrl = `${base}/chat/completions`;
+  }
+  const res = await _fetch(chatUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
     body: JSON.stringify({ model: model || cfg.default_narrator_model, max_tokens: maxTokens, messages, stream: false }),
@@ -202,7 +222,13 @@ export async function dispatchJSON(provider, key, model, prompt, maxTokens = 400
   }
 
   // OpenAI-compatible
-  const res = await fetch(cfg.chat, {
+  let chatUrl = cfg.chat;
+  if (provider === 'custom') {
+    const base = getCustomBaseUrl();
+    if (!base) throw new Error('Custom provider requires a base URL. Set it in ⚙ Settings.');
+    chatUrl = `${base}/chat/completions`;
+  }
+  const res = await fetch(chatUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
     body: JSON.stringify({ model: model || cfg.default_helper_model, max_tokens: maxTokens, temperature: 0.1, messages: [{ role: 'user', content: prompt }] }),
@@ -210,4 +236,46 @@ export async function dispatchJSON(provider, key, model, prompt, maxTokens = 400
   if (!res.ok) throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}`);
   const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
   try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch { return {}; }
+}
+
+// ─── DYNAMIC MODEL DISCOVERY ─────────────────────────────────────────────────
+// Queries the provider's model-list endpoint and returns an array of model id strings.
+// Model names churn constantly, so discovery is the source of truth; default_*_model
+// values are only a last-resort fallback. Returns [] on any error/CORS/non-200 so the
+// UI can gracefully fall back to a free-text input.
+export async function fetchModels(provider, key, baseUrl) {
+  if (!provider || !key) return [];
+  try {
+    // Gemini: models[].name, strip the "models/" prefix
+    if (provider === 'gemini') {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.models ?? []).map(m => (m.name ?? '').replace(/^models\//, '')).filter(Boolean);
+    }
+
+    // Anthropic: data[].id, x-api-key + anthropic-version headers
+    if (provider === 'anthropic') {
+      const res = await fetch('https://api.anthropic.com/v1/models', {
+        headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.data ?? []).map(m => m.id).filter(Boolean);
+    }
+
+    // OpenAI-compatible: Grok, OpenAI, OpenRouter, Groq, Custom — GET {chatBase}/models
+    const cfg = PROVIDER_ENDPOINTS[provider];
+    let base;
+    if (provider === 'custom') {
+      base = getCustomBaseUrl(baseUrl);
+    } else {
+      base = (cfg?.chat ?? '').replace(/\/chat\/completions$/, '');
+    }
+    if (!base) return [];
+    const res = await fetch(`${base}/models`, { headers: { 'Authorization': `Bearer ${key}` } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.data ?? []).map(m => m.id).filter(Boolean);
+  } catch { return []; }
 }
