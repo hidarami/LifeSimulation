@@ -435,6 +435,76 @@ CRITICAL: Do NOT extract the player character themselves (the "you" / protagonis
   return null;
 }
 
+Speak plainly and helpfully. Be direct. You can answer anything, not just game questions.
+
+WORLD MODIFICATION — when the player asks you to change something, include a <STATE_CHANGE> block with JSON:
+<STATE_CHANGE>
+{ "action": "...", "target": "...", "changes": { ... } }
+</STATE_CHANGE>
+
+Actions and examples:
+- modify_stat: { "action": "modify_stat", "target": "player", "changes": { "cash": 5000 } }
+- modify_stat (stats): { "action": "modify_stat", "target": "player", "changes": { "stats": { "health": 80, "mood": 75 } } }
+- update_player: { "action": "update_player", "target": "player", "changes": { "location": "Manila", "name": "Rico" } }
+- update_job: { "action": "update_job", "target": "player", "changes": { "employer": "7-Eleven", "position": "Cashier", "salary_per_cycle": 550, "pay_cycle": "daily", "schedule": "Mon-Sat 8AM-5PM", "days_employed": 0, "performance_flags": [] } }
+- clear_job: { "action": "clear_job", "target": "player", "changes": {} }
+- update_school: { "action": "update_school", "target": "player", "changes": { "name": "Bacolod City National High School", "grade_level": "Grade 12 - HUMSS", "schedule": "Mon-Fri 7AM-4PM", "status": "active", "absence_count": 0 } }
+- clear_school: { "action": "clear_school", "target": "player", "changes": {} }
+- update_npc: { "action": "update_npc", "target": "npc_id_here", "changes": { "relationship_meter": 40, "trust_meter": 30, "note": "reconciled after fight" } }
+- npc_job_change: { "action": "npc_job_change", "target": "npc_id_here", "changes": { "action": "quit_job" } } or { "action": "npc_job_change", "target": "npc_id_here", "changes": { "action": "enroll_school", "details": { "school_name": "STI College" } } }
+- add_challenge: { "action": "add_challenge", "target": "world", "changes": { "type": "health", "title": "Sprained Ankle", "cause": "...", "description": "...", "effects_text": "...", "resolution_steps": "...", "severity": "minor" } }
+- resolve_challenge: { "action": "resolve_challenge", "target": "challenge_id_prefix", "changes": {} }
+
+Include <STATE_CHANGE> ONLY when a change was explicitly requested. For questions and analysis, do not include it.`;
+
+Speak plainly and helpfully. Be direct. You can answer anything, not just game questions.
+
+WORLD MODIFICATION — when the player asks you to change something, include a <STATE_CHANGE> block with JSON:
+<STATE_CHANGE>
+{ "action": "...", "target": "...", "changes": { ... } }
+</STATE_CHANGE>
+
+Actions and examples:
+- modify_stat: { "action": "modify_stat", "target": "player", "changes": { "cash": 5000 } }
+- modify_stat (stats): { "action": "modify_stat", "target": "player", "changes": { "stats": { "health": 80, "mood": 75 } } }
+- update_player: { "action": "update_player", "target": "player", "changes": { "location": "Manila", "name": "Rico" } }
+- update_job: { "action": "update_job", "target": "player", "changes": { "employer": "7-Eleven", "position": "Cashier", "salary_per_cycle": 550, "pay_cycle": "daily", "schedule": "Mon-Sat 8AM-5PM", "days_employed": 0, "performance_flags": [] } }
+- clear_job: { "action": "clear_job", "target": "player", "changes": {} }
+- update_school: { "action": "update_school", "target": "player", "changes": { "name": "Bacolod City National High School", "grade_level": "Grade 12 - HUMSS", "schedule": "Mon-Fri 7AM-4PM", "status": "active", "absence_count": 0 } }
+- clear_school: { "action": "clear_school", "target": "player", "changes": {} }
+- update_npc: { "action": "update_npc", "target": "npc_id_here", "changes": { "relationship_meter": 40, "trust_meter": 30, "note": "reconciled after fight" } }
+- npc_job_change: { "action": "npc_job_change", "target": "npc_id_here", "changes": { "action": "quit_job" } } or { "action": "npc_job_change", "target": "npc_id_here", "changes": { "action": "enroll_school", "details": { "school_name": "STI College" } } }
+- add_challenge: { "action": "add_challenge", "target": "world", "changes": { "type": "health", "title": "Sprained Ankle", "cause": "...", "description": "...", "effects_text": "...", "resolution_steps": "...", "severity": "minor" } }
+- resolve_challenge: { "action": "resolve_challenge", "target": "challenge_id_prefix", "changes": {} }
+
+Include <STATE_CHANGE> ONLY when a change was explicitly requested. For questions and analysis, do not include it.`;
+
+- npc_ids_involved: only NPC ids that appear in the player's current world state
+- "alcohol_consumed": detect if player is drinking alcohol in this action:
+  { "detected": boolean, "drink_type": "beer"|"light_beer"|"wine"|"spirit_shot"|"cocktail"|"hard_liquor"|"spiked_drink"|"none", "quantity": number }
+  Triggers: "drink a beer", "have shots", "orders wine", "take a shot of gin", "have a few drinks"
+  "drink water/juice/soda/coffee/tea/milk" → detected: false
+  Default: { "detected": false, "drink_type": "none", "quantity": 1 }`;
+
+  "npc_ids_involved": string[],
+  "alcohol_consumed": { "detected": false, "drink_type": "none", "quantity": 1 },
+  "context_tags": []
+}
+
+- context_tags: array of applicable tags from: "crowded_place", "rain_exposure", "outdoor", "physical_exertion", "social_gathering", "risky_activity". Empty array if none apply.`;
+
+Return exactly this JSON shape:
+{
+  "action_type": string,
+  "time_cost_hours": number,
+  "stat_deltas": { "health": 0, "energy": 0, "hunger": 0, "hygiene": 0, "mood": 0, "social": 0 },
+  "risk_class": "none" | "low" | "moderate" | "high" | "critical",
+  "location_change": string | null,
+  "npc_ids_involved": string[],
+  "alcohol_consumed": { "detected": false, "drink_type": "none", "quantity": 1 },
+  "context_tags": []
+}
+
 // ─── MULTI-AI WORLD BUILDING ──────────────────────────────────────────────────
 // Runs Gemini (structure) and Groq (trait depth) in parallel during init.
 
