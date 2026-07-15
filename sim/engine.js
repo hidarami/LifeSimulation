@@ -96,7 +96,7 @@ export function formatTimestamp(date) {
   return {
     day:  d.toLocaleDateString('en-US', { weekday: 'long' }),
     date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-    time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
   };
 }
 
