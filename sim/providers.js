@@ -264,9 +264,21 @@ export async function dispatchJSON(provider, key, model, prompt, maxTokens = 400
     headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
     body: JSON.stringify({ model: model || cfg.default_helper_model, max_tokens: maxTokens, temperature: 0.1, messages: [{ role: 'user', content: prompt }] }),
   });
-  if (!res.ok) throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}`);
-  const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-  try { const _r = JSON.parse(text.replace(/```json|```/g, '').trim()); window._devlog?.api('dispatchJSON OK', { provider, model: model||cfg.default_helper_model, elapsed_ms: Date.now()-_t0 }); return _r; } catch { return {}; }
+  if (!res.ok) {
+    const _eb = await res.text().catch(() => '');
+    throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}: ${_eb.slice(0, 160)}`);
+  }
+  const _djData = await res.json();
+  const text = _djData.choices?.[0]?.message?.content ?? '{}';
+  const _djClean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim() || '{}';
+  try {
+    const _r = JSON.parse(_djClean);
+    window._devlog?.api('dispatchJSON OK', { provider, model: model||cfg.default_helper_model, elapsed_ms: Date.now()-_t0 });
+    return _r;
+  } catch (e) {
+    window._devlog?.error('dispatchJSON JSON parse error', { provider, model: model||cfg.default_helper_model, preview: _djClean.slice(0, 300), parse_error: e.message });
+    return {};
+  }
 }
 
 // ─── DYNAMIC MODEL DISCOVERY ─────────────────────────────────────────────────

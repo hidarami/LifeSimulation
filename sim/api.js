@@ -279,8 +279,13 @@ export async function compressSessionContext(last10Events) {
 
 // ─── LOREBOOK PARSER ──────────────────────────────────────────────────────────
 export async function parseLorebookToWorldState(lorebook) {
-  const key = localStorage.getItem('GEMINI_API_KEY');
-  if (!key) return null;
+  const _clsSlot = getClassifierSlot();
+  const _hlpSlot = getHelperSlot();
+  if (!_clsSlot.key && !_hlpSlot.key) {
+    console.warn('[lorebook] No classifier or helper key configured');
+    return null;
+  }
+
   const prompt = `Parse this lorebook for a life simulation game. Return ONLY valid JSON, no prose, no markdown fences.
 
 Lorebook:
@@ -338,60 +343,36 @@ Extract EVERY named person mentioned.
 CRITICAL: Also extract clearly implied household members or close relationships even if only partially named. Examples: "I live with my two brothers Jay and Ray (20,21)" → extract Jay AND Ray as separate NPCs. "my parents" → extract as father/mother with ids parent_father/parent_mother. "my best friend Marco" → extract Marco. "my girlfriend" → extract with id girlfriend_unnamed and name "Girlfriend". Do not leave anyone the player clearly lives with or is emotionally close to unextracted.
 CRITICAL: Do NOT extract the player character themselves (the "you" / protagonist / main character) as an NPC. Only extract OTHER people.`;
 
-  // Try Gemini first
-  try {
-    const res = await fetch(`${GEMINI_URL}?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 1200, response_mime_type: 'application/json' },
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-      const parsed = JSON.parse(text);
-      if (parsed?.player || parsed?.npcs?.length) {
-        console.log('[lorebook] Gemini parsed OK:', parsed?.npcs?.length ?? 0, 'NPCs');
-        return parsed;
-      }
-    } else {
-      console.warn('[lorebook] Gemini HTTP', res.status);
-    }
-  } catch (e) {
-    console.warn('[lorebook] Gemini failed:', e.message);
-  }
-
-  // Groq fallback — if Gemini fails or returns empty
-  const groqKey = localStorage.getItem('GROQ_API_KEY');
-  if (groqKey) {
+  // Build ordered slot list: classifier first (best JSON quality), then helper as fallback
+  const _parseSlots = [];
+  if (_clsSlot.key && _clsSlot.provider) _parseSlots.push({ ..._clsSlot, label: 'classifier' });
+  if (_hlpSlot.key && _hlpSlot.provider) _parseSlots.push({ ..._hlpSlot, label: 'helper' });
+  // Dedupe by provider+model so we don't call the same endpoint twice
+  const _seenParse = new Set();
+  for (const { key, provider, model, label } of _parseSlots) {
+    const _pk = `${provider}/${model || 'default'}`;
+    if (_seenParse.has(_pk)) continue;
+    _seenParse.add(_pk);
     try {
-      console.log('[lorebook] trying Groq fallback...');
-      const gr = await fetch(GROQ_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1,
-          max_tokens: 1200,
-        }),
-      });
-      if (gr.ok) {
-        const text = (await gr.json()).choices?.[0]?.message?.content ?? '{}';
-        const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-        if (parsed?.player || parsed?.npcs?.length) {
-          console.log('[lorebook] Groq fallback parsed OK:', parsed?.npcs?.length ?? 0, 'NPCs');
-          return parsed;
-        }
+      console.log(`[lorebook] trying ${provider} (${label})...`);
+      window._devlog?.system(`Lorebook parse attempt`, { provider, model: model||'default', label });
+      const parsed = await dispatchJSON(provider, key, model, prompt, 1200);
+      if (parsed?.player || parsed?.npcs?.length) {
+        console.log(`[lorebook] ${provider} parsed OK:`, parsed?.npcs?.length ?? 0, 'NPCs');
+        window._devlog?.system('Lorebook parsed OK', { provider, npc_count: parsed?.npcs?.length ?? 0 });
+        return parsed;
+      } else {
+        console.warn(`[lorebook] ${provider} returned empty/incomplete:`, Object.keys(parsed ?? {}).join(', ') || '(empty)');
+        window._devlog?.error('Lorebook parse incomplete', { provider, returned_keys: Object.keys(parsed ?? {}).join(', ') || 'empty' });
       }
     } catch (e) {
-      console.warn('[lorebook] Groq fallback failed:', e.message);
+      console.warn(`[lorebook] ${provider} failed:`, e.message);
+      window._devlog?.error('Lorebook parse failed', { provider, error: e.message });
     }
   }
 
   console.warn('[lorebook] all parsers failed — world starts empty');
+  window._devlog?.error('Lorebook parse: all slots exhausted', { tried: [..._seenParse] });
   return null;
 }
 
@@ -719,21 +700,31 @@ NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are liste
     getHelperSlot(),
     getClassifierSlot(),
   ].filter(Boolean);
-  const _seenProviders = new Set();
+  const _seenSlots = new Set();
   for (const { key, provider, model } of slots) {
-    if (!key || !provider || _seenProviders.has(provider)) continue;
-    _seenProviders.add(provider);
+    const _slotKey = `${provider}/${model || 'default'}`;
+    if (!key || !provider || _seenSlots.has(_slotKey)) continue;
+    _seenSlots.add(_slotKey);
     try {
-      const parsed = await dispatchJSON(provider, key, model, prompt, 2000);
-      if (parsed && (parsed.location_name || parsed.setting_description || parsed.starting_possessions?.length)) {
+      const parsed = await dispatchJSON(provider, key, model, prompt, 4096);
+      if (parsed && (parsed.location_name || parsed.setting_description || parsed.starting_possessions?.length || parsed.npc_descriptions)) {
         const _filled = _backfillEnrichment(parsed, ws);
+        window._devlog?.system('Enrichment OK', { provider, model: model||'default', possessions: _filled.starting_possessions?.length ?? 0, npc_descs: Object.keys(_filled.npc_descriptions ?? {}).length, npc_scheds: Object.keys(_filled.npc_schedules ?? {}).length, has_school: !!_filled.school, has_job_enrich: !!_filled.job_enrichment });
         console.log(`[enrich] ${provider} OK — loc: ${_filled.location_name?.slice(0,40)} | poss: ${_filled.starting_possessions?.length} | school: ${_filled.school?.name}`);
         return _filled;
+      } else {
+        const _missing = ['location_name','setting_description','starting_possessions','npc_descriptions'].filter(k => !parsed?.[k]);
+        window._devlog?.error('Enrichment incomplete', { provider, model: model||'default', missing_fields: _missing, returned_keys: Object.keys(parsed ?? {}).join(', ') || '(empty object)' });
+        console.warn(`[enrich] ${provider} returned incomplete — missing: ${_missing.join(', ')}`);
       }
-    } catch (e) { console.warn(`[enrich] ${provider} failed:`, e.message); }
+    } catch (e) {
+      window._devlog?.error('Enrichment failed', { provider, model: model||'default', error: e.message });
+      console.warn(`[enrich] ${provider} failed:`, e.message);
+    }
   }
 
-  console.warn('[enrich] all models failed');
+  window._devlog?.error('All enrichment slots exhausted', { tried: [..._seenSlots] });
+  console.warn('[enrich] all models failed — tried:', [..._seenSlots].join(', '));
   return null;
 }
 
@@ -816,7 +807,55 @@ Empty array if nothing should be removed.`;
 
 // ─── META CONSOLE ─────────────────────────────────────────────────────────────
 export async function callMetaConsole(messages, gameState) {
-  const systemPrompt = buildMetaConsolePrompt(gameState);
+  const _basePrompt = buildMetaConsolePrompt(gameState);
+  // Build live provider context so AI never speculates about which models are active
+  const _lsGet = k => (typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null) ?? '';
+  const _narKey  = _lsGet('NARRATOR_KEY')    || _lsGet('GROK_API_KEY');
+  const _clsKey  = _lsGet('CLASSIFIER_KEY')  || _lsGet('GEMINI_API_KEY');
+  const _hlpKey  = _lsGet('GROQ_API_KEY')    || _clsKey;
+  const _enrKey  = _lsGet('ENRICHER_KEY')    || _clsKey;
+  const _narProv = _lsGet('NARRATOR_PROVIDER')   || detectProvider(_narKey) || 'not configured';
+  const _clsProv = _lsGet('CLASSIFIER_PROVIDER') || detectProvider(_clsKey) || 'not configured';
+  const _hlpProv = _lsGet('GROQ_API_KEY') ? 'groq' : (_clsProv || 'not configured');
+  const _enrProv = _lsGet('ENRICHER_PROVIDER')   || detectProvider(_enrKey) || _clsProv || 'not configured';
+  const _activeNpcs = Object.values(gameState?.npcs ?? {}).filter(n => n.status === 'active');
+  const _wsPlayer  = gameState?.player;
+  const _consoleCtx = `
+
+━━ SIM CONSOLE: LIVE ENGINE CONFIGURATION ━━
+
+ACTIVE API SLOTS — use these facts when asked "which model/AI handles X":
+  Narrator  (prose generation):     ${getProviderDisplayName(_narProv)} / ${_lsGet('NARRATOR_MODEL') || 'provider default'}
+  Classifier (JSON/stat tasks):     ${getProviderDisplayName(_clsProv)} / ${_lsGet('CLASSIFIER_MODEL') || 'provider default'}
+  Helper    (background/fast tasks): ${getProviderDisplayName(_hlpProv)} / ${_lsGet('GROQ_API_KEY') ? 'llama-3.1-8b-instant (fast background)' : 'provider default'}
+  Enricher  (world-building init):  ${getProviderDisplayName(_enrProv)} / ${_lsGet('ENRICHER_MODEL') || 'provider default'}
+
+LIVE GAME STATE SUMMARY:
+  Player: ${_wsPlayer ? `${_wsPlayer.name}, age ${_wsPlayer.age}, ₱${_wsPlayer.cash ?? 0}, ${_wsPlayer.location ?? '?'}, Turn ${gameState.turn}` : 'no game loaded'}
+  Job: ${gameState?.job ? `${gameState.job.position ?? 'worker'} at ${gameState.job.employer ?? '?'}` : 'unemployed'}
+  School: ${gameState?.school?.name ?? 'none'} (${gameState?.school?.status ?? 'n/a'})
+  Possessions: ${(_wsPlayer?.possessions ?? []).length} items registered
+  Active NPCs (${_activeNpcs.length}): ${_activeNpcs.map(n => `${n.name}[${n.id}]`).join(', ') || 'none'}
+
+━━ CONSOLE IDENTITY ━━
+You are the SIM CONSOLE — the official management and diagnostic interface for The Sim.
+You have FULL authority over the game world. You are NOT a passive chatbot.
+
+YOUR CAPABILITIES:
+- Modify ANY part of game state using <SIM_PATCH> — always emit the block to commit changes
+- Answer questions using ENGINE LOG data when it is injected into the conversation
+- Diagnose initialization/enrichment/generation failures from injected logs
+- Apply schedule, relationship, stat, job, school, NPC, world, and inventory changes
+
+ENGINE LOG SECTIONS: When [ENGINE LOG] appears in the conversation, those are REAL devlog entries from the running engine. Use them as authoritative evidence. Never say "I don't have access to logs" when logs are present in context.
+
+WHEN ASKED "why did X not happen / which model / why no items":
+  1. Check ENGINE LOG for ERROR or SYSTEM entries first
+  2. Cross-reference with ACTIVE API SLOTS above
+  3. Give a specific, grounded answer based on what the logs show
+
+NEVER output vague statements like "check documentation" or "I can't access logs" — you ARE the console.`;
+  const systemPrompt = _basePrompt + _consoleCtx;
   const _sysTokenEst = Math.ceil(systemPrompt.length / 4);
   const _msgTokenEst = messages.slice(-24).reduce((acc, m) => acc + Math.ceil((m.content?.length ?? 0) / 4), 0);
   window._devlog?.console_log('Console API call', { msgs: messages.length, sys_tokens_est: _sysTokenEst, msg_tokens_est: _msgTokenEst, total_est: _sysTokenEst + _msgTokenEst });

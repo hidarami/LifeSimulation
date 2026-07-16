@@ -3587,6 +3587,7 @@ document.getElementById('k-custom-baseurl')?.addEventListener('input', _updateCu
 
 document.getElementById('btn-settings').addEventListener('click', () => {
   closeMenu();
+  document.getElementById('modal').classList.add('open');  
   document.getElementById('k-quickstart').value      = '';
   document.getElementById('k-narrator').value        = localStorage.getItem('NARRATOR_KEY') ?? '';
   document.getElementById('k-narrator-model').value  = localStorage.getItem('NARRATOR_MODEL') ?? '';
@@ -4203,18 +4204,33 @@ async function sendConsoleMessage() {
     window._devlog?.console_log('Command detected', { command: 'help' });
     appendConsoleMsg('user', content);
     appendConsoleMsg('assistant',
-      '**AI CONSOLE — Commands**\n\n' +
-      '**LIVE DATA (no AI):**\n' +
-      '- `show npcs` — all active NPCs\n- `show npc [name]` — full NPC data & schedule\n- `show world` — world state snapshot\n- `show lorebook` — lorebook text\n' +
-      '- `show patches` — patch audit log\n- `show errors` — recent error log\n- `show logs [category]` — devlog filter (ERROR API ROUTE TURN NPC STAT PATCH SYSTEM CONSOLE)\n' +
-      '- `show api calls` — recent API call history\n- `show recent` — last 15 devlog entries\n- `show model` — active AI slot config\n' +
-      '- `check` / `integrity` — engine rule validation\n- `undo` — reverse last SIM_PATCH\n\n' +
+      '**SIM CONSOLE — Commands**\n\n' +
+      '**LIVE DATA (no AI, instant):**\n' +
+      '- `show npcs` — all active NPCs with rel/trust meters\n' +
+      '- `show npc [name]` — full NPC data, schedule, traits, history\n' +
+      '- `show world` — complete world state snapshot\n' +
+      '- `show lorebook` — lorebook text\n' +
+      '- `show items` / `show possessions` — player inventory\n' +
+      '- `show providers` — live API slot configuration (who handles what)\n' +
+      '- `show init` / `show initialization` — enrichment & startup log\n' +
+      '- `show patches` — patch audit log\n' +
+      '- `show errors` — recent ERROR devlog entries\n' +
+      '- `show logs [category]` — filter devlog: ERROR API ROUTE TURN NPC STAT PATCH SYSTEM CONSOLE\n' +
+      '- `show api calls` — recent API call history\n' +
+      '- `show recent` — last 15 devlog entries\n' +
+      '- `show model` — active AI slot config\n' +
+      '- `check` / `integrity` — engine rule validation\n' +
+      '- `undo` — reverse last SIM_PATCH\n\n' +
       '**ENGINE ACTIONS (no AI):**\n' +
-      '- `generate npcs` — create missing NPCs from lorebook + enrich bios/schedules\n- `regenerate bio [name]` — rebuild an NPC\'s bio\n' +
-      '- `rerun enrichment` — re-apply world enrichment to current save\n- `reparse lorebook` — add missing NPCs to current game\n\n' +
+      '- `generate npcs` — create missing NPCs from lorebook + enrich bios/schedules\n' +
+      '- `regenerate bio [name]` — rebuild a specific NPC bio\n' +
+      '- `generate items` / `generate possessions` — create player inventory from lorebook\n' +
+      '- `fix schedules` / `repair schedules` — detect & repair broken NPC schedules\n' +
+      '- `rerun enrichment` — re-run world enrichment (items, schedules, bios, job details)\n' +
+      '- `reparse lorebook` — parse lorebook again and add missing NPCs\n\n' +
       '**ASK ANYTHING:**\n' +
-      'Any other input routes to AI with full game context.\n' +
-      'Diagnostic questions ("why did X fail") auto-inject recent error log.\n\n' +
+      'All other input goes to AI with full game context + ENGINE LOG injection.\n' +
+      'Diagnostic questions ("why no items", "which model failed", "show init log") auto-inject SYSTEM+ERROR+API logs.\n\n' +
       '*Source: deterministic engine — no AI used for this response*', false);
     return;
   }
@@ -4448,18 +4464,209 @@ async function sendConsoleMessage() {
     return;
   }
 
+// ── SHOW PROVIDERS ─────────────────────────────────────────────────────────
+  if (/^\s*(?:show|list|check)\s+providers?\s*(?:status|config|slots?)?\s*$/i.test(content) || /^\s*provider\s+(?:status|config)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_providers' });
+    appendConsoleMsg('user', content);
+    const _maskKey  = k => k ? k.slice(0, 6) + '...' + k.slice(-4) : '— not set —';
+    const _narKey   = localStorage.getItem('NARRATOR_KEY')    || localStorage.getItem('GROK_API_KEY') || '';
+    const _clsKey   = localStorage.getItem('CLASSIFIER_KEY')  || localStorage.getItem('GEMINI_API_KEY') || '';
+    const _hlpKey   = localStorage.getItem('GROQ_API_KEY')    || '';
+    const _enrKey   = localStorage.getItem('ENRICHER_KEY')    || '';
+    const _orKey    = localStorage.getItem('OPENROUTER_API_KEY') || '';
+    const _narProv  = localStorage.getItem('NARRATOR_PROVIDER')   || detectProvider(_narKey) || '?';
+    const _clsProv  = localStorage.getItem('CLASSIFIER_PROVIDER') || detectProvider(_clsKey) || '?';
+    const _enrProv  = _enrKey ? (localStorage.getItem('ENRICHER_PROVIDER') || detectProvider(_enrKey) || '?') : (_clsProv + ' (fallback to classifier)');
+    const _hlpProv  = _hlpKey ? 'groq' : (_clsProv ? _clsProv + ' (fallback to classifier)' : '?');
+    const _fbSlots  = (() => { try { return JSON.parse(localStorage.getItem('FALLBACK_SLOTS') ?? '[]').filter(s => s.enabled && s.key); } catch { return []; } })();
+    let _pReport = '**Active API Slot Configuration (live reading):**\n\n';
+    _pReport += `**Narrator** — produces prose narration each turn\n  Provider: ${getProviderDisplayName(_narProv)}\n  Key: ${_maskKey(_narKey)}\n  Model: ${localStorage.getItem('NARRATOR_MODEL') || '(provider default)'}\n\n`;
+    _pReport += `**Classifier** — JSON tasks: action→stats, NPC reactions, scheduling\n  Provider: ${getProviderDisplayName(_clsProv)}\n  Key: ${_maskKey(_clsKey)}\n  Model: ${localStorage.getItem('CLASSIFIER_MODEL') || '(provider default)'}\n\n`;
+    _pReport += `**Helper** — fast background: lorebook parsing, bio generation, flag checks\n  Provider: ${getProviderDisplayName(_hlpProv)}\n  Key: ${_maskKey(_hlpKey || _clsKey)}\n  Model: ${_hlpKey ? 'llama-3.1-8b-instant' : '(classifier fallback model)'}\n\n`;
+    _pReport += `**Enricher** — world-building at init: possessions, schedules, bios, job detail\n  Provider: ${getProviderDisplayName(_enrProv)}\n  Key: ${_maskKey(_enrKey || _clsKey)}\n  Model: ${localStorage.getItem('ENRICHER_MODEL') || '(provider default)'}\n\n`;
+    if (_orKey)  _pReport += `**OpenRouter** (narrator cascade fallback): ${_maskKey(_orKey)}\n\n`;
+    if (_fbSlots.length) {
+      _pReport += `**Configured Fallback Slots (${_fbSlots.length} enabled):**\n`;
+      _pReport += _fbSlots.map(s => `  Slot ${s.slot}: ${s.provider || detectProvider(s.key) || '?'} → roles: ${(s.roles ?? []).join(', ') || 'none assigned'}`).join('\n') + '\n\n';
+    } else {
+      _pReport += '*No fallback slots configured. If narrator/classifier fail, there is no cascade.*\n\n';
+    }
+    const _health = !_narKey && !_clsKey ? '❌ No keys set — game cannot run at all'
+      : !_narKey ? '⚠ Narrator key missing — prose narration will fail'
+      : !_clsKey ? '⚠ Classifier key missing — action classification will fail'
+      : '✓ Required slots configured';
+    _pReport += `**Health:** ${_health}\n\n*Source: localStorage — live reading, no AI inference*`;
+    appendConsoleMsg('assistant', _pReport, false);
+    return;
+  }
+
+  // ── SHOW INITIALIZATION / STARTUP LOG ─────────────────────────────────────
+  if (/^\s*(?:show|get|read|dump)\s+(?:init(?:ialization)?|startup|pipeline|generation\s+log|enrich(?:ment)?\s+log)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_init_log' });
+    appendConsoleMsg('user', content);
+    const _allEntries = window._devlog?.entries ?? [];
+    const _initEntries = _allEntries.filter(e => ['SYSTEM','API','ERROR'].includes(e.cat));
+    if (!_initEntries.length) {
+      appendConsoleMsg('assistant', 'No initialization log found. Start a new game to generate one.\n\n*Source: live _devlog.entries*', false);
+      return;
+    }
+    const _errs = _initEntries.filter(e => e.cat === 'ERROR');
+    const _sys  = _initEntries.filter(e => e.cat === 'SYSTEM');
+    const _apis = _initEntries.filter(e => e.cat === 'API').slice(-20);
+    let _initReport = `**Initialization & Enrichment Log:**\n\n`;
+    if (_errs.length) {
+      _initReport += `**❌ ERRORS (${_errs.length}) — root causes of missing items/schedules/NPCs:**\n`;
+      _initReport += _errs.map(e => `  [${new Date(e.ts).toLocaleTimeString()}] ${e.msg}${e.data ? '\n    ' + JSON.stringify(e.data).slice(0, 200) : ''}`).join('\n') + '\n\n';
+    } else {
+      _initReport += '**✓ No errors logged.**\n\n';
+    }
+    if (_sys.length) {
+      _initReport += `**⚙ System / Enrichment Events (${_sys.length}):**\n`;
+      _initReport += _sys.map(e => `  [${new Date(e.ts).toLocaleTimeString()}] ${e.msg}${e.data ? ' — ' + JSON.stringify(e.data).slice(0, 120) : ''}`).join('\n') + '\n\n';
+    }
+    if (_apis.length) {
+      _initReport += `**📡 Recent API Calls (last ${_apis.length}):**\n`;
+      _initReport += _apis.map(e => `  [${new Date(e.ts).toLocaleTimeString()}] ${e.msg}${e.data ? ' — ' + JSON.stringify(e.data).slice(0, 80) : ''}`).join('\n') + '\n\n';
+    }
+    if (!_errs.length && !_sys.length && _apis.length) {
+      _initReport += '_No SYSTEM entries found — enrichment may have completed before devlog was initialized, or initialization was not run this session._\n\n';
+    }
+    _initReport += '*Source: live _devlog.entries — SYSTEM/API/ERROR categories*';
+    appendConsoleMsg('assistant', _initReport, false);
+    return;
+  }
+
+  // ── SHOW ITEMS / POSSESSIONS ───────────────────────────────────────────────
+  if (/^\s*(?:show|list)\s+(?:items?|possessions?|inventory)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_items' });
+    appendConsoleMsg('user', content);
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const poss  = WS.player?.possessions ?? [];
+    const irrev = WS.player?.irreversible ?? [];
+    const habits = WS.player?.habits ?? [];
+    let _iReport = `**Player Inventory — ${WS.player?.name}:**\n\n`;
+    if (!poss.length) {
+      _iReport += '❌ **No possessions registered.**\n\n';
+      _iReport += '> This typically means enrichment failed at initialization.\n> Run `show init` to see why, then `generate items` to create them now.\n\n';
+    } else {
+      _iReport += `**Possessions (${poss.length}):**\n` + poss.map(p => `- **${p.name}**${p.condition ? ' (' + p.condition + ')' : ''}${p.note ? ' — ' + p.note : ''}`).join('\n') + '\n\n';
+    }
+    if (irrev.length) _iReport += `**Permanent/Irreversible (${irrev.length}):**\n${irrev.map(i => `- ${i}`).join('\n')}\n\n`;
+    if (habits.length) _iReport += `**Habits (${habits.length}):**\n${habits.map(h => `- ${h}`).join('\n')}\n\n`;
+    _iReport += '*Source: live engine data — WS.player.possessions*';
+    appendConsoleMsg('assistant', _iReport, false);
+    return;
+  }
+
+  // ── ENGINE: GENERATE ITEMS / POSSESSIONS ────────────────────────────────────
+  if (/^\s*(?:generate|create|add)\s+(?:items?|possessions?|inventory)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'generate_items' });
+    appendConsoleMsg('user', content);
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _curPoss = WS.player?.possessions ?? [];
+    if (_curPoss.length >= 4) {
+      appendConsoleMsg('assistant', `Player already has ${_curPoss.length} possessions. Use \`show items\` to view them.\n\nTo add specific items, ask me directly: "add a bicycle to ${WS.player?.name}'s possessions".`, false);
+      return;
+    }
+    appendConsoleMsg('assistant', '⏳ Generating possessions from lorebook context...', false);
+    const _lbText = localStorage.getItem('LOREBOOK') ?? '';
+    const _giNarKey  = localStorage.getItem('NARRATOR_KEY')   || localStorage.getItem('GROK_API_KEY') || '';
+    const _giClsKey  = localStorage.getItem('CLASSIFIER_KEY') || localStorage.getItem('GEMINI_API_KEY') || '';
+    const _giHlpKey  = localStorage.getItem('GROQ_API_KEY')   || '';
+    const _giKey     = _giHlpKey || _giClsKey || _giNarKey;
+    const _giProv    = _giHlpKey ? 'groq' : (detectProvider(_giClsKey) || detectProvider(_giNarKey) || null);
+    const _giModel   = _giHlpKey ? 'llama-3.1-8b-instant' : null;
+    if (!_giKey || !_giProv) { appendConsoleMsg('assistant', '⚠ No API key available. Configure one in ⚙ Settings.', false); return; }
+    try {
+      const _locale = localStorage.getItem('LOCALE') || 'Philippines';
+      const _curr   = localStorage.getItem('CURRENCY_SYMBOL') || '₱';
+      const _giPrompt = `Generate realistic starting possessions for this life simulation character.
+
+Character: ${WS.player?.name}, age ${WS.player?.age}, location: ${WS.player?.location ?? 'home'}
+Lorebook: "${_lbText.slice(0, 700)}"
+
+Return ONLY a valid JSON array, no markdown, no explanation:
+[
+  { "name": "item name", "condition": "new/worn/old/broken/well-maintained", "note": "its purpose or brief story", "acquired_method": "bought|gifted|inherited|found" }
+]
+
+Generate 6-8 items matching the character's economic class. MUST include:
+1. A phone (specify model appropriate to their income — cheap prepaid or old model for poor families)
+2. A bag or backpack
+3. At least one clothing item
+4. A hygiene item
+5. 2-4 items specific to their role (student: notebooks, lunchbox; worker: work shoes, ID; unemployed: utility items)
+
+Be specific and realistic for ${_locale}. No markdown, ONLY the JSON array.`;
+      const _giRaw = await _providerDispatchChat(_giProv, _giKey, _giModel, [{ role: 'user', content: _giPrompt }], 600, 15000);
+      const _giClean = _giRaw.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+      const _newPoss = JSON.parse(_giClean);
+      if (Array.isArray(_newPoss) && _newPoss.length) {
+        const _seenN = new Set((_curPoss).map(p => (p.name ?? '').toLowerCase()));
+        const _toAdd = _newPoss.filter(p => p.name && !_seenN.has(p.name.toLowerCase()));
+        WS.player.possessions = [..._curPoss, ..._toAdd];
+        await saveWorldState(WS);
+        renderAll();
+        window._devlog?.system('generate_items complete', { added: _toAdd.length, provider: _giProv });
+        appendConsoleMsg('assistant', `**Generated ${_toAdd.length} possessions for ${WS.player?.name}:**\n\n${_toAdd.map(p => `- **${p.name}** (${p.condition ?? 'used'})${p.note ? ' — ' + p.note : ''}`).join('\n')}\n\n*Source: Engine action — ${getProviderDisplayName(_giProv)}*`, false);
+      } else {
+        appendConsoleMsg('assistant', '⚠ Generation returned no valid items. Try `rerun enrichment` for a full world pass.', false);
+      }
+    } catch (e) {
+      window._devlog?.error('generate_items failed', { error: e.message });
+      appendConsoleMsg('assistant', `⚠ Generation failed: ${e.message}`, false);
+    }
+    return;
+  }
+
+  // ── ENGINE: FIX / REPAIR SCHEDULES ─────────────────────────────────────────
+  if (/^\s*(?:fix|repair|rebuild)\s+schedules?\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'repair_schedules' });
+    appendConsoleMsg('user', content);
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _allNpcs   = Object.values(WS.npcs).filter(n => n.status === 'active');
+    const _badNpcs   = _allNpcs.filter(n => {
+      const r = n.schedule?.weekday_routine ?? [];
+      if (!r.length) return true;
+      const s = [...r].sort((a,b) => a.start_hour - b.start_hour);
+      return s[0].start_hour !== 0 || s.at(-1).end_hour !== 24;
+    });
+    if (!_badNpcs.length) {
+      appendConsoleMsg('assistant', `✓ All ${_allNpcs.length} NPC schedules are valid (continuous 0–24h coverage). No repair needed.\n\nIf schedules feel generic, run \`rerun enrichment\` to regenerate personalized ones.\n\n*Source: engine validation*`, false);
+      return;
+    }
+    appendConsoleMsg('assistant', `Found ${_badNpcs.length} NPC(s) with broken schedules: **${_badNpcs.map(n => n.name).join(', ')}**\n\nApplying default 24h schedules...`, false);
+    const _DEFAULT_SCHED = [
+      { start_hour: 0,  end_hour: 6,  task: 'sleeping',     interruptible: false, location: 'home'    },
+      { start_hour: 6,  end_hour: 8,  task: 'morning_prep', interruptible: false, location: 'home'    },
+      { start_hour: 8,  end_hour: 12, task: 'errands',      interruptible: true,  location: 'outside' },
+      { start_hour: 12, end_hour: 18, task: 'leisure',      interruptible: true,  location: 'home'    },
+      { start_hour: 18, end_hour: 21, task: 'leisure',      interruptible: true,  location: 'home'    },
+      { start_hour: 21, end_hour: 24, task: 'winding_down', interruptible: true,  location: 'home'    },
+    ];
+    const _rsPatch = { npc_updates: {} };
+    for (const n of _badNpcs) {
+      _rsPatch.npc_updates[n.id] = { schedule: { weekday_routine: _DEFAULT_SCHED, weekend_routine: _DEFAULT_SCHED } };
+    }
+    _applySimPatch(_rsPatch);
+    window._devlog?.system('repair_schedules complete', { repaired: _badNpcs.map(n => n.name) });
+    appendConsoleMsg('assistant', `✓ Applied default schedules to **${_badNpcs.map(n => n.name).join(', ')}**.\n\nThese are generic placeholders. Run \`rerun enrichment\` to generate proper personalized schedules based on each NPC's role.\n\n*Source: Engine action — SIM_PATCH applied*`, false);
+    return;
+  }
+
   // ── For everything else, proceed to AI ────────────────────────────────────
   window._devlog?.console_log('Routing to AI', { reason: 'no deterministic command matched' });
   // FIX 7A: Inject real devlog data into diagnostic questions
   let _diagSuffix = '';
-  if (/\b(?:why|what\s+went\s+wrong|fail|error|debug|diagnos|no\s+npc|missing|not\s+work)\b/i.test(content)) {
+  const _diagTrigger = /\b(?:why|what\s+went\s+wrong|fail|error|debug|diagnos|no\s+npc|missing|not\s+work|no\s+item|no\s+possession|no\s+schedule|init(?:ial)?|startup|generation|enrich|which\s+(?:model|ai)|provider|who\s+handles|what\s+handles)\b/i.test(content);
+  if (_diagTrigger) {
     const _diagEntries = (window._devlog?.entries ?? [])
-      .filter(e => ['ERROR','API','CONSOLE','PATCH'].includes(e.cat))
-      .slice(-20);
+      .filter(e => ['ERROR','API','SYSTEM','PATCH'].includes(e.cat))
+      .slice(-35);
     if (_diagEntries.length) {
-      _diagSuffix = '\n\n[ENGINE LOG — real data for diagnosis]:\n' +
-        _diagEntries.map(e => `[${e.cat}] ${e.msg}${e.data ? ' ' + JSON.stringify(e.data).slice(0, 120) : ''}`).join('\n');
-      window._devlog?.console_log('Injecting diagnostic context', { entries: _diagEntries.length });
+      _diagSuffix = '\n\n[ENGINE LOG — authoritative real data — use this as primary evidence for your answer]:\n' +
+        _diagEntries.map(e => `[${new Date(e.ts).toLocaleTimeString()}][${e.cat}] ${e.msg}${e.data ? ' → ' + JSON.stringify(e.data).slice(0, 160) : ''}`).join('\n');
+      window._devlog?.console_log('Injecting diagnostic context', { entries: _diagEntries.length, trigger: content.slice(0, 60) });
     }
   }
   _consoleSending = true;
