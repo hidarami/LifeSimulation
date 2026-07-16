@@ -1059,14 +1059,22 @@ window._devlog = (function(){
       <div class="field">
         <label class="field-label">Quick-start Key <span style="font-weight:400;opacity:.6">(fills BOTH narrator &amp; classifier — provider auto-detected)</span></label>
         <div class="pw-wrapper"><input class="field-input" id="k-quickstart" type="password" placeholder="Paste one API key to power the whole game"><button class="pw-toggle" data-target="k-quickstart">👁</button></div>
-        <div id="k-quickstart-badge" style="font-size:10px;color:var(--pos);margin-top:3px;display:none"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <div id="k-quickstart-badge" style="font-size:10px;color:var(--pos);flex:1;display:none"></div>
+          <button class="btn" id="k-quickstart-test" type="button" style="font-size:10px;padding:3px 10px;flex-shrink:0">Test</button>
+        </div>
+        <div id="k-quickstart-test-result" style="font-size:10px;margin-top:3px;display:none"></div>
       </div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Narrator — AI that writes your story</div>
       <div class="field">
         <label class="field-label">Narrator Key <span style="font-weight:400;opacity:.6">(xai- = Grok · sk- = OpenAI · sk-ant- = Anthropic · sk-or- = OpenRouter · gsk_ = Groq · AIza = Gemini)</span></label>
         <div class="pw-wrapper"><input class="field-input" id="k-narrator" type="password" placeholder="Paste any supported API key — provider auto-detected"><button class="pw-toggle" data-target="k-narrator">👁</button></div>
-        <div id="k-narrator-badge" style="font-size:10px;color:var(--pos);margin-top:3px;display:none"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <div id="k-narrator-badge" style="font-size:10px;color:var(--pos);flex:1;display:none"></div>
+          <button class="btn" id="k-narrator-test" type="button" style="font-size:10px;padding:3px 10px;flex-shrink:0">Test</button>
+        </div>
+        <div id="k-narrator-test-result" style="font-size:10px;margin-top:3px;display:none"></div>
       </div>
       <div class="field" id="k-narrator-provider-row" style="display:none">
         <label class="field-label">Narrator Provider <span style="font-weight:400;opacity:.6">(key prefix unrecognized — choose one)</span></label>
@@ -1094,7 +1102,11 @@ window._devlog = (function(){
       <div class="field">
         <label class="field-label">Classifier Key <span style="font-weight:400;opacity:.6">(can be the same key as narrator)</span></label>
         <div class="pw-wrapper"><input class="field-input" id="k-classifier" type="password" placeholder="Paste any supported API key"><button class="pw-toggle" data-target="k-classifier">👁</button></div>
-        <div id="k-classifier-badge" style="font-size:10px;color:var(--pos);margin-top:3px;display:none"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <div id="k-classifier-badge" style="font-size:10px;color:var(--pos);flex:1;display:none"></div>
+          <button class="btn" id="k-classifier-test" type="button" style="font-size:10px;padding:3px 10px;flex-shrink:0">Test</button>
+        </div>
+        <div id="k-classifier-test-result" style="font-size:10px;margin-top:3px;display:none"></div>
       </div>
       <div class="field" id="k-classifier-provider-row" style="display:none">
         <label class="field-label">Classifier Provider <span style="font-weight:400;opacity:.6">(key prefix unrecognized — choose one)</span></label>
@@ -1366,7 +1378,7 @@ import { challengeFromDisease, challengeFromNpcEvent, challengeFromWorldEvent,
 import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
          buildNpcContextForGemini, applyRelationshipDelta, createNpc,
          driftTraits, getNpcCurrentTask, updateNpcCareer } from './npc.js';
-import { detectProvider, getProviderDisplayName, fetchModels } from './providers.js';
+import { detectProvider, getProviderDisplayName, fetchModels, dispatchChat as _providerDispatchChat } from './providers.js';
 
          
 let WS = null;
@@ -3323,6 +3335,8 @@ async function _discoverModels(prefix) {
   const provider = _effectiveProvider(prefix);
   const baseUrl  = document.getElementById('k-custom-baseurl')?.value?.trim();
   if (!listEl) return;
+  document.getElementById(`k-${prefix}-model-filter`)?.remove();
+  document.getElementById(`k-${prefix}-model-count`)?.remove();
   if (!key || !provider) { listEl.innerHTML = '<option value="">— enter a key / pick a provider first —</option>'; return; }
   listEl.innerHTML = '<option value="">Loading…</option>';
   const models  = await fetchModels(provider, key, baseUrl);
@@ -3330,6 +3344,28 @@ async function _discoverModels(prefix) {
   if (!models.length) { listEl.innerHTML = '<option value="">— discovery failed, type a model below —</option>'; return; }
   listEl.innerHTML = '<option value="">— use provider default —</option>' +
     models.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${m}</option>`).join('');
+  const _filterInput = document.createElement('input');
+  _filterInput.id = `k-${prefix}-model-filter`;
+  _filterInput.className = 'field-input';
+  _filterInput.placeholder = 'Filter models… (type to search)';
+  _filterInput.style.cssText = 'margin-bottom:4px;font-size:12px';
+  const _countEl = document.createElement('div');
+  _countEl.id = `k-${prefix}-model-count`;
+  _countEl.style.cssText = 'font-size:10px;color:var(--dim);margin-bottom:4px';
+  _countEl.textContent = `${models.length} models`;
+  listEl.parentNode.insertBefore(_filterInput, listEl);
+  listEl.parentNode.insertBefore(_countEl, listEl);
+  _filterInput.addEventListener('input', () => {
+    const q = _filterInput.value.toLowerCase();
+    let shown = 0;
+    for (const opt of listEl.options) {
+      if (!opt.value) continue;
+      const match = !q || opt.value.toLowerCase().includes(q);
+      opt.style.display = match ? '' : 'none';
+      if (match) shown++;
+    }
+    _countEl.textContent = q ? `Showing ${shown} of ${models.length} models` : `${models.length} models`;
+  });
 }
 
 // Mutual exclusion: quick-start ↔ dual-slot (narrator + classifier)
@@ -3413,50 +3449,7 @@ document.getElementById('btn-settings').addEventListener('click', () => {
   _seedModelList('narrator');
   _seedModelList('classifier');
   ['quickstart', 'narrator', 'classifier'].forEach(_updateSlotDetection);
-  // Discover models for a slot from its provider and populate the dropdown.
-async function _discoverModels(prefix) {
-  const listEl   = document.getElementById(`k-${prefix}-model-list`);
-  const key      = document.getElementById(`k-${prefix}`)?.value?.trim();
-  const provider = _effectiveProvider(prefix);
-  const baseUrl  = document.getElementById('k-custom-baseurl')?.value?.trim();
-  if (!listEl) return;
-  // Remove stale filter UI from a previous discovery run
-  document.getElementById(`k-${prefix}-model-filter`)?.remove();
-  document.getElementById(`k-${prefix}-model-count`)?.remove();
-  if (!key || !provider) { listEl.innerHTML = '<option value="">— enter a key / pick a provider first —</option>'; return; }
-  listEl.innerHTML = '<option value="">Loading…</option>';
-  const models  = await fetchModels(provider, key, baseUrl);
-  const current = localStorage.getItem(`${prefix.toUpperCase()}_MODEL`) ?? '';
-  if (!models.length) { listEl.innerHTML = '<option value="">— discovery failed, type a model below —</option>'; return; }
-  listEl.innerHTML = '<option value="">— use provider default —</option>' +
-    models.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${m}</option>`).join('');
-  // Inject filter input then count display, both inserted before the select
-  const _filterInput = document.createElement('input');
-  _filterInput.id = `k-${prefix}-model-filter`;
-  _filterInput.className = 'field-input';
-  _filterInput.placeholder = 'Filter models… (type to search)';
-  _filterInput.style.cssText = 'margin-bottom:4px;font-size:12px';
-  const _countEl = document.createElement('div');
-  _countEl.id = `k-${prefix}-model-count`;
-  _countEl.style.cssText = 'font-size:10px;color:var(--dim);margin-bottom:4px';
-  _countEl.textContent = `${models.length} models`;
-  // Order after both inserts: filterInput → countEl → select
-  listEl.parentNode.insertBefore(_filterInput, listEl);
-  listEl.parentNode.insertBefore(_countEl, listEl);
-  _filterInput.addEventListener('input', () => {
-    const q = _filterInput.value.toLowerCase();
-    let shown = 0;
-    for (const opt of listEl.options) {
-      if (!opt.value) continue; // skip "— use provider default —" placeholder
-      const match = !q || opt.value.toLowerCase().includes(q);
-      opt.style.display = match ? '' : 'none';
-      if (match) shown++;
-    }
-    _countEl.textContent = q
-      ? `Showing ${shown} of ${models.length} models`
-      : `${models.length} models`;
-  });
-}
+  _updateMutualExclusion();
 });
 
 // Content mode toggle handler
@@ -3502,6 +3495,41 @@ document.querySelectorAll('.pw-toggle').forEach(btn => {
     const inp = document.getElementById(btn.dataset.target); if (!inp) return;
     inp.type = inp.type === 'password' ? 'text' : 'password';
     btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+  });
+});
+
+// ── API KEY TEST BUTTONS (FIX 4A) ─────────────────────────────────────────────
+async function _testApiKey(keyVal, prefix) {
+  const resEl = document.getElementById(`k-${prefix}-test-result`);
+  if (!resEl) return;
+  resEl.style.display = 'block';
+  resEl.style.color = 'var(--dim)';
+  resEl.textContent = 'Testing…';
+  if (!keyVal) { resEl.textContent = '⚠ Paste a key first'; resEl.style.color = 'var(--low)'; return; }
+  const providerOverride = document.getElementById(`k-${prefix}-provider`)?.value?.trim();
+  const provider = providerOverride || detectProvider(keyVal);
+  if (!provider) { resEl.textContent = '⚠ Unrecognized key prefix — choose a provider below first'; resEl.style.color = 'var(--low)'; return; }
+  try {
+    const reply = await _providerDispatchChat(
+      provider, keyVal, null,
+      [{ role: 'user', content: 'Reply with the single word: OK' }],
+      20, 8000
+    );
+    if (reply && reply.length > 0) {
+      resEl.textContent = `✓ Key works — ${getProviderDisplayName(provider)} responded`;
+      resEl.style.color = 'var(--pos)';
+    } else {
+      resEl.textContent = '⚠ Key returned empty response';
+      resEl.style.color = 'var(--low)';
+    }
+  } catch (e) {
+    resEl.textContent = `✗ ${e.message.slice(0, 100)}`;
+    resEl.style.color = 'var(--crit)';
+  }
+}
+['quickstart', 'narrator', 'classifier'].forEach(prefix => {
+  document.getElementById(`k-${prefix}-test`)?.addEventListener('click', () => {
+    _testApiKey(document.getElementById(`k-${prefix}`)?.value?.trim() ?? '', prefix);
   });
 });
 

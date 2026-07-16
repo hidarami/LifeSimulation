@@ -25,6 +25,25 @@ const BG_GEMINI_FAST = 'gemini-2.0-flash';          // Gemini JSON tasks and aut
 // Fix #4: true means fallback is only triggered on genuine outages
 const FALLBACK_ON_OUTAGE_ONLY = true;
 
+// ─── PROVIDER COOLDOWN (session-level, resets on page reload) ────────────────
+const _COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const _providerCooldowns = new Map();
+function _markCooling(provider, reason) {
+  const _until = Date.now() + _COOLDOWN_MS;
+  _providerCooldowns.set(provider, { until: _until, reason });
+  window._devlog?.system(`${provider} in cooldown 5min after ${reason}. Retry after ${new Date(_until).toLocaleTimeString()}.`);
+}
+function _isCooling(provider) {
+  const c = _providerCooldowns.get(provider);
+  if (!c) return false;
+  if (Date.now() >= c.until) { _providerCooldowns.delete(provider); return false; }
+  window._devlog?.system(`${provider} still in cooldown — routing to next slot.`);
+  return true;
+}
+function _shouldCool(errMsg) {
+  return /HTTP\s*(404|503)\b/.test(errMsg ?? '');
+}
+
 function getKey(name) {
   const k = localStorage.getItem(name);
   if (!k) throw new Error(`API key not set: ${name}. Open ⚙ Settings.`);
@@ -69,16 +88,23 @@ export async function callGrok(turnBrief, mode) {
   ];
 
   let prose;
-  try {
-    prose = await dispatchChat(provider, key, model, messages, 600, 30000);
-  } catch (err) {
-    window._devlog?.error('Narrator primary failed', { provider, error: err.message });
-    const isOutage = !navigator.onLine || err.message?.includes('502') || err.message?.includes('503') || err.message === 'Failed to fetch';
-    if (FALLBACK_ON_OUTAGE_ONLY && !isOutage) {
-      throw new Error(`Narrator failed (${err.message}) — check your ${getProviderDisplayName(provider)} API key and model.`);
-    }
-    console.warn('[narrator] Primary failed, trying fallbacks:', err.message);
+  if (_isCooling(provider)) {
+    window._devlog?.system(`Narrator primary (${provider}) in cooldown — going to fallback.`);
     prose = await _callNarratorFallback(sys, usr);
+  } else {
+    try {
+      prose = await dispatchChat(provider, key, model, messages, 600, 30000);
+      _providerCooldowns.delete(provider);
+    } catch (err) {
+      window._devlog?.error('Narrator primary failed', { provider, error: err.message });
+      if (_shouldCool(err.message)) _markCooling(provider, err.message.match(/HTTP\s*\d+/)?.[0] ?? 'error');
+      const isOutage = !navigator.onLine || err.message?.includes('502') || err.message?.includes('503') || err.message === 'Failed to fetch';
+      if (FALLBACK_ON_OUTAGE_ONLY && !isOutage) {
+        throw new Error(`Narrator failed (${err.message}) — check your ${getProviderDisplayName(provider)} API key and model.`);
+      }
+      console.warn('[narrator] Primary failed, trying fallbacks:', err.message);
+      prose = await _callNarratorFallback(sys, usr);
+    }
   }
 
   const _rc = prose.toLowerCase();
@@ -131,10 +157,20 @@ const GROQ_URL   = 'https://api.groq.com/openai/v1/chat/completions';
 async function geminiRaw(prompt, maxTokens = 400) {
   const { key, provider, model } = getClassifierSlot();
   if (!key || !provider) throw new Error('Classifier API key not configured. Open ⚙ Settings → Classifier Key.');
+  if (_isCooling(provider)) {
+    window._devlog?.system(`Classifier primary (${provider}) in cooldown — routing to helper.`);
+    const helper = getHelperSlot();
+    if (helper.key && helper.provider && helper.provider !== provider) {
+      return dispatchJSON(helper.provider, helper.key, helper.model, prompt, maxTokens);
+    }
+    throw new Error(`Classifier (${provider}) in cooldown and no fallback available.`);
+  }
   try {
-    return await dispatchJSON(provider, key, model, prompt, maxTokens);
+    const result = await dispatchJSON(provider, key, model, prompt, maxTokens);
+    _providerCooldowns.delete(provider);
+    return result;
   } catch (e) {
-    // Rate-limit: try helper slot as fallback classifier
+    if (_shouldCool(e.message)) _markCooling(provider, e.message.match(/HTTP\s*\d+/)?.[0] ?? 'error');
     if (e.message === 'GEMINI_RATE_LIMIT' || e.message?.includes('429')) {
       const helper = getHelperSlot();
       if (helper.key && helper.provider && helper.provider !== provider) {
