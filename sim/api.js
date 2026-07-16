@@ -864,6 +864,10 @@ NEVER output vague statements like "check documentation" or "I can't access logs
   const helperSlot     = getHelperSlot();
   const narratorSlot   = getNarratorSlot();
   const _tried = new Set();
+  // FIX 8B: Context budget — trim history when over 10K token estimate (protects Groq 8b / small models)
+  const _budgetMsgs = (_sysTokenEst + _msgTokenEst > 10000)
+    ? (() => { window._devlog?.console_log('Context budget exceeded — trimming to last 8 msgs', { total_est: _sysTokenEst + _msgTokenEst }); return messages.slice(-8); })()
+    : messages.slice(-20);
 
   // Classifier slot first — console is a structured reasoning task, not prose
   if (classifierSlot.key && classifierSlot.provider) {
@@ -871,7 +875,7 @@ NEVER output vague statements like "check documentation" or "I can't access logs
     _tried.add(classifierSlot.provider);
     window._devlog?.console_log('Console using slot', { provider: classifierSlot.provider, model: _model });
     try {
-      const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
+      const allMsgs = [{ role: 'system', content: systemPrompt }, ..._budgetMsgs];
       const reply = await dispatchChat(classifierSlot.provider, classifierSlot.key, _model, allMsgs, 800, 25000);
       if (reply && reply.length > 20) {
         window._devlog?.console_log(`Console: ${classifierSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
@@ -895,7 +899,7 @@ NEVER output vague statements like "check documentation" or "I can't access logs
     const _modelList = [...new Set([model, HELPER_CHAT_MODELS[helperSlot.provider]].filter(Boolean))];
     for (const m of _modelList) {
       try {
-        const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
+        const allMsgs = [{ role: 'system', content: systemPrompt }, ..._budgetMsgs];
         const reply = await dispatchChat(helperSlot.provider, helperSlot.key, m, allMsgs, 800, 25000);
         if (reply && reply.length > 20) {
           window._devlog?.console_log(`Console: ${helperSlot.provider}(${m}) responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
@@ -912,7 +916,7 @@ NEVER output vague statements like "check documentation" or "I can't access logs
   if (narratorSlot.key && narratorSlot.provider && !_tried.has(narratorSlot.provider)) {
     window._devlog?.console_log('Console using slot', { provider: narratorSlot.provider, model: narratorSlot.model });
     try {
-      const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
+      const allMsgs = [{ role: 'system', content: systemPrompt }, ..._budgetMsgs];
       const reply = await dispatchChat(narratorSlot.provider, narratorSlot.key, narratorSlot.model, allMsgs, 800, 30000);
       if (reply && reply.length > 20) {
         window._devlog?.console_log(`Console: ${narratorSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });

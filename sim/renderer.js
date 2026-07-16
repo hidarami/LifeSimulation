@@ -349,7 +349,12 @@ export function renderNarration(prose, anchorEl, feed, turn) {
   wrapper.appendChild(anchorEl);
   const proseEl = document.createElement('div');
   proseEl.className = 'narration-prose';
-  proseEl.textContent = prose;
+  const paras = prose.split(/\n\n+|\r\n\r\n+/).map(s => s.trim()).filter(Boolean);
+  if (paras.length > 1) {
+    paras.forEach(p => { const el = document.createElement('p'); el.textContent = p; proseEl.appendChild(el); });
+  } else {
+    proseEl.textContent = prose;
+  }
   wrapper.appendChild(proseEl);
   feed.appendChild(wrapper);
 }

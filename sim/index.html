@@ -2,11 +2,14 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0e0c0a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
 <title>The Sim</title>
 <link rel="manifest" href="manifest.json">
 <style>
@@ -127,6 +130,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .ta-time{color:var(--dim);font-size:10px;flex:1}
 .ta-loc{font-size:9px;color:var(--dim);opacity:.5;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .narration-prose{font-family:var(--fs);font-size:15px;line-height:1.9;color:var(--txt)}
+.narration-prose p{margin-bottom:.85em}
+.narration-prose p:last-child{margin-bottom:0}
 
 /* ── INPUT ───────────────────────────────────────────────────────────────── */
 #input-area{
@@ -316,7 +321,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .pw-wrapper{position:relative}
 .pw-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--dim);font-size:14px;background:none;border:none;padding:0;transition:color .15s;z-index:2}
 .pw-toggle:hover{color:var(--acc)}
-@media(max-width:767px){.pw-toggle{right:4px;font-size:11px}}
+@media(max-width:767px){.pw-toggle{right:4px;font-size:11px;width:20px;height:20px}}
+.pw-wrapper .field-input{padding-right:36px}
 
 /* BUTTONS */
 .btn{
@@ -1443,7 +1449,8 @@ import { detectProvider, getProviderDisplayName, fetchModels, dispatchChat as _p
          
 let WS = null;
 let _processTurnCounter = 0; // race condition guard for non-blocking NPC callbacks
-let _patchUndo = null;       // undo snapshot — type "undo" in AI Console to restore
+const _undoStack = [];       // multi-level undo — type "undo" in AI Console to restore
+const _UNDO_MAX  = 10;
 let _sbClient  = null;
 let _imageCache = {};        // in-memory image cache: { player: dataUrl, npc_id: dataUrl }
 let _imgUploadTarget = null; // 'player' or NPC id
@@ -1577,7 +1584,8 @@ function _applySimPatch(patch) {
     savePatchAuditEntry(patchId, patch, [], true, _violations).catch(() => {});
     return { rejected: true, violations: _violations };
   }
-  _patchUndo = JSON.parse(JSON.stringify(WS)); // snapshot before destructive change
+  _undoStack.push(JSON.parse(JSON.stringify(WS)));
+  if (_undoStack.length > _UNDO_MAX) _undoStack.shift();
   window._devlog?.patch(`SIM_PATCH ${patchId} received`, patch);
   const _changed = [];
   try {
@@ -2687,6 +2695,7 @@ async function processTurn(input) {
   if (!WS) { alert('Start a new game first.'); return; }
   const _turnToken = ++_processTurnCounter;
   setStatus('Processing…', 'load'); setProcessing(true);
+  let _turnCommitted = false;
   try {
     let ws = JSON.parse(JSON.stringify(WS));
     let statDeltas={}, relDeltas={}, timeCost=0.25, locationChange=null, npcReactions=[];
@@ -2699,6 +2708,7 @@ async function processTurn(input) {
     let route = routeInput(input);
     if (route === ROUTE.PATH_1_EXPLICIT && localStorage.getItem('CONTENT_MODE') === 'filtered') {
       route = ROUTE.PATH_3_AUTOPILOT;
+      setStatus('Explicit content is off — action processed as time skip.', 'load');
     }
 
     window._devlog?.system(`processTurn start T${(WS?.turn??0)+1}`, { input: input.slice(0,80), route });
@@ -3131,12 +3141,23 @@ async function processTurn(input) {
       prose = await callGeminiAutopilot(sanitizeStateForGemini(ws), timeCost, input).catch(() => `${timeCost}h passed.`);
     } else {
       const brief = assembleTurnBrief(ws, { turnNumber:ws.turn, simTime:ws.sim_time, location:ws.player.location, actionDescription:actionDesc, statDeltas, riskResult, consequenceUpdate:consequenceUpd, npcReactions, turnClass, isExplicit:route===ROUTE.PATH_1_EXPLICIT, rawInput:input });
+      // FIX 8A: Selective NPC injection — exclude definitively-away irrelevant NPCs
       brief.npc_locations = {};
+      const _nlInputLow = input.toLowerCase();
+      const _nlReacted  = new Set(npcReactions.map(r => r.npc_id));
+      const _nlAwayLocs = new Set(['workplace', 'school', 'transit']);
+      const _nlAbsent   = [];
       for (const [_nlId, _nlNpc] of Object.entries(ws.npcs)) {
         if (_nlNpc.status !== 'active') continue;
-        const _nlTask = getNpcCurrentTask(_nlNpc, ws.sim_time);
-        const _nlLoc  = _nlTask.location ?? 'home';
-        const _nlCo   = livesWithPlayer(_nlNpc);
+        const _nlTask  = getNpcCurrentTask(_nlNpc, ws.sim_time);
+        const _nlLoc   = _nlTask.location ?? 'home';
+        const _nlCo    = livesWithPlayer(_nlNpc);
+        const _nlAway  = _nlAwayLocs.has(_nlLoc);
+        const _nlNamed = _nlNpc.name && _nlInputLow.includes(_nlNpc.name.toLowerCase());
+        if (_nlAway && !_nlNamed && !_nlReacted.has(_nlId)) {
+          if (_nlNpc.significance >= 1) _nlAbsent.push(`${_nlNpc.name}(${_nlLoc})`);
+          continue;
+        }
         let _nlCtx = _nlLoc;
         if      (_nlLoc === 'home' &&  _nlCo)  _nlCtx = 'same household as player — their home IS the player\'s home';
         else if (_nlLoc === 'home' && !_nlCo)  _nlCtx = 'their own separate home — NOT the player\'s home';
@@ -3150,6 +3171,7 @@ async function processTurn(input) {
           context: _nlCtx,
         };
       }
+      if (_nlAbsent.length) brief.absent_npcs_note = `Away this turn (not in scene): ${_nlAbsent.join(', ')}`;
       const mode = { [TURN_CLASSIFICATION.ROUTINE]:'notable', [TURN_CLASSIFICATION.NOTABLE]:'notable', [TURN_CLASSIFICATION.CRISIS]:'crisis', [TURN_CLASSIFICATION.DEATH]:'death' }[turnClass] ?? 'notable';
       prose = await callGrok(brief, mode);
     window._devlog?.turn(`T${ws.turn} narrated`, { class: turnClass, route, chars: prose.length, first50: prose.slice(0,50) });
@@ -3198,6 +3220,7 @@ async function processTurn(input) {
     renderNarration(prose, anchor, document.getElementById('feed'), ws.turn);
     document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior:'smooth' });
     WS = ws;
+    _turnCommitted = true;
     await saveWorldState(ws); await saveNarration(ws.turn, ws.sim_time, ws.player.location, prose);
     await savePlayerAction(ws.turn, ws.sim_time, input);
     saveWorldStateCloud(ws).catch(()=>{});
@@ -3300,7 +3323,11 @@ async function processTurn(input) {
     }
   } catch(err) {
     window._devlog?.error(`processTurn error`, { message: err.message, stack: err.stack?.slice(0,400) });
-    setStatus(`Error: ${err.message}`, 'err');
+    if (_turnCommitted) {
+      setStatus(`Turn processed — narrator failed. Type anything to continue.`, 'err');
+    } else {
+      setStatus(`Error: ${err.message}`, 'err');
+    }
     console.error('[processTurn]', err);
   } finally {
     if (!WS || WS.player?.stats?.health > 0) setProcessing(false);
@@ -4037,16 +4064,31 @@ async function sendConsoleMessage() {
     inp.value = ''; inp.style.height = 'auto';
     return;
   }
-  // Undo last patch
-  if (content.toLowerCase() === 'undo') {
+  // Multi-level undo
+  const _undoMatch = content.match(/^\s*undo(?:\s+(\d+))?\s*$/i);
+  if (_undoMatch) {
     window._devlog?.console_log('Command detected', { command: 'undo_patch' });
-    if (_patchUndo && WS) {
-      WS = _patchUndo; _patchUndo = null;
+    appendConsoleMsg('user', content);
+    const _undoSteps = Math.min(parseInt(_undoMatch[1] ?? '1', 10) || 1, _undoStack.length);
+    if (_undoSteps > 0 && WS) {
+      let _undoTarget = null;
+      for (let _ui = 0; _ui < _undoSteps; _ui++) _undoTarget = _undoStack.pop();
+      WS = _undoTarget;
       await saveWorldState(WS).catch(() => {}); renderAll();
-      appendConsoleMsg('user', 'undo');
-      appendConsoleMsg('assistant', '↩ Last patch undone — world state restored.', false);
+      appendConsoleMsg('assistant', `↩ Went back ${_undoSteps} step${_undoSteps > 1 ? 's' : ''} — ${_undoStack.length} undo${_undoStack.length !== 1 ? 's' : ''} remaining.`, false);
     } else {
-      appendConsoleMsg('assistant', 'Nothing to undo — no recent patch was applied.', false);
+      appendConsoleMsg('assistant', 'Nothing to undo — no patches applied yet.', false);
+    }
+    return;
+  }
+  // Show undo stack
+  if (/^\s*(?:show|list)\s+undo\s*(?:stack|history)?\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!_undoStack.length) {
+      appendConsoleMsg('assistant', 'Undo stack is empty. Apply patches first.', false);
+    } else {
+      const _uLines = _undoStack.slice().reverse().map((s, i) => `- Undo ${i + 1}: Turn ${s?.turn ?? '?'} state`).join('\n');
+      appendConsoleMsg('assistant', `**Undo Stack (${_undoStack.length} of ${_UNDO_MAX} max, newest first):**\n\n${_uLines}\n\nType \`undo\` or \`undo N\` to step back.`, false);
     }
     return;
   }
@@ -4991,6 +5033,18 @@ function _showCameraFlash() {
 
 boot();
 checkForUpdate();
+// FIX 9C: Mobile keyboard/viewport fix
+if ('visualViewport' in window) {
+  window.visualViewport.addEventListener('resize', () => {
+    const _vvOffset = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
+    document.getElementById('input-area').style.paddingBottom = Math.max(10, _vvOffset) + 'px';
+  });
+}
+document.getElementById('action-input').addEventListener('focus', () => {
+  if (window.innerWidth < 768) {
+    setTimeout(() => { const _f = document.getElementById('feed'); if (_f) _f.scrollTop = _f.scrollHeight; }, 350);
+  }
+});
 </script>
 </body>
 </html>
