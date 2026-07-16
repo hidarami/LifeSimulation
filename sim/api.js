@@ -817,7 +817,9 @@ Empty array if nothing should be removed.`;
 // ─── META CONSOLE ─────────────────────────────────────────────────────────────
 export async function callMetaConsole(messages, gameState) {
   const systemPrompt = buildMetaConsolePrompt(gameState);
-  window._devlog?.console_log('Console API call', { msgs: messages.length });
+  const _sysTokenEst = Math.ceil(systemPrompt.length / 4);
+  const _msgTokenEst = messages.slice(-24).reduce((acc, m) => acc + Math.ceil((m.content?.length ?? 0) / 4), 0);
+  window._devlog?.console_log('Console API call', { msgs: messages.length, sys_tokens_est: _sysTokenEst, msg_tokens_est: _msgTokenEst, total_est: _sysTokenEst + _msgTokenEst });
 
   const classifierSlot = getClassifierSlot();
   const helperSlot     = getHelperSlot();

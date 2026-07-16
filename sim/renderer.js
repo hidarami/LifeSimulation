@@ -3,7 +3,7 @@
 'use strict';
 
 import { getNpcCurrentTask } from './npc.js';
-import { getCurrencySymbol } from './providers.js';
+import { getCurrencySymbol, detectProvider } from './providers.js';
 
 // ─── NPC LOCATION HELPERS ─────────────────────────────────────────────────────
 export function livesWithPlayer(npc) {

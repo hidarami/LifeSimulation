@@ -314,8 +314,9 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .field-row{display:flex;gap:8px}
 .field-row .field{flex:1}
 .pw-wrapper{position:relative}
-.pw-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--dim);font-size:14px;background:none;border:none;padding:0;transition:color .15s}
+.pw-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--dim);font-size:14px;background:none;border:none;padding:0;transition:color .15s;z-index:2}
 .pw-toggle:hover{color:var(--acc)}
+@media(max-width:767px){.pw-toggle{right:4px;font-size:11px}}
 
 /* BUTTONS */
 .btn{
@@ -1060,7 +1061,7 @@ window._devlog = (function(){
   <div id="console-feed">
     <div id="console-empty">
       <div class="ce-icon">⌘</div>
-      <div class="ce-text">Ask anything about the game — mechanics, NPC behavior, strategies, or how the engine works. You can also give instructions to modify the world.</div>
+      <div class="ce-text" style="text-align:left;max-width:340px;font-size:11px;line-height:1.9;opacity:1"><strong style="color:var(--acc);display:block;margin-bottom:8px;font-size:12px;letter-spacing:.06em">AI CONSOLE</strong><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Live Data (no AI):</span><br><span style="color:var(--txt)">show npcs &nbsp;·&nbsp; show npc [name] &nbsp;·&nbsp; show world</span><br><span style="color:var(--txt)">show errors &nbsp;·&nbsp; show logs [cat] &nbsp;·&nbsp; show model</span><br><span style="color:var(--txt)">show patches &nbsp;·&nbsp; check &nbsp;·&nbsp; undo</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Engine Actions (no AI):</span><br><span style="color:var(--txt)">generate npcs &nbsp;·&nbsp; regenerate bio [name]</span><br><span style="color:var(--txt)">rerun enrichment &nbsp;·&nbsp; reparse lorebook</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Ask Anything:</span><br><span style="color:var(--dim)">Other questions go to AI. Type <strong>help</strong> for this list.</span></div>
     </div>
   </div>
   <div id="console-input-area">
@@ -3937,7 +3938,7 @@ async function loadConsoleHistoryForCurrentSave(saveId) {
   const emptyEl = document.createElement('div');
   emptyEl.id = 'console-empty';
   emptyEl.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--dim);text-align:center;padding:40px';
-  emptyEl.innerHTML = '<div class="ce-icon">⌘</div><div class="ce-text">Ask anything about the game — mechanics, NPC behavior, strategies, or how the engine works. You can also give instructions to modify the world.</div>';
+  emptyEl.innerHTML = '<div class="ce-icon">⌘</div><div class="ce-text" style="text-align:left;max-width:340px;font-size:11px;line-height:1.9;opacity:1"><strong style="color:var(--acc);display:block;margin-bottom:8px;font-size:12px;letter-spacing:.06em">AI CONSOLE</strong><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Live Data (no AI):</span><br><span style="color:var(--txt)">show npcs &nbsp;·&nbsp; show npc [name] &nbsp;·&nbsp; show world</span><br><span style="color:var(--txt)">show errors &nbsp;·&nbsp; show logs [cat] &nbsp;·&nbsp; show model</span><br><span style="color:var(--txt)">show patches &nbsp;·&nbsp; check &nbsp;·&nbsp; undo</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Engine Actions (no AI):</span><br><span style="color:var(--txt)">generate npcs &nbsp;·&nbsp; regenerate bio [name]</span><br><span style="color:var(--txt)">rerun enrichment &nbsp;·&nbsp; reparse lorebook</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Ask Anything:</span><br><span style="color:var(--dim)">Other questions go to AI. Type <strong>help</strong> for this list.</span></div>';
   feed.appendChild(emptyEl);
   if (saveId === null || saveId === undefined) return;
   try {
@@ -4164,11 +4165,306 @@ async function sendConsoleMessage() {
     return;
   }
 
+  // ── PENDING REPARSE CONFIRMATION ──────────────────────────────────────────
+  if (window._consolePendingReparse) {
+    window._consolePendingReparse = false;
+    appendConsoleMsg('user', content);
+    if (/^\s*yes\s*$/i.test(content)) {
+      appendConsoleMsg('assistant', '⏳ Reparsing lorebook — adding missing NPCs...', false);
+      try {
+        const _rpLb = localStorage.getItem('LOREBOOK') ?? '';
+        const _rpParsed = await buildWorldWithMultipleAIs(_rpLb);
+        if (!_rpParsed?.npcs?.length) { appendConsoleMsg('assistant', '⚠ Lorebook parsing returned no NPCs. Check your API keys.', false); return; }
+        const _rpAdded = [], _rpSkipped = [];
+        for (const nd of _rpParsed.npcs) {
+          if (!nd.id || !nd.name) continue;
+          if (WS.npcs[nd.id] || Object.values(WS.npcs).some(n => n.name?.toLowerCase() === nd.name.toLowerCase())) { _rpSkipped.push(nd.name); continue; }
+          const _rpNpc = createNpc({ id: nd.id, name: nd.name, age: nd.age || 25, npc_class: nd.npc_class || 'household', relationship_type: nd.relationship_type || null, traits: nd.traits || {} });
+          _rpNpc.relationship_meter = Math.max(-100, Math.min(100, Number(nd.relationship_meter) || 0));
+          _rpNpc.trust_meter = Math.max(-100, Math.min(100, Number(nd.trust_meter) || 0));
+          _rpNpc.significance = 2;
+          _rpNpc.recent_interactions = [`Added via console reparse — turn ${WS.turn}`];
+          WS.npcs[nd.id] = _rpNpc;
+          _rpAdded.push(nd.name);
+        }
+        await saveWorldState(WS); renderAll();
+        window._devlog?.system('reparse_lorebook complete', { added: _rpAdded.length, skipped: _rpSkipped.length });
+        appendConsoleMsg('assistant',
+          `**Reparse Complete**\n\nAdded (${_rpAdded.length}): ${_rpAdded.join(', ') || 'none'}\nSkipped — already exist (${_rpSkipped.length}): ${_rpSkipped.join(', ') || 'none'}\n\nRun \`generate npcs\` to also enrich bios and schedules.\n\n*Source: Engine action — buildWorldWithMultipleAIs*`, false);
+      } catch(e) { window._devlog?.error('reparse_lorebook failed', { error: e.message }); appendConsoleMsg('assistant', `⚠ Reparse failed: ${e.message}`, false); }
+    } else {
+      appendConsoleMsg('assistant', '↩ Reparse cancelled.', false);
+    }
+    return;
+  }
+
+  // ── HELP ──────────────────────────────────────────────────────────────────
+  if (/^\s*(?:help|commands?|what\s+can\s+you\s+do)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'help' });
+    appendConsoleMsg('user', content);
+    appendConsoleMsg('assistant',
+      '**AI CONSOLE — Commands**\n\n' +
+      '**LIVE DATA (no AI):**\n' +
+      '- `show npcs` — all active NPCs\n- `show npc [name]` — full NPC data & schedule\n- `show world` — world state snapshot\n- `show lorebook` — lorebook text\n' +
+      '- `show patches` — patch audit log\n- `show errors` — recent error log\n- `show logs [category]` — devlog filter (ERROR API ROUTE TURN NPC STAT PATCH SYSTEM CONSOLE)\n' +
+      '- `show api calls` — recent API call history\n- `show recent` — last 15 devlog entries\n- `show model` — active AI slot config\n' +
+      '- `check` / `integrity` — engine rule validation\n- `undo` — reverse last SIM_PATCH\n\n' +
+      '**ENGINE ACTIONS (no AI):**\n' +
+      '- `generate npcs` — create missing NPCs from lorebook + enrich bios/schedules\n- `regenerate bio [name]` — rebuild an NPC\'s bio\n' +
+      '- `rerun enrichment` — re-apply world enrichment to current save\n- `reparse lorebook` — add missing NPCs to current game\n\n' +
+      '**ASK ANYTHING:**\n' +
+      'Any other input routes to AI with full game context.\n' +
+      'Diagnostic questions ("why did X fail") auto-inject recent error log.\n\n' +
+      '*Source: deterministic engine — no AI used for this response*', false);
+    return;
+  }
+
+  // ── SHOW ERRORS ───────────────────────────────────────────────────────────
+  if (/^\s*show\s+errors?\s*(?:log)?\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_errors' });
+    appendConsoleMsg('user', content);
+    const _errs = (window._devlog?.entries ?? []).filter(e => e.cat === 'ERROR').slice(-10);
+    if (!_errs.length) { appendConsoleMsg('assistant', '✓ No errors in devlog.\n\n*Source: live _devlog.entries*', false); return; }
+    const _errLines = _errs.map(e =>
+      `[${new Date(e.ts).toLocaleTimeString()}] **${e.msg}**${e.data ? '\n  ' + JSON.stringify(e.data).slice(0, 140) : ''}`
+    ).join('\n\n');
+    appendConsoleMsg('assistant', `**Last ${_errs.length} Errors:**\n\n${_errLines}\n\n*Source: live _devlog.entries*`, false);
+    return;
+  }
+
+  // ── SHOW API CALLS ────────────────────────────────────────────────────────
+  if (/^\s*show\s+api\s*(?:calls?)?\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_api_calls' });
+    appendConsoleMsg('user', content);
+    const _apis = (window._devlog?.entries ?? []).filter(e => e.cat === 'API').slice(-10);
+    if (!_apis.length) { appendConsoleMsg('assistant', 'No API calls logged yet.\n\n*Source: live _devlog.entries*', false); return; }
+    const _apiLines = _apis.map(e => {
+      const d = e.data ?? {};
+      const info = [d.provider, d.model, d.elapsed_ms != null ? d.elapsed_ms + 'ms' : null, d.chars ? d.chars + ' chars' : null].filter(Boolean).join(' · ');
+      return `[${new Date(e.ts).toLocaleTimeString()}] ${e.msg}${info ? ' — ' + info : ''}`;
+    }).join('\n');
+    appendConsoleMsg('assistant', `**Last ${_apis.length} API Calls:**\n\n${_apiLines}\n\n*Source: live _devlog.entries*`, false);
+    return;
+  }
+
+  // ── SHOW RECENT ───────────────────────────────────────────────────────────
+  if (/^\s*show\s+(?:recent|activity)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_recent' });
+    appendConsoleMsg('user', content);
+    const _recent = (window._devlog?.entries ?? []).slice(-15).reverse();
+    if (!_recent.length) { appendConsoleMsg('assistant', 'No devlog entries yet.\n\n*Source: live _devlog.entries*', false); return; }
+    appendConsoleMsg('assistant',
+      `**Last ${_recent.length} entries (newest first):**\n\n${_recent.map(e => `[${new Date(e.ts).toLocaleTimeString()}] **${e.cat}** ${e.msg}`).join('\n')}\n\n*Source: live _devlog.entries*`, false);
+    return;
+  }
+
+  // ── SHOW LOGS [category] ──────────────────────────────────────────────────
+  const _showLogsMatch = content.match(/^\s*show\s+logs?\s+(\w+)\s*$/i);
+  if (_showLogsMatch) {
+    const _logCat = _showLogsMatch[1].toUpperCase();
+    window._devlog?.console_log('Command detected', { command: 'show_logs', category: _logCat });
+    appendConsoleMsg('user', content);
+    const _VALID_LOG_CATS = new Set(['ERROR','API','ROUTE','TURN','NPC','STAT','PATCH','SYSTEM','CONSOLE']);
+    if (!_VALID_LOG_CATS.has(_logCat)) {
+      appendConsoleMsg('assistant', `Unknown category "${_logCat}". Valid: ERROR, API, ROUTE, TURN, NPC, STAT, PATCH, SYSTEM, CONSOLE`, false); return;
+    }
+    const _logEntries = (window._devlog?.entries ?? []).filter(e => e.cat === _logCat).slice(-10);
+    if (!_logEntries.length) { appendConsoleMsg('assistant', `No ${_logCat} entries in devlog.\n\n*Source: live _devlog.entries*`, false); return; }
+    appendConsoleMsg('assistant',
+      `**${_logCat} log (last ${_logEntries.length}):**\n\n${_logEntries.map(e => `[${new Date(e.ts).toLocaleTimeString()}] ${e.msg}${e.data ? ' — ' + JSON.stringify(e.data).slice(0,110) : ''}`).join('\n')}\n\n*Source: live _devlog.entries*`, false);
+    return;
+  }
+
+  // ── SHOW MODEL ────────────────────────────────────────────────────────────
+  if (/^\s*(?:show\s+model|what\s+model|which\s+model|what\s+ai)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_model' });
+    appendConsoleMsg('user', content);
+    const _smNarKey  = localStorage.getItem('NARRATOR_KEY') ?? localStorage.getItem('GROK_API_KEY') ?? '';
+    const _smClsKey  = localStorage.getItem('CLASSIFIER_KEY') ?? localStorage.getItem('GEMINI_API_KEY') ?? '';
+    const _smEnrKey  = localStorage.getItem('ENRICHER_KEY') ?? '';
+    const _smGroqKey = localStorage.getItem('GROQ_API_KEY') ?? '';
+    const _smNarProv = localStorage.getItem('NARRATOR_PROVIDER') || detectProvider(_smNarKey) || '?';
+    const _smClsProv = localStorage.getItem('CLASSIFIER_PROVIDER') || detectProvider(_smClsKey) || '?';
+    const _smEnrProv = _smEnrKey ? (localStorage.getItem('ENRICHER_PROVIDER') || detectProvider(_smEnrKey) || '?') : null;
+    appendConsoleMsg('assistant',
+      '**Active AI Slot Configuration:**\n\n' +
+      `**Narrator:** ${getProviderDisplayName(_smNarProv)} / ${localStorage.getItem('NARRATOR_MODEL') || '(provider default)'}\n` +
+      `**Classifier:** ${getProviderDisplayName(_smClsProv)} / ${localStorage.getItem('CLASSIFIER_MODEL') || '(provider default)'}\n` +
+      `**Helper:** ${_smGroqKey ? 'Groq / llama-3.1-8b-instant' : 'fallback to classifier slot'}\n` +
+      `**Enricher:** ${_smEnrKey ? getProviderDisplayName(_smEnrProv) + ' / ' + (localStorage.getItem('ENRICHER_MODEL') || 'provider default') : 'fallback to classifier slot'}\n\n` +
+      '*Source: localStorage slot configuration*', false);
+    return;
+  }
+
+  // ── ENGINE: GENERATE NPCS ─────────────────────────────────────────────────
+  if (/^\s*(?:generate\s+npcs?|create\s+npcs?\s+from\s+lorebook)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'generate_npcs' });
+    appendConsoleMsg('user', content);
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _gnLb = localStorage.getItem('LOREBOOK') ?? '';
+    if (!_gnLb.trim()) { appendConsoleMsg('assistant', 'No lorebook set. Configure one in ⚙ Settings → Lorebook first.', false); return; }
+    appendConsoleMsg('assistant', '⏳ Parsing lorebook and creating NPCs... (may take 10–20s)', false);
+    try {
+      window._devlog?.system('generate_npcs: starting buildWorldWithMultipleAIs');
+      const _gnParsed = await buildWorldWithMultipleAIs(_gnLb);
+      if (!_gnParsed?.npcs?.length) {
+        appendConsoleMsg('assistant', '⚠ Lorebook parsing returned no NPCs. Check your Classifier/Gemini API key and lorebook content.', false); return;
+      }
+      const _gnCreated = [], _gnSkipped = [];
+      for (const nd of _gnParsed.npcs) {
+        if (!nd.id || !nd.name) continue;
+        if (WS.npcs[nd.id] || Object.values(WS.npcs).some(n => n.name?.toLowerCase() === nd.name.toLowerCase())) { _gnSkipped.push(nd.name); continue; }
+        const _gnNpc = createNpc({ id: nd.id, name: nd.name, age: nd.age || 25, npc_class: nd.npc_class || 'household', relationship_type: nd.relationship_type || null, traits: nd.traits || {} });
+        _gnNpc.relationship_meter = Math.max(-100, Math.min(100, Number(nd.relationship_meter) || 0));
+        _gnNpc.trust_meter = Math.max(-100, Math.min(100, Number(nd.trust_meter) || 0));
+        _gnNpc.significance = 2;
+        _gnNpc.recent_interactions = nd.note ? [nd.note] : [`Created via console — turn ${WS.turn}`];
+        WS.npcs[nd.id] = _gnNpc;
+        _gnCreated.push(nd.name);
+      }
+      if (_gnCreated.length) {
+        window._devlog?.system('generate_npcs: running enrichment for new NPCs');
+        const _gnEnr = await enrichWorldDetails(_gnLb, WS).catch(() => null);
+        if (_gnEnr) {
+          if (_gnEnr.npc_descriptions) {
+            for (const [k, bio] of Object.entries(_gnEnr.npc_descriptions)) {
+              const _gnBN = _resolveEnrichmentKey(k, WS.npcs);
+              if (_gnBN && WS.npcs[_gnBN.id] && _gnCreated.includes(_gnBN.name) && bio) WS.npcs[_gnBN.id].bio = bio;
+            }
+          }
+          if (_gnEnr.npc_schedules) {
+            for (const [k, sched] of Object.entries(_gnEnr.npc_schedules)) {
+              if (!sched?.weekday_routine?.length) continue;
+              const _gnSN = _resolveEnrichmentKey(k, WS.npcs);
+              if (_gnSN && WS.npcs[_gnSN.id] && _gnCreated.includes(_gnSN.name)) {
+                WS.npcs[_gnSN.id].schedule = { weekday_routine: sched.weekday_routine, weekend_routine: sched.weekend_routine ?? sched.weekday_routine, interruptions: [] };
+              }
+            }
+          }
+        }
+      }
+      await saveWorldState(WS); renderAll();
+      window._devlog?.system('generate_npcs complete', { created: _gnCreated.length, skipped: _gnSkipped.length });
+      let _gnReply = '**NPC Generation Complete**\n\n';
+      if (_gnCreated.length) _gnReply += `**Created (${_gnCreated.length}):** ${_gnCreated.join(', ')}\n`;
+      if (_gnSkipped.length) _gnReply += `**Already exist (${_gnSkipped.length}):** ${_gnSkipped.join(', ')}\n`;
+      if (!_gnCreated.length) _gnReply += 'No new NPCs added — all lorebook characters already exist.\n';
+      _gnReply += '\n*Source: Engine action — buildWorldWithMultipleAIs + enrichWorldDetails*';
+      appendConsoleMsg('assistant', _gnReply, false);
+    } catch(e) {
+      window._devlog?.error('generate_npcs failed', { error: e.message });
+      appendConsoleMsg('assistant', `⚠ Generation failed: ${e.message}`, false);
+    }
+    return;
+  }
+
+  // ── ENGINE: REGENERATE BIO [name] ─────────────────────────────────────────
+  const _reBioMatch = content.match(/^\s*(?:regenerate|update|rebuild|fix)\s+bio\s*(.*)$/i);
+  if (_reBioMatch) {
+    const _reBioQuery = (_reBioMatch[1] ?? '').trim();
+    window._devlog?.console_log('Command detected', { command: 'regenerate_bio', target: _reBioQuery });
+    appendConsoleMsg('user', content);
+    if (!_reBioQuery) { appendConsoleMsg('assistant', 'Usage: `regenerate bio [name]` — e.g. `regenerate bio Maria`', false); return; }
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _reBioId = _resolveNpcPatchKey(_reBioQuery);
+    if (!_reBioId || !WS.npcs[_reBioId]) {
+      appendConsoleMsg('assistant', `No NPC found matching "${_reBioQuery}". Use \`show npcs\` to list available characters.`, false); return;
+    }
+    const _reBioNpc = WS.npcs[_reBioId];
+    appendConsoleMsg('assistant', `⏳ Generating bio for ${_reBioNpc.name}...`, false);
+    try {
+      const _reLb = localStorage.getItem('LOREBOOK') ?? '';
+      const _reKey = localStorage.getItem('GROQ_API_KEY') || localStorage.getItem('CLASSIFIER_KEY') || localStorage.getItem('NARRATOR_KEY') || '';
+      const _reProv = localStorage.getItem('GROQ_API_KEY') ? 'groq'
+        : (localStorage.getItem('CLASSIFIER_PROVIDER') || detectProvider(localStorage.getItem('CLASSIFIER_KEY') ?? '')
+        || localStorage.getItem('NARRATOR_PROVIDER') || detectProvider(localStorage.getItem('NARRATOR_KEY') ?? '') || null);
+      const _reModel = localStorage.getItem('GROQ_API_KEY') ? 'llama-3.1-8b-instant' : null;
+      if (!_reKey || !_reProv) { appendConsoleMsg('assistant', '⚠ No API key available. Configure Groq or another key in ⚙ Settings.', false); return; }
+      const _rePrompt = `Write a 2-3 sentence character bio for a life simulation NPC: ${_reBioNpc.name}, age ${_reBioNpc.age}, ${(_reBioNpc.relationship_type ?? _reBioNpc.npc_class ?? '').replace(/_/g, ' ')}. Lorebook context: "${_reLb.slice(0, 500)}". Cover: physical appearance or first impression, a specific habit or mannerism, and their role in the player's life. Reply with ONLY the bio text — no labels, JSON, or preamble.`;
+      const _reBioText = await _providerDispatchChat(_reProv, _reKey, _reModel, [{ role: 'user', content: _rePrompt }], 150, 10000);
+      if (_reBioText?.trim()) {
+        WS.npcs[_reBioId].bio = _reBioText.trim();
+        await saveWorldState(WS); renderAll();
+        window._devlog?.system('regenerate_bio complete', { npc: _reBioNpc.name });
+        appendConsoleMsg('assistant', `**Bio updated for ${_reBioNpc.name}:**\n\n${_reBioText.trim()}\n\n*Source: Engine action — dispatchChat*`, false);
+      } else {
+        appendConsoleMsg('assistant', `⚠ Bio generation returned empty. Try again or check your API key.`, false);
+      }
+    } catch(e) {
+      window._devlog?.error('regenerate_bio failed', { error: e.message });
+      appendConsoleMsg('assistant', `⚠ Failed: ${e.message}`, false);
+    }
+    return;
+  }
+
+  // ── ENGINE: RERUN ENRICHMENT ──────────────────────────────────────────────
+  if (/^\s*(?:rerun\s+enrichment|fix\s+world|reenrich)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'rerun_enrichment' });
+    appendConsoleMsg('user', content);
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    appendConsoleMsg('assistant', '⏳ Running world enrichment — this may take 15–30 seconds...', false);
+    try {
+      const _rrLb = localStorage.getItem('LOREBOOK') ?? '';
+      const _rrEnr = await enrichWorldDetails(_rrLb, WS);
+      if (!_rrEnr) { appendConsoleMsg('assistant', '⚠ Enrichment returned no data. Check your Enricher/Classifier API key.', false); return; }
+      const _rrChanged = [];
+      if (_rrEnr.setting_description) { WS.setting_description = _rrEnr.setting_description; _rrChanged.push('setting'); }
+      if (_rrEnr.npc_descriptions) {
+        for (const [k, bio] of Object.entries(_rrEnr.npc_descriptions)) {
+          const _rrN = _resolveEnrichmentKey(k, WS.npcs);
+          if (_rrN && WS.npcs[_rrN.id] && bio) { WS.npcs[_rrN.id].bio = bio; _rrChanged.push(`${_rrN.name}.bio`); }
+        }
+      }
+      if (_rrEnr.npc_schedules) {
+        for (const [k, sched] of Object.entries(_rrEnr.npc_schedules)) {
+          if (!sched?.weekday_routine?.length) continue;
+          const _rrSN = _resolveEnrichmentKey(k, WS.npcs);
+          if (_rrSN && WS.npcs[_rrSN.id]) {
+            WS.npcs[_rrSN.id].schedule = { weekday_routine: sched.weekday_routine, weekend_routine: sched.weekend_routine ?? sched.weekday_routine, interruptions: WS.npcs[_rrSN.id].schedule?.interruptions ?? [] };
+            _rrChanged.push(`${_rrSN.name}.schedule`);
+          }
+        }
+      }
+      await saveWorldState(WS); renderAll();
+      window._devlog?.system('rerun_enrichment complete', { changed: _rrChanged });
+      appendConsoleMsg('assistant', `**Enrichment Complete**\n\nUpdated: ${_rrChanged.join(', ') || 'nothing new (all fields already populated)'}\n\n*Source: Engine action — enrichWorldDetails*`, false);
+    } catch(e) {
+      window._devlog?.error('rerun_enrichment failed', { error: e.message });
+      appendConsoleMsg('assistant', `⚠ Enrichment failed: ${e.message}`, false);
+    }
+    return;
+  }
+
+  // ── ENGINE: REPARSE LOREBOOK ──────────────────────────────────────────────
+  if (/^\s*reparse\s+lorebook\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'reparse_lorebook' });
+    appendConsoleMsg('user', content);
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _rlLb = localStorage.getItem('LOREBOOK') ?? '';
+    if (!_rlLb.trim()) { appendConsoleMsg('assistant', 'No lorebook set. Configure one in ⚙ Settings → Lorebook first.', false); return; }
+    appendConsoleMsg('assistant',
+      `⚠ This will add missing NPCs from lorebook to the current game. Existing ${Object.keys(WS.npcs).length} NPCs will not be modified.\n\nReply **yes** to continue or anything else to cancel.`, false);
+    window._consolePendingReparse = true;
+    return;
+  }
+
   // ── For everything else, proceed to AI ────────────────────────────────────
   window._devlog?.console_log('Routing to AI', { reason: 'no deterministic command matched' });
+  // FIX 7A: Inject real devlog data into diagnostic questions
+  let _diagSuffix = '';
+  if (/\b(?:why|what\s+went\s+wrong|fail|error|debug|diagnos|no\s+npc|missing|not\s+work)\b/i.test(content)) {
+    const _diagEntries = (window._devlog?.entries ?? [])
+      .filter(e => ['ERROR','API','CONSOLE','PATCH'].includes(e.cat))
+      .slice(-20);
+    if (_diagEntries.length) {
+      _diagSuffix = '\n\n[ENGINE LOG — real data for diagnosis]:\n' +
+        _diagEntries.map(e => `[${e.cat}] ${e.msg}${e.data ? ' ' + JSON.stringify(e.data).slice(0, 120) : ''}`).join('\n');
+      window._devlog?.console_log('Injecting diagnostic context', { entries: _diagEntries.length });
+    }
+  }
   _consoleSending = true;
   document.getElementById('console-submit').disabled = true;
-  _consoleMessages.push({ role: 'user', content });
+  _consoleMessages.push({ role: 'user', content: content + _diagSuffix });
   appendConsoleMsg('user', content, true);
   showConsoleThinking();
   try {

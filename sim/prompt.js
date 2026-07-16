@@ -450,7 +450,21 @@ export function buildMetaConsolePrompt(gameState) {
     ws.challenges?.filter(c => c.active && !c.resolved).length ? `Active challenges: ${ws.challenges.filter(c => c.active && !c.resolved).map(c => c.title).join(' | ')}` : null,
     ws.recent_significant_events?.length ? `Recent events: ${ws.recent_significant_events.slice(-3).join(' | ')}` : null,
     ws.sim_time ? `Sim time (ISO): ${ws.sim_time}` : null,
-    `Lorebook:\n${(typeof localStorage !== 'undefined' ? localStorage.getItem('LOREBOOK') : null) ?? 'None set'}`,
+    (() => {
+      const lb = (typeof localStorage !== 'undefined' ? localStorage.getItem('LOREBOOK') : null) ?? 'None set';
+      const MAX_LB = 6000; // FIX 8B: ~1500 token cap prevents context overflow on small models
+      return `Lorebook${lb.length > MAX_LB ? ' (truncated)' : ''}:\n${lb.length > MAX_LB ? lb.slice(0, MAX_LB) + '\n...[truncated for context budget]' : lb}`;
+    })(),
+    (() => {
+      try {
+        if (typeof localStorage === 'undefined') return null;
+        const nKey = localStorage.getItem('NARRATOR_KEY') ?? localStorage.getItem('GROK_API_KEY') ?? '';
+        const cKey = localStorage.getItem('CLASSIFIER_KEY') ?? localStorage.getItem('GEMINI_API_KEY') ?? '';
+        const nProv = localStorage.getItem('NARRATOR_PROVIDER') || detectProvider(nKey) || '?';
+        const cProv = localStorage.getItem('CLASSIFIER_PROVIDER') || detectProvider(cKey) || '?';
+        return `Active slots: Narrator=${nProv}/${localStorage.getItem('NARRATOR_MODEL') || 'default'} | Classifier=${cProv}/${localStorage.getItem('CLASSIFIER_MODEL') || 'default'}`;
+      } catch { return null; }
+    })(),
   ].filter(Boolean).join('\n') : 'No active save loaded.';
 
   return `You are the AI Console for "The Sim" — a text-based life simulation game. You are a meta-layer tool above the simulation. You are NOT in-character and you are NOT the narrator.
