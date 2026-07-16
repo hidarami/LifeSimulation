@@ -6,8 +6,8 @@
 export const PROVIDER_ENDPOINTS = {
   grok: {
     chat:                   'https://api.x.ai/v1/chat/completions',
-    default_narrator_model: 'grok-3-20-non-reasoning',
-    default_helper_model:   'grok-3-20-non-reasoning',
+    default_narrator_model: 'grok-4.20-non-reasoning',
+    default_helper_model:   'grok-4.20-non-reasoning',
     format:                 'openai',
     auth: k => ({ 'Authorization': `Bearer ${k}` }),
   },
