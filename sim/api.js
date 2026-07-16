@@ -11,7 +11,8 @@ import {
 import {
   detectProvider, dispatchChat, dispatchJSON,
   getNarratorSlot, getClassifierSlot, getHelperSlot,
-  getNarratorFallbacks, PROVIDER_ENDPOINTS, getProviderDisplayName,
+  getNarratorFallbacks, getFallbackSlots, getEnricherSlot,
+  PROVIDER_ENDPOINTS, getProviderDisplayName,
 } from './providers.js';
 
 // ─── BACKGROUND MODEL CONSTANTS ──────────────────────────────────────────────
@@ -87,6 +88,7 @@ export async function callGrok(turnBrief, mode) {
     { role: 'user', content: usr },
   ];
 
+  const _t0 = Date.now();
   let prose;
   if (_isCooling(provider)) {
     window._devlog?.system(`Narrator primary (${provider}) in cooldown — going to fallback.`);
@@ -131,23 +133,37 @@ export async function callGrok(turnBrief, mode) {
   _conversationHistory.push({ role: 'assistant', content: prose });
   if (_conversationHistory.length > 20) _conversationHistory = _conversationHistory.slice(-20);
 
-  window._devlog?.api(`Narrator OK`, { provider, model: model || cfg?.default_narrator_model, chars: prose.length });
+  window._devlog?.api(`Narrator OK`, { provider, model: model || cfg?.default_narrator_model, elapsed_ms: Date.now()-_t0, chars: prose.length });
   return prose;
 }
 
 async function _callNarratorFallback(systemPrompt, userMessage) {
+  // Try configured fallback slots first (FIX 5C)
+  const configuredFallbacks = getFallbackSlots('narrator');
+  for (const { key, provider, model } of configuredFallbacks) {
+    if (!key || !provider) continue;
+    try {
+      const msgs = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
+      const text = await dispatchChat(provider, key, model, msgs, 600, 22000);
+      if (text && text.length > 60) {
+        window._devlog?.api(`Narrator fallback slot OK`, { provider, model });
+        return text;
+      }
+    } catch (e) { window._devlog?.error(`Narrator fallback slot failed`, { provider, model, error: e.message }); }
+  }
+  // Fall back to hardcoded fallbacks
   const fallbacks = getNarratorFallbacks();
   for (const { key, provider, model } of fallbacks) {
     try {
       const msgs = [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMessage }];
       const text = await dispatchChat(provider, key, model, msgs, 600, 22000);
       if (text && text.length > 60) {
-        window._devlog?.api(`Narrator fallback OK`, { provider, model });
+        window._devlog?.api(`Narrator hardcoded fallback OK`, { provider, model });
         return text;
       }
-    } catch (e) { window._devlog?.error(`Narrator fallback failed`, { provider, model, error: e.message }); }
+    } catch (e) { window._devlog?.error(`Narrator hardcoded fallback failed`, { provider, model, error: e.message }); }
   }
-  throw new Error('All narrator fallbacks exhausted. Configure OpenRouter or Groq as fallback keys in ⚙ Settings.');
+  throw new Error('All narrator fallbacks exhausted. Configure fallback slots or OpenRouter/Groq keys in ⚙ Settings.');
 }
 
 // ─── GEMINI ───────────────────────────────────────────────────────────────────
@@ -158,7 +174,16 @@ async function geminiRaw(prompt, maxTokens = 400) {
   const { key, provider, model } = getClassifierSlot();
   if (!key || !provider) throw new Error('Classifier API key not configured. Open ⚙ Settings → Classifier Key.');
   if (_isCooling(provider)) {
-    window._devlog?.system(`Classifier primary (${provider}) in cooldown — routing to helper.`);
+    window._devlog?.system(`Classifier primary (${provider}) in cooldown — trying fallback slots.`);
+    // Try configured fallback slots first (FIX 5C)
+    const configuredFallbacks = getFallbackSlots('classifier');
+    for (const { key: fbKey, provider: fbProvider, model: fbModel } of configuredFallbacks) {
+      if (!fbKey || !fbProvider || fbProvider === provider) continue;
+      try {
+        return await dispatchJSON(fbProvider, fbKey, fbModel, prompt, maxTokens);
+      } catch (e) { window._devlog?.error(`Classifier fallback slot failed`, { provider: fbProvider, error: e.message }); }
+    }
+    // Fall back to helper slot
     const helper = getHelperSlot();
     if (helper.key && helper.provider && helper.provider !== provider) {
       return dispatchJSON(helper.provider, helper.key, helper.model, prompt, maxTokens);
@@ -172,6 +197,15 @@ async function geminiRaw(prompt, maxTokens = 400) {
   } catch (e) {
     if (_shouldCool(e.message)) _markCooling(provider, e.message.match(/HTTP\s*\d+/)?.[0] ?? 'error');
     if (e.message === 'GEMINI_RATE_LIMIT' || e.message?.includes('429')) {
+      // Try configured fallback slots first (FIX 5C)
+      const configuredFallbacks = getFallbackSlots('classifier');
+      for (const { key: fbKey, provider: fbProvider, model: fbModel } of configuredFallbacks) {
+        if (!fbKey || !fbProvider || fbProvider === provider) continue;
+        try {
+          return await dispatchJSON(fbProvider, fbKey, fbModel, prompt, maxTokens);
+        } catch (fe) { window._devlog?.error(`Classifier fallback slot failed`, { provider: fbProvider, error: fe.message }); }
+      }
+      // Fall back to helper slot
       const helper = getHelperSlot();
       if (helper.key && helper.provider && helper.provider !== provider) {
         window._devlog?.api('Classifier rate-limited, falling back to helper slot', { helper_provider: helper.provider });
@@ -183,9 +217,10 @@ async function geminiRaw(prompt, maxTokens = 400) {
 }
 
 export async function classifyAction(input, sanitizedState) {
+  const _t0 = Date.now();
   try {
     const result = await geminiRaw(buildGeminiClassifyPrompt(input, sanitizedState));
-    window._devlog?.api('Gemini classify', { action_type: result.action_type, time_cost: result.time_cost_hours, risk: result.risk_class, deltas: result.stat_deltas });
+    window._devlog?.api('Gemini classify', { action_type: result.action_type, time_cost: result.time_cost_hours, risk: result.risk_class, deltas: result.stat_deltas, elapsed_ms: Date.now()-_t0 });
     return result;
   } catch(e) {
     window._devlog?.error('Gemini classify failed — using fallback', { error: e.message });
@@ -194,9 +229,10 @@ export async function classifyAction(input, sanitizedState) {
 }
 
 export async function evaluateNpcReaction(npcContext, actionDescription, playerStats) {
+  const _t0 = Date.now();
   try {
     const r = await geminiRaw(buildGeminiNpcPrompt(npcContext, actionDescription, playerStats));
-    window._devlog?.npc(`${npcContext.name} NPC eval`, { rel_delta: r.relationship_delta, trust_delta: r.trust_delta, summary: r.reaction_summary, flags: r.flags_to_add });
+    window._devlog?.npc(`${npcContext.name} NPC eval`, { rel_delta: r.relationship_delta, trust_delta: r.trust_delta, summary: r.reaction_summary, flags: r.flags_to_add, elapsed_ms: Date.now()-_t0 });
     return r;
   } catch(e) {
     window._devlog?.error(`NPC eval failed for ${npcContext?.name}`, { error: e.message });
@@ -221,7 +257,7 @@ export async function callGeminiAutopilot(sanitizedState, hours, activityLabel) 
       const useModel = model || cfg?.default_helper_model || null;
       const text = await dispatchChat(provider, key, useModel, msgs, 150, 12000);
       if (text && text.length > 20) return text;
-    } catch (e) { window._devlog?.error?.('dispatch fallback failed', e); }
+    } catch (e) { window._devlog?.error?.('dispatch fallback failed', e ?? {}); }
   }
   return `${hrLabel} passed.`;
 }
@@ -672,11 +708,13 @@ NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are liste
   - Weekend routines should differ: no school/work blocks unless role requires (e.g. retail, construction sometimes Sat)
   - interruptible: false for sleeping, morning_prep, work, school, commuting. true for leisure, errands, winding_down, studying, store_duty`;
 
-  // For enrichment: try the smarter Groq model (70b) first for richer text, then fall
-  // through to Gemini (classifier slot). The 8b helper slot is listed so _seenProviders
+  // For enrichment: try dedicated enricher slot first (FIX 5D), then fallback slots (FIX 5C),
+  // then fall through to helper/classifier. The 8b helper slot is listed so _seenProviders
   // skips it if 70b already ran on Groq, avoiding a redundant same-provider call.
   const _enrichGroqKey = typeof localStorage !== 'undefined' ? localStorage.getItem('GROQ_API_KEY')?.trim() : null;
   const slots = [
+    getEnricherSlot(),
+    ...getFallbackSlots('enricher'),
     _enrichGroqKey ? { key: _enrichGroqKey, provider: 'groq', model: BG_GROQ_SMART } : null,
     getHelperSlot(),
     getClassifierSlot(),
@@ -779,7 +817,7 @@ Empty array if nothing should be removed.`;
 // ─── META CONSOLE ─────────────────────────────────────────────────────────────
 export async function callMetaConsole(messages, gameState) {
   const systemPrompt = buildMetaConsolePrompt(gameState);
-  window._devlog?.patch('Console API call', { msgs: messages.length });
+  window._devlog?.console_log('Console API call', { msgs: messages.length });
 
   const classifierSlot = getClassifierSlot();
   const helperSlot     = getHelperSlot();
@@ -790,47 +828,59 @@ export async function callMetaConsole(messages, gameState) {
   if (classifierSlot.key && classifierSlot.provider) {
     const _model = classifierSlot.model || PROVIDER_ENDPOINTS[classifierSlot.provider]?.default_helper_model || null;
     _tried.add(classifierSlot.provider);
-    window._devlog?.system('Console using slot', { provider: classifierSlot.provider, model: _model });
+    window._devlog?.console_log('Console using slot', { provider: classifierSlot.provider, model: _model });
     try {
       const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
       const reply = await dispatchChat(classifierSlot.provider, classifierSlot.key, _model, allMsgs, 800, 25000);
       if (reply && reply.length > 20) {
-        window._devlog?.patch(`Console: ${classifierSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
+        window._devlog?.console_log(`Console: ${classifierSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
         return reply;
       }
-    } catch (e) { window._devlog?.error('Console: classifier slot failed', { error: e.message }); }
+    } catch (e) { 
+      window._devlog?.console_log('Slot failed → fallback', { failed: classifierSlot.provider, reason: e.message });
+      window._devlog?.error('Console: classifier slot failed', { error: e.message }); 
+    }
   }
 
   // Helper slot second (Groq/fast) — structured tasks
   if (helperSlot.key && helperSlot.provider && !_tried.has(helperSlot.provider)) {
     _tried.add(helperSlot.provider);
     const HELPER_CHAT_MODELS = { groq: BG_GROQ_SMART, openai: 'gpt-4o-mini', gemini: BG_GEMINI_FAST };
-    const model = helperSlot.model || HELPER_CHAT_MODELS[helperSlot.provider] || null;
-    window._devlog?.system('Console using slot', { provider: helperSlot.provider, model });
+    // FIX 5E: For console specifically, prefer 70b when Groq is the provider (unless user explicitly set model)
+    const model = helperSlot.provider === 'groq' && !helperSlot.model
+      ? BG_GROQ_SMART
+      : helperSlot.model || HELPER_CHAT_MODELS[helperSlot.provider] || null;
+    window._devlog?.console_log('Console using slot', { provider: helperSlot.provider, model });
     const _modelList = [...new Set([model, HELPER_CHAT_MODELS[helperSlot.provider]].filter(Boolean))];
     for (const m of _modelList) {
       try {
         const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
         const reply = await dispatchChat(helperSlot.provider, helperSlot.key, m, allMsgs, 800, 25000);
         if (reply && reply.length > 20) {
-          window._devlog?.patch(`Console: ${helperSlot.provider}(${m}) responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
+          window._devlog?.console_log(`Console: ${helperSlot.provider}(${m}) responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
           return reply;
         }
-      } catch (e) { window._devlog?.error(`Console: ${helperSlot.provider}(${m}) failed`, { error: e.message }); }
+      } catch (e) { 
+        window._devlog?.console_log('Slot failed → fallback', { failed: helperSlot.provider, reason: e.message });
+        window._devlog?.error(`Console: ${helperSlot.provider}(${m}) failed`, { error: e.message }); 
+      }
     }
   }
 
   // Narrator slot last resort — expensive, avoid for console tasks
   if (narratorSlot.key && narratorSlot.provider && !_tried.has(narratorSlot.provider)) {
-    window._devlog?.system('Console using slot', { provider: narratorSlot.provider, model: narratorSlot.model });
+    window._devlog?.console_log('Console using slot', { provider: narratorSlot.provider, model: narratorSlot.model });
     try {
       const allMsgs = [{ role: 'system', content: systemPrompt }, ...messages.slice(-20)];
       const reply = await dispatchChat(narratorSlot.provider, narratorSlot.key, narratorSlot.model, allMsgs, 800, 30000);
       if (reply && reply.length > 20) {
-        window._devlog?.patch(`Console: ${narratorSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
+        window._devlog?.console_log(`Console: ${narratorSlot.provider} responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
         return reply;
       }
-    } catch (e) { window._devlog?.error('Console: narrator slot failed', { error: e.message }); }
+    } catch (e) { 
+      window._devlog?.console_log('Slot failed → fallback', { failed: narratorSlot.provider, reason: e.message });
+      window._devlog?.error('Console: narrator slot failed', { error: e.message }); 
+    }
   }
 
   throw new Error('No API available for console. Configure a Narrator Key in ⚙ Settings.');

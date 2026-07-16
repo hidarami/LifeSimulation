@@ -196,7 +196,9 @@ export async function dispatchChat(provider, key, model, messages, maxTokens = 6
     if (sysContent) body.system_instruction = { parts: [{ text: sysContent }] };
     const res = await _fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) { const t = await res.text(); throw new Error(`Gemini HTTP ${res.status}: ${t.slice(0, 160)}`); }
-    return (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+    const _gOut = (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+    window._devlog?.api('dispatchChat OK', { provider, model: gModel, elapsed_ms: Date.now()-_t0, chars: _gOut.length });
+    return _gOut;
   }
 
   // OpenAI-compatible: Grok, OpenAI, OpenRouter, Groq, Custom

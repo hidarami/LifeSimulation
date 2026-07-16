@@ -523,14 +523,15 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 /* Mobile devcon layout */
 @media(max-width:767px){
   .devcon-hdr{flex-wrap:wrap;padding:8px 10px;gap:5px}
-  .devcon-filters{order:3;flex:0 0 100%;margin:2px 0 0}
+  .devcon-filters{order:3;flex:0 0 100%;margin:2px 0 0;gap:4px}
   .devcon-actions{flex-shrink:0}
   .devcon-title{flex:1}
-  .devcon-filter{font-size:10px;padding:4px 8px;min-height:30px}
-  .devcon-btn{min-height:30px;padding:4px 8px}
+  .devcon-filter{font-size:11px;padding:4px 8px;min-height:32px}
+  .devcon-btn{min-height:32px;padding:4px 8px}
   .devcon-entry{font-size:12px;padding:4px 6px}
-  .devcon-ts{width:46px;font-size:10px}
-  .devcon-cat{width:46px;font-size:10px}
+  .devcon-ts{width:54px;font-size:11px;min-width:54px}
+  .devcon-cat{width:52px;font-size:10px}
+  .devcon-msg{font-size:12px}
   #devcon-feed{padding:8px 10px;gap:2px}
 }
 
@@ -4012,6 +4013,10 @@ async function sendConsoleMessage() {
   const content = inp.value.trim();
   if (!content) return;
   inp.value = ''; inp.style.height = 'auto';
+  
+  // Log user's actual request (FIX 6D)
+  window._devlog?.console_log('Console request', { msg: content.slice(0, 100) });
+  
   // /state shortcut — instant snapshot, no API call
   if (content.toLowerCase() === '/state' || content.toLowerCase() === 'state') {
     window._devlog?.console_log('Command detected', { command: 'state_snapshot' });
@@ -4032,6 +4037,7 @@ async function sendConsoleMessage() {
   }
   // Undo last patch
   if (content.toLowerCase() === 'undo') {
+    window._devlog?.console_log('Command detected', { command: 'undo_patch' });
     if (_patchUndo && WS) {
       WS = _patchUndo; _patchUndo = null;
       await saveWorldState(WS).catch(() => {}); renderAll();
@@ -4049,8 +4055,10 @@ async function sendConsoleMessage() {
   if (_npcMatch) {
     const _query = _npcMatch[1].trim();
     const _resolvedId = _resolveNpcPatchKey(_query);
+    window._devlog?.console_log('Command detected', { command: 'show_npc', target: _query });
     appendConsoleMsg('user', content);
     if (_resolvedId && WS) {
+      window._devlog?.console_log('Command resolved', { source: 'WS.npcs', found: true, id: _resolvedId });
       const _npcData = exportNpc(WS, _resolvedId);
       const _npcTask = getNpcCurrentTask(WS.npcs[_resolvedId], WS.sim_time);
       appendConsoleMsg('assistant',
@@ -4065,6 +4073,7 @@ async function sendConsoleMessage() {
         `**Recent:** ${_npcData.recent_interactions.slice(-3).join(' | ') || 'none'}\n\n` +
         `*Source: live engine data — WS.npcs["${_resolvedId}"]*`, false);
     } else {
+      window._devlog?.console_log('Command resolved', { source: 'WS.npcs', found: false });
       const _avail = WS ? Object.keys(WS.npcs).join(', ') : 'none';
       appendConsoleMsg('assistant',
         `No NPC found matching "${_query}".\n\nAvailable ids: ${_avail}`, false);
@@ -4074,6 +4083,7 @@ async function sendConsoleMessage() {
 
   // show world / show state / dump state
   if (/^\s*(?:show|read|dump)\s+(?:world|state|game)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_world_state' });
     appendConsoleMsg('user', content);
     if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
     const _summary = exportWorldSummary(WS);
@@ -4085,6 +4095,7 @@ async function sendConsoleMessage() {
 
   // show lorebook
   if (/^\s*(?:show|read)\s+lorebook\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_lorebook' });
     appendConsoleMsg('user', content);
     const _lb = exportLorebook();
     appendConsoleMsg('assistant',
@@ -4095,6 +4106,7 @@ async function sendConsoleMessage() {
 
   // show npcs / list npcs
   if (/^\s*(?:show|list)\s+npcs?\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'list_npcs' });
     appendConsoleMsg('user', content);
     if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
     const _active = Object.values(WS.npcs).filter(n => n.status === 'active');
@@ -4134,6 +4146,7 @@ async function sendConsoleMessage() {
 
   // show patches / patch log
   if (/^\s*(?:show|list)\s+patches?\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'show_patches' });
     appendConsoleMsg('user', content);
     const _pLogs = await exportPatchAuditLog(20, getCurrentSaveId());
     if (!_pLogs.length) {
@@ -4152,13 +4165,13 @@ async function sendConsoleMessage() {
   }
 
   // ── For everything else, proceed to AI ────────────────────────────────────
+  window._devlog?.console_log('Routing to AI', { reason: 'no deterministic command matched' });
   _consoleSending = true;
   document.getElementById('console-submit').disabled = true;
   _consoleMessages.push({ role: 'user', content });
   appendConsoleMsg('user', content, true);
   showConsoleThinking();
   try {
-    window._devlog?.console_log('Routing to AI', { reason: 'no deterministic command matched', msg: content.slice(0, 100) });
     const _consoleT0 = Date.now();
     let reply = await callMetaConsole(_consoleMessages.slice(-24), WS ?? null);
     removeConsoleThinking();
@@ -4315,7 +4328,7 @@ function _showSingleChallenge(ch, onDismiss) {
     el.className='devcon-entry';
     const d=new Date(e.ts);
     const ts=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    const ds=e.data!==null?(typeof e.data==='string'?e.data:JSON.stringify(e.data,null,2)):'';
+    const ds=e.data!==null && e.data!==undefined?(typeof e.data==='string'?e.data:JSON.stringify(e.data,null,2)):'';
     el.innerHTML=`<span class="devcon-ts">${ts}</span><span class="devcon-cat" data-cat="${e.cat}">${e.cat}</span><div style="flex:1;min-width:0"><div class="devcon-msg">${String(e.msg).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>${ds?`<pre class="devcon-data">${ds.replace(/</g,'&lt;')}</pre>`:''}</div>`;
     if(ds) el.addEventListener('click',()=>el.classList.toggle('expanded'));
     return el;
