@@ -447,22 +447,22 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 #panel-devcon{
   display:none;position:fixed;inset:0;z-index:145;
   flex-direction:column;font-family:'IBM Plex Mono','Courier New',monospace;
-  background:#060606;
+  background:var(--bg);
 }
 #panel-devcon.open{display:flex}
 .devcon-hdr{
   display:flex;align-items:center;gap:8px;flex-shrink:0;
-  padding:9px 14px;border-bottom:1px solid #1a1a1a;background:#0d0d0d;
+  padding:9px 14px;border-bottom:1px solid var(--bdr);background:var(--sur);
 }
 .devcon-title{font-size:11px;font-weight:700;letter-spacing:.12em;color:#27ae60;flex-shrink:0}
 .devcon-filters{display:flex;gap:3px;flex-wrap:wrap;flex:1;margin:0 6px}
 .devcon-filter{
-  font-size:9px;padding:2px 6px;border-radius:3px;cursor:pointer;
-  border:1px solid #2a2a2a;background:transparent;color:#555;
+  font-size:10px;padding:3px 7px;border-radius:3px;cursor:pointer;min-height:26px;
+  border:1px solid var(--bdr);background:transparent;color:var(--dim);
   font-family:inherit;transition:all .12s;
 }
-.devcon-filter.on{color:#fff}
-.devcon-filter[data-cat="ALL"].on{background:#333;border-color:#555}
+.devcon-filter.on{color:var(--txt)}
+.devcon-filter[data-cat="ALL"].on{background:var(--sur2);border-color:var(--dim)}
 .devcon-filter[data-cat="ERROR"].on{background:#922b21;border-color:#c0392b}
 .devcon-filter[data-cat="API"].on{background:#1a5276;border-color:#2980b9}
 .devcon-filter[data-cat="ROUTE"].on{background:#784212;border-color:#d35400}
@@ -471,26 +471,27 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .devcon-filter[data-cat="STAT"].on{background:#2e4057;border-color:#616a6b}
 .devcon-filter[data-cat="PATCH"].on{background:#0e6655;border-color:#1abc9c}
 .devcon-filter[data-cat="SYSTEM"].on{background:#2e4057;border-color:#5d6d7e}
+.devcon-filter[data-cat="CONSOLE"].on{background:#4a0530;border-color:#e91e8c}
 .devcon-actions{display:flex;gap:5px;flex-shrink:0}
 .devcon-btn{
-  font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;
-  border:1px solid #2a2a2a;background:transparent;color:#555;
+  font-size:10px;padding:3px 8px;border-radius:3px;cursor:pointer;min-height:26px;
+  border:1px solid var(--bdr);background:transparent;color:var(--dim);
   font-family:inherit;white-space:nowrap;transition:color .12s,border-color .12s;
 }
-.devcon-btn:hover{color:#aaa;border-color:#555}
+.devcon-btn:hover{color:var(--txt);border-color:var(--dim)}
 #devcon-feed{
   flex:1;overflow-y:auto;padding:6px 8px;
   display:flex;flex-direction:column;gap:1px;
 }
 .devcon-entry{
-  display:flex;align-items:flex-start;gap:6px;padding:2px 3px;border-radius:2px;
-  font-size:11px;line-height:1.55;cursor:pointer;transition:background .1s;
+  display:flex;align-items:flex-start;gap:6px;padding:3px 4px;border-radius:2px;
+  font-size:12px;line-height:1.55;cursor:pointer;transition:background .1s;
 }
-.devcon-entry:hover{background:rgba(255,255,255,0.03)}
+.devcon-entry:hover{background:var(--sur2)}
 .devcon-entry.expanded .devcon-data{display:block}
-.devcon-ts{color:#2a2a2a;width:50px;flex-shrink:0;font-size:10px;padding-top:1px}
+.devcon-ts{color:var(--dim);opacity:.45;width:54px;flex-shrink:0;font-size:10px;padding-top:1px}
 .devcon-cat{
-  font-size:9px;font-weight:700;width:46px;flex-shrink:0;
+  font-size:10px;font-weight:700;width:52px;flex-shrink:0;
   padding-top:1px;text-align:right;letter-spacing:.04em;
 }
 .devcon-cat[data-cat="ERROR"]{color:#c0392b}
@@ -501,20 +502,37 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .devcon-cat[data-cat="STAT"]{color:#566573}
 .devcon-cat[data-cat="PATCH"]{color:#1abc9c}
 .devcon-cat[data-cat="SYSTEM"]{color:#424949}
-.devcon-msg{flex:1;color:#7f7f7f;word-break:break-word}
+.devcon-cat[data-cat="CONSOLE"]{color:#e91e8c}
+.devcon-msg{flex:1;color:var(--dim);word-break:break-word}
 .devcon-data{
-  display:none;margin:3px 0 4px 96px;padding:5px 7px;
-  background:#0a0a0a;border:1px solid #1a1a1a;border-radius:2px;
-  font-size:10px;color:#5a5a5a;white-space:pre-wrap;word-break:break-all;
-  max-height:160px;overflow-y:auto;width:calc(100% - 100px);
+  display:none;margin:3px 0 4px 104px;padding:5px 7px;
+  background:var(--bg);border:1px solid var(--bdr);border-radius:2px;
+  font-size:10px;color:var(--dim);white-space:pre-wrap;word-break:break-all;
+  max-height:160px;overflow-y:auto;width:calc(100% - 108px);opacity:.75;
 }
 .devcon-footer{
   display:flex;align-items:center;gap:8px;padding:5px 12px;
-  border-top:1px solid #1a1a1a;background:#0d0d0d;flex-shrink:0;
+  border-top:1px solid var(--bdr);background:var(--sur);flex-shrink:0;
 }
-#devcon-count{font-size:10px;color:#333}
-.devcon-as-row{display:flex;align-items:center;gap:4px;font-size:10px;color:#333;cursor:pointer;margin-left:auto}
+#devcon-count{font-size:10px;color:var(--dim)}
+.devcon-as-row{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--dim);cursor:pointer;margin-left:auto}
 .devcon-as-row input{accent-color:#27ae60;cursor:pointer}
+/* Light theme devcon overrides */
+[data-theme="light"] .devcon-entry:hover{background:var(--sur2)}
+[data-theme="light"] #devcon-feed{border-top:1px solid var(--bdr)}
+/* Mobile devcon layout */
+@media(max-width:767px){
+  .devcon-hdr{flex-wrap:wrap;padding:8px 10px;gap:5px}
+  .devcon-filters{order:3;flex:0 0 100%;margin:2px 0 0}
+  .devcon-actions{flex-shrink:0}
+  .devcon-title{flex:1}
+  .devcon-filter{font-size:10px;padding:4px 8px;min-height:30px}
+  .devcon-btn{min-height:30px;padding:4px 8px}
+  .devcon-entry{font-size:12px;padding:4px 6px}
+  .devcon-ts{width:46px;font-size:10px}
+  .devcon-cat{width:46px;font-size:10px}
+  #devcon-feed{padding:8px 10px;gap:2px}
+}
 
 /* ── SKEUOMORPHISM & DEPTH ──────────────────────────────────────────────────── */
 
@@ -859,7 +877,8 @@ window._devlog = (function(){
   let _c = 0;
   const COLORS = { ERROR:'color:#e74c3c;font-weight:bold', API:'color:#5dade2',
     ROUTE:'color:#f39c12;font-weight:bold', TURN:'color:#a569bd', NPC:'color:#e67e22',
-    STAT:'color:#808b96', PATCH:'color:#1abc9c;font-weight:bold', SYSTEM:'color:#717d7e' };
+    STAT:'color:#808b96', PATCH:'color:#1abc9c;font-weight:bold', SYSTEM:'color:#717d7e',
+    CONSOLE:'color:#e91e8c;font-weight:bold' };
   function log(cat, msg, data){
     const entry = {id:++_c, ts:Date.now(), cat, msg, data:data??null};
     _e.push(entry);
@@ -872,6 +891,7 @@ window._devlog = (function(){
     route: (m,d)=>log('ROUTE', m,d), turn:  (m,d)=>log('TURN',  m,d),
     npc:   (m,d)=>log('NPC',   m,d), stat:  (m,d)=>log('STAT',  m,d),
     patch: (m,d)=>log('PATCH', m,d), system:(m,d)=>log('SYSTEM',m,d),
+    console_log: (m,d)=>log('CONSOLE',m,d),
     log,
     get entries(){ return [..._e]; },
     on(fn){ _l.push(fn); },
@@ -995,6 +1015,7 @@ window._devlog = (function(){
       <button class="devcon-filter" data-cat="STAT">STAT</button>
       <button class="devcon-filter" data-cat="PATCH">PATCH</button>
       <button class="devcon-filter" data-cat="SYSTEM">SYS</button>
+      <button class="devcon-filter" data-cat="CONSOLE">CON</button>
     </div>
     <div class="devcon-actions">
       <button class="devcon-btn" id="btn-devcon-clear">Clear</button>
@@ -1004,7 +1025,7 @@ window._devlog = (function(){
     </div>
   </div>
   <div id="devcon-feed">
-    <div style="color:#2a2a2a;padding:24px;text-align:center;font-size:11px">No entries yet — events appear here as the simulation runs.</div>
+    <div id="devcon-empty-msg" style="color:var(--dim);padding:24px;text-align:center;font-size:11px">No entries yet — events appear here as the simulation runs.</div>
   </div>
   <div class="devcon-footer">
     <span id="devcon-count">0 entries</span>
@@ -1152,6 +1173,39 @@ window._devlog = (function(){
       </div>
       <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6">When off, explicit player actions skip narration and run as autopilot. Useful for filtered-model users.</div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Enricher — World-building AI (game init only)</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:8px;line-height:1.6">Dedicated slot for <strong>enrichWorldDetails()</strong> — the slowest, most creative init call. Falls through to Classifier if empty. Use a smarter model here without slowing real-time classification.</div>
+      <div class="field">
+        <label class="field-label">Enricher Key <span style="font-weight:400;opacity:.6">(any supported key — provider auto-detected)</span></label>
+        <div class="pw-wrapper"><input class="field-input" id="k-enricher" type="password" placeholder="Paste API key for world-building"><button class="pw-toggle" data-target="k-enricher">👁</button></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <div id="k-enricher-badge" style="font-size:10px;color:var(--pos);flex:1;display:none"></div>
+          <button class="btn" id="k-enricher-test" type="button" style="font-size:10px;padding:3px 10px;flex-shrink:0">Test</button>
+        </div>
+        <div id="k-enricher-test-result" style="font-size:10px;margin-top:3px;display:none"></div>
+      </div>
+      <div class="field" id="k-enricher-provider-row" style="display:none">
+        <label class="field-label">Enricher Provider</label>
+        <select class="field-input" id="k-enricher-provider">
+          <option value="">Auto-detect from key</option>
+          <option value="grok">Grok/xAI</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="groq">Groq</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="custom">Custom (OpenAI-compatible)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Enricher Model</label>
+        <div style="display:flex;gap:6px">
+          <select class="field-input" id="k-enricher-model-list" style="flex:1"><option value="">— enter key, then Discover —</option></select>
+          <button class="btn" id="k-enricher-refresh" type="button" style="white-space:nowrap">↻ Discover</button>
+        </div>
+        <input class="field-input" id="k-enricher-model" placeholder="Override: exact model id (optional)" style="margin-top:6px">
+      </div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Additional / Fallback Keys</div>
       <div class="field"><label class="field-label">Grok API Key <span style="font-weight:400;opacity:.6">(used as narrator if Narrator Key is empty)</span></label><div class="pw-wrapper"><input class="field-input" id="k-grok" type="password" placeholder="xai-..."><button class="pw-toggle" data-target="k-grok">👁</button></div></div>
       <div class="field"><label class="field-label">Gemini API Key <span style="font-weight:400;opacity:.6">(used as classifier if Classifier Key is empty)</span></label><div class="pw-wrapper"><input class="field-input" id="k-gem" type="password" placeholder="AIza..."><button class="pw-toggle" data-target="k-gem">👁</button></div></div>
@@ -1159,6 +1213,10 @@ window._devlog = (function(){
       <div class="field"><label class="field-label">OpenRouter API Key <span style="font-weight:400;opacity:.6">(narrator fallbacks — free uncensored models)</span></label><div class="pw-wrapper"><input class="field-input" id="k-or" type="password" placeholder="sk-or-..."><button class="pw-toggle" data-target="k-or">👁</button></div></div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div class="field"><label class="field-label">Lorebook — world &amp; character facts sent every narrator prompt</label><textarea class="field-input field-textarea" id="k-lorebook" placeholder="e.g. Name: Rico Diaz, 18, male. Lives alone in Cavite..."></textarea></div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Fallback Slots — 8 configurable cascade providers</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.6">Each enabled slot becomes available as a fallback when the primary slot fails or refuses. Slot 1 has highest priority. Assign roles to control which call chains use each slot.</div>
+      <div id="fallback-slots-list"></div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div class="field"><label class="field-label">Supabase URL</label><input class="field-input" id="k-sb-url" placeholder="https://xxx.supabase.co"></div>
       <div class="field"><label class="field-label">Supabase Anon Key</label><div class="pw-wrapper"><input class="field-input" id="k-sb-key" type="password" placeholder="eyJ..."><button class="pw-toggle" data-target="k-sb-key">👁</button></div></div>
@@ -3417,6 +3475,112 @@ function _wireSlot(prefix) {
     listEl.addEventListener('change', () => { const ov = document.getElementById(`k-${prefix}-model`); if (ov && listEl.value) ov.value = listEl.value; });
   }
 }
+// ── FALLBACK SLOTS ────────────────────────────────────────────────────────────
+function _loadFallbackSlots() {
+  try { return JSON.parse(localStorage.getItem('FALLBACK_SLOTS') ?? '[]'); }
+  catch { return []; }
+}
+function _saveFallbackSlots() {
+  const slots = [];
+  document.querySelectorAll('.fb-slot').forEach((el, idx) => {
+    const key      = el.querySelector('.fb-key')?.value?.trim() ?? '';
+    const provider = el.querySelector('.fb-provider')?.value?.trim() ?? '';
+    const model    = el.querySelector('.fb-model')?.value?.trim() ?? '';
+    const enabled  = el.querySelector('.fb-toggle-inp')?.checked ?? false;
+    const roles    = [];
+    el.querySelectorAll('.fb-role:checked').forEach(r => roles.push(r.value));
+    slots.push({ slot: idx + 1, enabled, key, provider, model, roles });
+  });
+  localStorage.setItem('FALLBACK_SLOTS', JSON.stringify(slots));
+}
+function _renderFallbackSlots() {
+  const container = document.getElementById('fallback-slots-list');
+  if (!container) return;
+  const saved = _loadFallbackSlots();
+  container.innerHTML = '';
+  for (let i = 0; i < 8; i++) {
+    const s = saved[i] ?? { slot: i+1, enabled: false, key: '', provider: '', model: '', roles: [] };
+    const _autoP = s.key ? (detectProvider(s.key) ?? '') : '';
+    const _pName = _autoP ? (getProviderDisplayName(_autoP)) : '';
+    const el = document.createElement('div');
+    el.className = 'fb-slot';
+    el.style.cssText = 'border:1px solid var(--bdr);border-radius:4px;margin-bottom:6px;overflow:hidden';
+    const summaryText = s.key ? (_pName || s.provider || '?') + (s.model ? ' / ' + s.model : '') : 'Not configured';
+    el.innerHTML = `
+      <div class="fb-slot-head" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--sur);cursor:pointer;user-select:none">
+        <input type="checkbox" class="fb-toggle-inp" ${s.enabled?'checked':''} style="cursor:pointer;accent-color:var(--acc);flex-shrink:0">
+        <span style="font-size:11px;color:var(--acc);font-weight:700;flex-shrink:0">Slot ${i+1}</span>
+        <span class="fb-slot-summary" style="flex:1;font-size:10px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${summaryText}</span>
+        <span class="fb-expand-icon" style="font-size:9px;color:var(--dim);transition:transform .2s">${s.enabled?'▼':'▶'}</span>
+      </div>
+      <div class="fb-slot-body" style="display:${s.enabled?'block':'none'};padding:10px;background:var(--bg)">
+        <div class="field" style="margin-bottom:8px">
+          <label class="field-label">API Key</label>
+          <div class="pw-wrapper">
+            <input class="field-input fb-key" type="password" value="${s.key.replace(/"/g,'&quot;')}" placeholder="Any supported API key">
+            <button class="fb-pw-toggle" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--dim);font-size:14px;background:none;border:none;padding:0">👁</button>
+          </div>
+          <div class="fb-badge" style="font-size:10px;color:var(--pos);margin-top:3px;${_autoP&&s.key?'':'display:none'}">${_autoP&&s.key?'✓ Detected: '+_pName:''}</div>
+        </div>
+        <div class="field-row" style="margin-bottom:8px">
+          <div class="field">
+            <label class="field-label">Provider</label>
+            <select class="field-input fb-provider" style="font-size:12px">
+              <option value="">Auto-detect</option>
+              <option value="grok"       ${s.provider==='grok'?'selected':''}>Grok/xAI</option>
+              <option value="openai"     ${s.provider==='openai'?'selected':''}>OpenAI</option>
+              <option value="anthropic"  ${s.provider==='anthropic'?'selected':''}>Anthropic</option>
+              <option value="openrouter" ${s.provider==='openrouter'?'selected':''}>OpenRouter</option>
+              <option value="groq"       ${s.provider==='groq'?'selected':''}>Groq</option>
+              <option value="gemini"     ${s.provider==='gemini'?'selected':''}>Gemini</option>
+            </select>
+          </div>
+          <div class="field">
+            <label class="field-label">Model (optional)</label>
+            <input class="field-input fb-model" value="${s.model.replace(/"/g,'&quot;')}" placeholder="e.g. gpt-4o" style="font-size:12px">
+          </div>
+        </div>
+        <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Roles</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);cursor:pointer"><input type="checkbox" class="fb-role" value="narrator"   ${(s.roles??[]).includes('narrator')?'checked':''}   style="accent-color:var(--acc)"> Narrator fallback</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);cursor:pointer"><input type="checkbox" class="fb-role" value="classifier" ${(s.roles??[]).includes('classifier')?'checked':''} style="accent-color:var(--acc)"> Classifier fallback</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);cursor:pointer"><input type="checkbox" class="fb-role" value="enricher"   ${(s.roles??[]).includes('enricher')?'checked':''}   style="accent-color:var(--acc)"> Enricher</label>
+        </div>
+      </div>`;
+    // Toggle head click (not on checkbox)
+    el.querySelector('.fb-slot-head').addEventListener('click', ev => {
+      if (ev.target.tagName === 'INPUT') return;
+      const body = el.querySelector('.fb-slot-body');
+      const icon = el.querySelector('.fb-expand-icon');
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : 'block';
+      icon.textContent   = open ? '▶' : '▼';
+    });
+    // Checkbox expands body
+    el.querySelector('.fb-toggle-inp').addEventListener('change', ev => {
+      const body = el.querySelector('.fb-slot-body');
+      const icon = el.querySelector('.fb-expand-icon');
+      body.style.display = ev.target.checked ? 'block' : 'none';
+      icon.textContent   = ev.target.checked ? '▼' : '▶';
+    });
+    // Auto-detect provider from key
+    el.querySelector('.fb-key').addEventListener('input', function() {
+      const badge = el.querySelector('.fb-badge');
+      const auto  = detectProvider(this.value.trim());
+      const pn    = auto ? getProviderDisplayName(auto) : '';
+      badge.textContent    = auto ? '✓ Detected: ' + pn : '';
+      badge.style.display  = (auto && this.value.trim()) ? 'block' : 'none';
+    });
+    // PW toggle for key field
+    el.querySelector('.fb-pw-toggle').addEventListener('click', function() {
+      const inp = el.querySelector('.fb-key');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+      this.textContent = inp.type === 'password' ? '👁' : '🙈';
+    });
+    container.appendChild(el);
+  }
+}
+
 document.getElementById('k-custom-baseurl')?.addEventListener('input', _updateCustomBaseUrlRow);
 
 document.getElementById('btn-settings').addEventListener('click', () => {
@@ -3436,6 +3600,9 @@ document.getElementById('btn-settings').addEventListener('click', () => {
   document.getElementById('k-sb-url').value          = localStorage.getItem('SUPABASE_URL') ?? '';
   document.getElementById('k-sb-key').value          = localStorage.getItem('SUPABASE_ANON_KEY') ?? '';
   document.getElementById('k-lorebook').value        = localStorage.getItem('LOREBOOK')  ?? '';
+  document.getElementById('k-enricher').value        = localStorage.getItem('ENRICHER_KEY') ?? '';
+  document.getElementById('k-enricher-model').value  = localStorage.getItem('ENRICHER_MODEL') ?? '';
+  document.getElementById('k-enricher-provider').value = localStorage.getItem('ENRICHER_PROVIDER') ?? '';
   document.getElementById('k-locale').value          = localStorage.getItem('LOCALE')    ?? 'Philippines';
   document.getElementById('k-language').value        = localStorage.getItem('LANGUAGE')  ?? 'Tagalog';
   document.getElementById('k-currency').value        = localStorage.getItem('CURRENCY_SYMBOL') ?? '';
@@ -3445,11 +3612,13 @@ document.getElementById('btn-settings').addEventListener('click', () => {
   const _explicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
   if (_cTog) _cTog.classList.toggle('on', _explicit);
   // Slot controls: wire listeners, seed model dropdowns, refresh detection/badges
-  ['quickstart', 'narrator', 'classifier'].forEach(_wireSlot);
+  ['quickstart', 'narrator', 'classifier', 'enricher'].forEach(_wireSlot);
   _seedModelList('narrator');
   _seedModelList('classifier');
-  ['quickstart', 'narrator', 'classifier'].forEach(_updateSlotDetection);
+  _seedModelList('enricher');
+  ['quickstart', 'narrator', 'classifier', 'enricher'].forEach(_updateSlotDetection);
   _updateMutualExclusion();
+  _renderFallbackSlots();
 });
 
 // Content mode toggle handler
@@ -3479,6 +3648,10 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   localStorage.setItem('SUPABASE_URL',       _sv('k-sb-url'));
   localStorage.setItem('SUPABASE_ANON_KEY',  _sv('k-sb-key'));
   localStorage.setItem('LOREBOOK',           document.getElementById('k-lorebook')?.value ?? '');
+  _set('ENRICHER_KEY',      _sv('k-enricher'));
+  _set('ENRICHER_MODEL',    _sv('k-enricher-model') || _sv('k-enricher-model-list'));
+  _set('ENRICHER_PROVIDER', _sv('k-enricher-provider'));
+  _saveFallbackSlots();
   localStorage.setItem('CONTENT_MODE',       _contentExplicit ? 'explicit' : 'filtered');
   localStorage.setItem('LOCALE',   document.getElementById('k-locale')?.value?.trim()   || 'Philippines');
   localStorage.setItem('LANGUAGE', document.getElementById('k-language')?.value?.trim() || 'Tagalog');
@@ -3527,7 +3700,7 @@ async function _testApiKey(keyVal, prefix) {
     resEl.style.color = 'var(--crit)';
   }
 }
-['quickstart', 'narrator', 'classifier'].forEach(prefix => {
+['quickstart', 'narrator', 'classifier', 'enricher'].forEach(prefix => {
   document.getElementById(`k-${prefix}-test`)?.addEventListener('click', () => {
     _testApiKey(document.getElementById(`k-${prefix}`)?.value?.trim() ?? '', prefix);
   });
@@ -3841,6 +4014,7 @@ async function sendConsoleMessage() {
   inp.value = ''; inp.style.height = 'auto';
   // /state shortcut — instant snapshot, no API call
   if (content.toLowerCase() === '/state' || content.toLowerCase() === 'state') {
+    window._devlog?.console_log('Command detected', { command: 'state_snapshot' });
     const _cur = localStorage.getItem('CURRENCY_SYMBOL') || '₱';
     const _snap = WS ? [
       `━━ WORLD STATE — Turn ${WS.turn} ━━`,
@@ -3940,6 +4114,7 @@ async function sendConsoleMessage() {
 
   // check / integrity / verify / scan
   if (/^\s*(?:check|integrity|verify|scan)\s*$/i.test(content)) {
+    window._devlog?.console_log('Command detected', { command: 'integrity_check' });
     appendConsoleMsg('user', content);
     const _iResult = runIntegrityCheck(WS);
     let _iReport = '**Integrity Check — Deterministic Engine Rules**\n\n';
@@ -3983,10 +4158,11 @@ async function sendConsoleMessage() {
   appendConsoleMsg('user', content, true);
   showConsoleThinking();
   try {
-    window._devlog?.patch('Console request', { msg: content.slice(0, 100) });
+    window._devlog?.console_log('Routing to AI', { reason: 'no deterministic command matched', msg: content.slice(0, 100) });
+    const _consoleT0 = Date.now();
     let reply = await callMetaConsole(_consoleMessages.slice(-24), WS ?? null);
     removeConsoleThinking();
-    window._devlog?.patch('Console raw reply', { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
+    window._devlog?.console_log('AI responded', { elapsed_ms: Date.now()-_consoleT0, chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
 
     // ── Extract SIM_PATCH (multi-strategy) ───────────────────────────────
     const _extractAndApplyPatch = (rawReply) => {
@@ -4044,8 +4220,12 @@ async function sendConsoleMessage() {
     }
 
     if (_patchApplied?.patchId) {
+      window._devlog?.console_log('Patch result', { patchId: _patchApplied.patchId, rejected: false });
       reply += `\n\n✓ Changes applied — **Patch ${_patchApplied.patchId}** · type "show patches" to audit`;
+    } else if (_patchApplied?.rejected) {
+      window._devlog?.console_log('Patch result', { rejected: true, violations: _patchApplied.violations ?? [] });
     } else if (_patchApplied) {
+      window._devlog?.console_log('Patch result', { patchId: 'legacy', rejected: false });
       reply += '\n\n✓ Changes applied to game world.';
     }
     reply += '\n\n---\n*Source: AI inference from state summary — for live data, use: `show npc [name]`, `show world`, `check`*';
@@ -4149,7 +4329,7 @@ function _showSingleChallenge(ch, onDismiss) {
     const fil=_filter==='ALL'?all:all.filter(e=>e.cat===_filter);
     cnt.textContent=`${fil.length} entr${fil.length===1?'y':'ies'}`;
     feed.innerHTML='';
-    if(!fil.length){feed.innerHTML='<div style="color:#2a2a2a;padding:24px;text-align:center;font-size:11px">No entries.</div>';return;}
+    if(!fil.length){feed.innerHTML='<div style="color:var(--dim);padding:24px;text-align:center;font-size:11px">No entries.</div>';return;}
     const frag=document.createDocumentFragment();
     for(const e of fil) frag.appendChild(_entryEl(e));
     feed.appendChild(frag);
@@ -4196,7 +4376,7 @@ function _showSingleChallenge(ch, onDismiss) {
     if(_filter!=='ALL' && e.cat!==_filter) return;
     const feed=document.getElementById('devcon-feed');
     const cnt=document.getElementById('devcon-count');
-    feed?.querySelector('[style*="No entries"]')?.remove();
+    document.getElementById('devcon-empty-msg')?.remove();
     const all=window._devlog?.entries??[];
     const fil=_filter==='ALL'?all:all.filter(x=>x.cat===_filter);
     if(cnt) cnt.textContent=`${fil.length} entr${fil.length===1?'y':'ies'}`;

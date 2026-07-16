@@ -134,11 +134,35 @@ export function getNarratorFallbacks() {
   return list;
 }
 
+// ─── ENRICHER SLOT ────────────────────────────────────────────────────────────
+// Dedicated to world-building (enrichWorldDetails) — slower, smarter, independent of classifier
+export function getEnricherSlot() {
+  const key      = localStorage.getItem('ENRICHER_KEY')?.trim()      || null;
+  const provider = localStorage.getItem('ENRICHER_PROVIDER')?.trim() || (key ? detectProvider(key) : null);
+  const model    = localStorage.getItem('ENRICHER_MODEL')?.trim()    || null;
+  if (key && provider) return { key, provider, model };
+  return getClassifierSlot(); // fall through to classifier
+}
+
+// ─── CONFIGURABLE FALLBACK SLOTS ──────────────────────────────────────────────
+// Returns enabled slots for the given role, sorted by slot number (slot 1 = highest priority)
+export function getFallbackSlots(role) {
+  try {
+    const raw = localStorage.getItem('FALLBACK_SLOTS');
+    if (!raw) return [];
+    const slots = JSON.parse(raw);
+    return slots
+      .filter(s => s.enabled && s.key?.trim() && s.provider && (s.roles ?? []).includes(role))
+      .map(s => ({ key: s.key.trim(), provider: s.provider, model: s.model?.trim() || null }));
+  } catch { return []; }
+}
+
 // ─── CORE DISPATCH: CHAT → string ────────────────────────────────────────────
 // messages: [{role, content}] — system role supported for all providers
 export async function dispatchChat(provider, key, model, messages, maxTokens = 600, timeoutMs = 30000) {
   const cfg = PROVIDER_ENDPOINTS[provider];
   if (!cfg) throw new Error(`Unknown provider: ${provider}`);
+  const _t0 = Date.now();
 
   const _fetch = async (url, opts) => {
     const ctrl = new AbortController();
@@ -157,7 +181,9 @@ export async function dispatchChat(provider, key, model, messages, maxTokens = 6
       body: JSON.stringify({ model: model || cfg.default_narrator_model, max_tokens: maxTokens, system: sysContent, messages: convMessages }),
     });
     if (!res.ok) { const t = await res.text(); throw new Error(`Anthropic HTTP ${res.status}: ${t.slice(0, 160)}`); }
-    return (await res.json()).content?.[0]?.text?.trim() ?? '';
+    const _aOut = (await res.json()).content?.[0]?.text?.trim() ?? '';
+    window._devlog?.api('dispatchChat OK', { provider, model: model||cfg.default_narrator_model, elapsed_ms: Date.now()-_t0, chars: _aOut.length });
+    return _aOut;
   }
 
   // Gemini: system_instruction separate, only last user message used (no history in v1beta)
@@ -186,13 +212,16 @@ export async function dispatchChat(provider, key, model, messages, maxTokens = 6
     body: JSON.stringify({ model: model || cfg.default_narrator_model, max_tokens: maxTokens, messages, stream: false }),
   });
   if (!res.ok) { const t = await res.text(); throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}: ${t.slice(0, 160)}`); }
-  return (await res.json()).choices?.[0]?.message?.content?.trim() ?? '';
+  const _oOut = (await res.json()).choices?.[0]?.message?.content?.trim() ?? '';
+  window._devlog?.api('dispatchChat OK', { provider, model: model||cfg.default_narrator_model, elapsed_ms: Date.now()-_t0, chars: _oOut.length });
+  return _oOut;
 }
 
 // ─── CORE DISPATCH: JSON → parsed object ─────────────────────────────────────
 export async function dispatchJSON(provider, key, model, prompt, maxTokens = 400) {
   const cfg = PROVIDER_ENDPOINTS[provider];
   if (!cfg) throw new Error(`Unknown provider: ${provider}`);
+  const _t0 = Date.now();
 
   // Gemini: native JSON mode
   if (provider === 'gemini') {
@@ -206,7 +235,7 @@ export async function dispatchJSON(provider, key, model, prompt, maxTokens = 400
     if (res.status === 429) throw new Error('GEMINI_RATE_LIMIT');
     if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
     const text = (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-    try { return JSON.parse(text); } catch { return {}; }
+    try { const _r = JSON.parse(text); window._devlog?.api('dispatchJSON OK', { provider, model: model||cfg.default_helper_model, elapsed_ms: Date.now()-_t0 }); return _r; } catch { return {}; }
   }
 
   // Anthropic
@@ -218,7 +247,7 @@ export async function dispatchJSON(provider, key, model, prompt, maxTokens = 400
     });
     if (!res.ok) throw new Error(`Anthropic HTTP ${res.status}`);
     const text = (await res.json()).content?.[0]?.text ?? '{}';
-    try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch { return {}; }
+    try { const _r = JSON.parse(text.replace(/```json|```/g, '').trim()); window._devlog?.api('dispatchJSON OK', { provider, model: model||cfg.default_helper_model, elapsed_ms: Date.now()-_t0 }); return _r; } catch { return {}; }
   }
 
   // OpenAI-compatible
@@ -235,7 +264,7 @@ export async function dispatchJSON(provider, key, model, prompt, maxTokens = 400
   });
   if (!res.ok) throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}`);
   const text = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-  try { return JSON.parse(text.replace(/```json|```/g, '').trim()); } catch { return {}; }
+  try { const _r = JSON.parse(text.replace(/```json|```/g, '').trim()); window._devlog?.api('dispatchJSON OK', { provider, model: model||cfg.default_helper_model, elapsed_ms: Date.now()-_t0 }); return _r; } catch { return {}; }
 }
 
 // ─── DYNAMIC MODEL DISCOVERY ─────────────────────────────────────────────────
