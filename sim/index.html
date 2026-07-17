@@ -1062,7 +1062,10 @@ window._devlog = (function(){
       <div class="console-brand">AI CONSOLE</div>
       <div class="console-brand-sub">Game guide · Mechanics · Dev tool</div>
     </div>
-    <button class="console-close" id="btn-console-close">✕</button>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="console-close" id="btn-console-export-md" title="Export conversation as markdown" style="font-size:11px;width:auto;padding:0 10px;border:1px solid var(--bdr);border-radius:4px;letter-spacing:.04em">↓ Export</button>
+      <button class="console-close" id="btn-console-close">✕</button>
+    </div>
   </div>
   <div id="console-feed">
     <div id="console-empty">
@@ -1182,7 +1185,14 @@ window._devlog = (function(){
         <div class="field" style="flex:0 0 120px"><label class="field-label">Currency Symbol</label><input class="field-input" id="k-currency" type="text" placeholder="₱" maxlength="4" style="font-size:16px;text-align:center"></div>
         <div class="field"><label class="field-label">Notes</label><div style="font-size:10px;color:var(--dim);margin-top:6px;line-height:1.6">Affects UI cash display. Leave blank for ₱ (Philippine Peso).</div></div>
       </div>
-      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Affects world-building, do-not-translate rules, and currency display. Defaults to Philippines / Tagalog / ₱.</div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Affects UI cash display. Leave blank for ₱ (Philippine Peso).</div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Time Display</div>
+      <div class="menu-toggle-row" id="btn-time-format" style="padding:10px 0;cursor:pointer">
+        <span style="font-size:13px">24-Hour Clock</span>
+        <div class="tog" id="time-format-tog"><div class="tog-knob"></div></div>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Toggle between 12-hour (3:00 PM) and 24-hour (15:00) format used throughout the game and narration.</div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Content Mode</div>
       <div class="menu-toggle-row" id="btn-content-mode" style="padding:10px 0;cursor:pointer">
@@ -1891,13 +1901,17 @@ function buildCharacterOverview(ws) {
   if (!ws?.player) return '';
   const { player, consequences, npcs, sim_time } = ws;
   const ts = formatTimestamp(sim_time);
+  const _ovUse24h = localStorage.getItem('TIME_FORMAT_24H') === '1';
+  const _ovTd = new Date(sim_time);
+  const _ovTime = _ovTd.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: !_ovUse24h });
+  const _ovDay = _ovTd.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const emotions = computeCharacterEmotions(player.stats, consequences ?? [], Object.values(npcs ?? {}));
   const emoStr = emotions.slice(0, 2).map(e => e.label.toLowerCase()).join(' & ');
   const loc = (player.location ?? 'somewhere').replace(/_/g, ' ');
   const nearby = Object.values(npcs ?? {})
     .filter(n => n.status === 'active' && n.significance >= 1)
     .slice(0, 3).map(n => n.name);
-  let text = `${ts.day}, ${ts.time}. At ${loc}.`;
+  let text = `${_ovDay}, ${_ovTime}. At ${loc}.`;
   if (emoStr) text += ` Feeling ${emoStr}.`;
   if (ws.consequences?.length) {
     const c = ws.consequences[0];
@@ -1941,7 +1955,11 @@ function renderAll() {
   renderChallengesPanel(WS.challenges, WS.debts ?? [], WS.fame ?? null, document.getElementById('p-challenges'));
   renderSchedulePanel(WS.job, WS.school ?? null, document.getElementById('p-schedule'));
   const ts = formatTimestamp(WS.sim_time);
-  document.getElementById('h-time').innerHTML = `${ts.time}<br><span style="font-size:10px">${ts.day}</span>`;
+  const _rUse24h = localStorage.getItem('TIME_FORMAT_24H') === '1';
+  const _rTd = new Date(WS.sim_time);
+  const _rTimeStr = _rTd.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: !_rUse24h });
+  const _rDayStr = _rTd.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  document.getElementById('h-time').innerHTML = `${_rTimeStr}<br><span style="font-size:10px">${_rDayStr}</span>`;
   document.getElementById('h-cash').textContent = `${localStorage.getItem('CURRENCY_SYMBOL')||'₱'}${WS.player.cash.toLocaleString()}`;
   const nm = WS.player.name || '—';
   document.getElementById('char-name').textContent = nm;
@@ -2507,8 +2525,9 @@ async function startNewGame() {
     setStage('Writing your opening scene...', 'Grok is composing your world...', 72);
     const simTime = ws.sim_time;
     const _td = new Date(simTime);
+    const _initUse24h = localStorage.getItem('TIME_FORMAT_24H') === '1';
     const sim_time_formatted =
-      _td.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) + ' · ' +
+      _td.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: !_initUse24h }) + ' · ' +
       _td.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
     const initBrief = {
@@ -3806,6 +3825,10 @@ document.getElementById('btn-settings').addEventListener('click', () => {
   const _cTog = document.getElementById('content-mode-tog');
   const _explicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
   if (_cTog) _cTog.classList.toggle('on', _explicit);
+  // Time format toggle
+  const _tTog = document.getElementById('time-format-tog');
+  const _is24h = localStorage.getItem('TIME_FORMAT_24H') === '1';
+  if (_tTog) _tTog.classList.toggle('on', _is24h);
   // Slot controls: wire listeners, seed model dropdowns, refresh detection/badges
   ['quickstart', 'narrator', 'classifier', 'enricher'].forEach(_wireSlot);
   _seedModelList('narrator');
@@ -3821,6 +3844,11 @@ let _contentExplicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
 document.getElementById('btn-content-mode')?.addEventListener('click', () => {
   _contentExplicit = !_contentExplicit;
   document.getElementById('content-mode-tog')?.classList.toggle('on', _contentExplicit);
+});
+let _timeFormat24h = localStorage.getItem('TIME_FORMAT_24H') === '1';
+document.getElementById('btn-time-format')?.addEventListener('click', () => {
+  _timeFormat24h = !_timeFormat24h;
+  document.getElementById('time-format-tog')?.classList.toggle('on', _timeFormat24h);
 });
 [document.getElementById('btn-mcancel'), document.getElementById('btn-mcancel2')].forEach(b => b?.addEventListener('click', () => document.getElementById('modal').classList.remove('open')));
 document.getElementById('modal').addEventListener('click', e => { if (e.target===e.currentTarget) e.currentTarget.classList.remove('open'); });
@@ -3848,6 +3876,8 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   _set('ENRICHER_PROVIDER', _sv('k-enricher-provider'));
   _saveFallbackSlots();
   localStorage.setItem('CONTENT_MODE',       _contentExplicit ? 'explicit' : 'filtered');
+  if (_timeFormat24h) localStorage.setItem('TIME_FORMAT_24H', '1');
+  else localStorage.removeItem('TIME_FORMAT_24H');
   localStorage.setItem('LOCALE',   document.getElementById('k-locale')?.value?.trim()   || 'Philippines');
   localStorage.setItem('LANGUAGE', document.getElementById('k-language')?.value?.trim() || 'Tagalog');
   const _saveCur = document.getElementById('k-currency')?.value?.trim();
@@ -3857,6 +3887,7 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   if (su && sk && window.supabase) { _sbClient = window.supabase.createClient(su, sk); setSupabaseClient(_sbClient); }
   document.getElementById('modal').classList.remove('open');
   setStatus('Settings saved.');
+  if (WS) renderAll();
 });
 document.querySelectorAll('.pw-toggle').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -4524,19 +4555,119 @@ async function sendConsoleMessage() {
   if (/^\s*(?:check|integrity|verify|scan)\s*$/i.test(content)) {
     window._devlog?.console_log('Command detected', { command: 'integrity_check' });
     appendConsoleMsg('user', content);
+    if (!WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
     const _iResult = runIntegrityCheck(WS);
     let _iReport = '**Integrity Check — Deterministic Engine Rules**\n\n';
     _iReport += '*Source: engine rules, no AI inference*\n\n';
+    const _hasSchedFails = _iResult.failed.some(f => f.includes('schedule'));
+    const _hasMissingBios = _iResult.warnings.some(w => w.includes('no bio'));
+    const _hasNoItems = (WS.player?.possessions?.length ?? 0) === 0;
     if (_iResult.failed.length) {
-      _iReport += '**❌ FAILED:**\n' + _iResult.failed.map(f => '- ' + f).join('\n') + '\n\n';
+      _iReport += `**❌ FAILED (${_iResult.failed.length}):**\n` + _iResult.failed.map(f => '- ' + f).join('\n') + '\n\n';
     }
     if (_iResult.warnings.length) {
-      _iReport += '**⚠ WARNINGS:**\n' + _iResult.warnings.map(w => '- ' + w).join('\n') + '\n\n';
+      _iReport += `**⚠ WARNINGS (${_iResult.warnings.length}):**\n` + _iResult.warnings.map(w => '- ' + w).join('\n') + '\n\n';
     }
     if (!_iResult.failed.length && !_iResult.warnings.length) {
       _iReport += '**✓ All rules passed. World state is consistent.**';
     }
     appendConsoleMsg('assistant', _iReport, false);
+    // Append action buttons for fixable issues
+    if (_iResult.failed.length || _iResult.warnings.length || _hasNoItems) {
+      const _icFeed = document.getElementById('console-feed');
+      const _icBtnRow = document.createElement('div');
+      _icBtnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;padding:4px 0 12px;align-items:flex-start';
+      // Smart schedule gap filler (no API call)
+      if (_hasSchedFails) {
+        const _sfBtn = document.createElement('button');
+        _sfBtn.className = 'btn';
+        _sfBtn.style.cssText = 'font-size:11px;padding:5px 12px;background:var(--acc2);border-color:var(--acc);color:var(--acc)';
+        _sfBtn.textContent = '⚙ Fix Schedule Gaps';
+        _sfBtn.addEventListener('click', () => {
+          _sfBtn.disabled = true; _sfBtn.textContent = 'Fixing…';
+          const _sfDflt = (s,e) => ({start_hour:s,end_hour:e,task:'sleeping',interruptible:false,location:'home'});
+          const _sfFill = (r) => {
+            if (!r?.length) return [_sfDflt(0,6),{start_hour:6,end_hour:8,task:'morning_prep',interruptible:false,location:'home'},{start_hour:8,end_hour:12,task:'errands',interruptible:true,location:'outside'},{start_hour:12,end_hour:18,task:'leisure',interruptible:true,location:'home'},{start_hour:18,end_hour:21,task:'leisure',interruptible:true,location:'home'},{start_hour:21,end_hour:24,task:'winding_down',interruptible:true,location:'home'}];
+            const s=[...r].sort((a,b)=>a.start_hour-b.start_hour), out=[];
+            if(s[0].start_hour>0) out.push(_sfDflt(0,s[0].start_hour));
+            for(let i=0;i<s.length;i++){out.push(s[i]);if(i<s.length-1&&s[i].end_hour<s[i+1].start_hour)out.push({start_hour:s[i].end_hour,end_hour:s[i+1].start_hour,task:'leisure',interruptible:true,location:'home'});}
+            if(s.at(-1).end_hour<24) out.push(_sfDflt(s.at(-1).end_hour,24));
+            return out;
+          };
+          const _sfBad = Object.values(WS.npcs).filter(n=>{
+            if(n.status!=='active') return false;
+            const r=n.schedule?.weekday_routine??[];
+            if(!r.length) return true;
+            const s=[...r].sort((a,b)=>a.start_hour-b.start_hour);
+            return s[0].start_hour!==0||s.at(-1).end_hour!==24;
+          });
+          const _sfPatch={npc_updates:{}};
+          for(const n of _sfBad){
+            const wr=_sfFill(n.schedule?.weekday_routine??[]);
+            const wkr=n.schedule?.weekend_routine?.length?_sfFill(n.schedule.weekend_routine):wr;
+            _sfPatch.npc_updates[n.id]={schedule:{weekday_routine:wr,weekend_routine:wkr}};
+          }
+          _applySimPatch(_sfPatch);
+          appendConsoleMsg('assistant', `✓ **Schedule gaps filled** for: **${_sfBad.map(n=>n.name).join(', ')}**.\n\nGaps filled with sleeping/leisure blocks. Existing blocks preserved. Run \`rerun enrichment\` for personalized schedules.\n\n*Source: Engine smart repair — no AI*`, false);
+          _sfBtn.textContent='✓ Fixed'; _sfBtn.style.opacity='0.5';
+        });
+        _icBtnRow.appendChild(_sfBtn);
+      }
+      // Generate items (API call via console)
+      if (_hasNoItems) {
+        const _giBtn = document.createElement('button');
+        _giBtn.className = 'btn';
+        _giBtn.style.cssText = 'font-size:11px;padding:5px 12px';
+        _giBtn.textContent = '📦 Generate Items';
+        _giBtn.addEventListener('click', () => {
+          _giBtn.disabled=true; _giBtn.textContent='Running…';
+          document.getElementById('console-input').value='generate items';
+          sendConsoleMessage();
+          _giBtn.textContent='✓ Sent'; _giBtn.style.opacity='0.5';
+        });
+        _icBtnRow.appendChild(_giBtn);
+      }
+      // Rerun enrichment (API call via console — fixes bios, schedules, job)
+      if (_hasMissingBios || _hasSchedFails) {
+        const _reBtn = document.createElement('button');
+        _reBtn.className = 'btn';
+        _reBtn.style.cssText = 'font-size:11px;padding:5px 12px';
+        _reBtn.textContent = '✨ Rerun Enrichment';
+        _reBtn.addEventListener('click', () => {
+          _reBtn.disabled=true; _reBtn.textContent='Running…';
+          document.getElementById('console-input').value='rerun enrichment';
+          sendConsoleMessage();
+          _reBtn.textContent='✓ Sent'; _reBtn.style.opacity='0.5';
+        });
+        _icBtnRow.appendChild(_reBtn);
+      }
+      // Fix All — runs smart repair inline then enrichment
+      if (_iResult.failed.length) {
+        const _faBtn = document.createElement('button');
+        _faBtn.className = 'btn btn-primary';
+        _faBtn.style.cssText = 'font-size:11px;padding:5px 14px';
+        _faBtn.textContent = '⚡ Fix All Issues';
+        _faBtn.addEventListener('click', () => {
+          _faBtn.disabled=true; _faBtn.textContent='Fixing…';
+          // Click schedule fix if needed
+          if(_hasSchedFails) _icBtnRow.querySelector('[data-fix="sched"]')?.click();
+          // Then trigger enrichment
+          setTimeout(()=>{
+            document.getElementById('console-input').value='rerun enrichment';
+            sendConsoleMessage();
+            if(_hasNoItems) setTimeout(()=>{
+              document.getElementById('console-input').value='generate items';
+              sendConsoleMessage();
+            }, 800);
+          }, 400);
+          _faBtn.textContent='✓ Running'; _faBtn.style.opacity='0.5';
+        });
+        // Tag the schedule button for "Fix All" to click it
+        if (_hasSchedFails && _icBtnRow.firstChild) _icBtnRow.firstChild.dataset.fix='sched';
+        _icBtnRow.appendChild(_faBtn);
+      }
+      if (_icBtnRow.children.length) _icFeed?.appendChild(_icBtnRow);
+    }
     return;
   }
 
@@ -5197,6 +5328,20 @@ Be specific and realistic for ${_locale}. No markdown, ONLY the JSON array.`;
 document.getElementById('btn-console').addEventListener('click', openConsole);
 document.getElementById('btn-console-close').addEventListener('click', closeConsole);
 document.getElementById('console-submit').addEventListener('click', sendConsoleMessage);
+document.getElementById('btn-console-export-md')?.addEventListener('click', () => {
+  if (!_consoleMessages.length) { setStatus('Nothing to export — console is empty.'); return; }
+  const lines = _consoleMessages.map(m => {
+    const role = m.role === 'user' ? '**YOU**' : '**AI CONSOLE**';
+    const body = m.content.replace(/\*\*/g, '').replace(/<[^>]+>/g, '').replace(/---\n\*Source:.*$/m, '').trim();
+    return `${role}\n\n${body}`;
+  });
+  const txt = `# AI Console Conversation\nExported: ${new Date().toLocaleString()}\nMessages: ${_consoleMessages.length}\n\n---\n\n` + lines.join('\n\n---\n\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(txt);
+  a.download = `console-${new Date().toISOString().replace(/[:.]/g, '-')}.md`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setStatus('Console conversation downloaded.');
+});
 let _consoleHistory = [], _consoleCursorIdx = -1;
 document.getElementById('console-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _consoleCursorIdx = -1; sendConsoleMessage(); return; }
@@ -5326,10 +5471,18 @@ function _showSingleChallenge(ch, onDismiss) {
   document.getElementById('btn-devcon-export')?.addEventListener('click',()=>{
     const all=window._devlog?.entries??[];
     const fil=_filter==='ALL'?all:all.filter(e=>e.cat===_filter);
-    const txt=JSON.stringify(fil,null,2);
-    navigator.clipboard?.writeText(txt).then(()=>setStatus('Dev log copied to clipboard.')).catch(()=>{
-      const a=document.createElement('a');a.href='data:text/json;charset=utf-8,'+encodeURIComponent(txt);a.download='devlog.json';a.click();
+    const lines = fil.map(e=>{
+      const ts=new Date(e.ts).toLocaleTimeString();
+      const data=e.data!=null?'\n  '+JSON.stringify(e.data,null,2).replace(/\n/g,'\n  '):'';
+      return `[${ts}][${e.cat}] ${e.msg}${data}`;
     });
+    const hdr=`# Dev Console Export\nFilter: ${_filter} | Entries: ${fil.length}\nExported: ${new Date().toLocaleString()}\n\n---\n\n`;
+    const txt=hdr+lines.join('\n\n');
+    const a=document.createElement('a');
+    a.href='data:text/markdown;charset=utf-8,'+encodeURIComponent(txt);
+    a.download=`devlog-${new Date().toISOString().replace(/[:.]/g,'-')}.md`;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    setStatus('Dev log downloaded.');
   });
   document.getElementById('devcon-autoscroll')?.addEventListener('change',e=>{_autoScroll=e.target.checked;});
   document.querySelectorAll('.devcon-filter').forEach(btn=>btn.addEventListener('click',()=>{

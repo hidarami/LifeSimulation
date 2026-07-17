@@ -64,7 +64,7 @@ function buildGrokUserMessage(turnBrief, mode) {
     death:     'Write the death scene with gravity. 4–6 paragraphs.',
     legacy:    'Write a post-death reflection from the world\'s perspective: how the death of the player character ripples outward. Show the successor NPC\'s immediate reaction and the weight they now carry. Do NOT resurrect the deceased. 3–5 paragraphs.',
     pov_shift: 'This is the first scene from a new player POV after the previous character died. Establish the new POV character — their location, body, and the immediate emotional weight of what they know happened. Do not rush past the loss. 3–4 paragraphs.',
-    init:      'This is the opening scene of a new game. Establish the character in their immediate physical environment — body state, location, sensory details. 3–4 paragraphs.',
+    init:      'This is the opening scene of a new game. Establish the character in their immediate physical environment at the exact time shown in sim_time_formatted. CRITICAL: Do NOT default to waking up or morning scenes unless sim_time_formatted shows a time before 9:00 AM. If it shows afternoon, noon, or evening, the character is already mid-day — scene must reflect that hour with appropriate ambient sounds, light, activity, and body state. Never open with the character just having woken up unless the sim time genuinely warrants it. 3–4 paragraphs.',
   }[mode] ?? '2–3 paragraphs.';
   return JSON.stringify({ ...turnBrief, narration_instruction: instruction });
 }
@@ -684,6 +684,8 @@ NPC_SCHEDULES — REQUIRED if NPCs exist, never empty object when NPCs are liste
   - Value: { "weekday_routine": [...blocks], "weekend_routine": [...blocks] }
   - Each block: { "start_hour": number, "end_hour": number, "task": string, "interruptible": boolean, "location": string }
   - Blocks MUST be contiguous and cover ALL 24 hours exactly (start at 0, end at 24, no gaps, no overlaps)
+  - MANDATORY FIRST BLOCK: Every routine array MUST begin with start_hour: 0 — NO EXCEPTIONS. If the NPC wakes at 5 AM, the FIRST block is {"start_hour":0,"end_hour":5,"task":"sleeping","interruptible":false,"location":"home"}, then their wake block starts at 5. NEVER start at hour 5, 6, or any non-zero value.
+  - MANDATORY LAST BLOCK: The final block MUST have end_hour: 24. No exceptions.
   - location values: "home" (their own home), "workplace", "school", "transit", "outside"
   - REASON from each NPC's actual role — never use a generic template:
     * Construction/manual worker: up 5am, work 6am-5pm at workplace, commute 5-6pm, leisure/home 6-10pm, sleep 10pm
@@ -930,6 +932,24 @@ Always emit SIM_PATCH or SIM_ACTION to commit changes. Prose alone does nothing.
         window._devlog?.console_log('Slot failed → fallback', { failed: helperSlot.provider, reason: e.message });
         window._devlog?.error(`Console: ${helperSlot.provider}(${m}) failed`, { error: e.message }); 
       }
+    }
+  }
+
+  // Configured fallback slots — cheaper than narrator, try before narrator
+  const _consoleFallbacks = [...getFallbackSlots('classifier'), ...getFallbackSlots('narrator')];
+  for (const { key: _cfbKey, provider: _cfbProv, model: _cfbModel } of _consoleFallbacks) {
+    if (!_cfbKey || !_cfbProv || _tried.has(_cfbProv)) continue;
+    _tried.add(_cfbProv);
+    try {
+      const allMsgs = [{ role: 'system', content: systemPrompt }, ..._budgetMsgs];
+      const reply = await dispatchChat(_cfbProv, _cfbKey, _cfbModel, allMsgs, 800, 25000);
+      if (reply && reply.length > 20) {
+        window._devlog?.console_log(`Console: fallback slot (${_cfbProv}) responded`, { chars: reply.length, hasPatch: /<SIM_PATCH>/i.test(reply) });
+        return reply;
+      }
+    } catch (e) {
+      window._devlog?.console_log(`Fallback slot failed`, { failed: _cfbProv, reason: e.message });
+      window._devlog?.error(`Console: fallback slot (${_cfbProv}) failed`, { error: e.message });
     }
   }
 

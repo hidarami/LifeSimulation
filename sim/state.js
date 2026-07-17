@@ -338,8 +338,9 @@ export function assembleTurnBrief(worldState, turnData) {
     .join('\n') || null;
 
   const _td = new Date(simTime);
+  const _stUse24h = (typeof localStorage !== 'undefined' ? localStorage.getItem('TIME_FORMAT_24H') : null) === '1';
   const sim_time_formatted =
-    _td.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) +
+    _td.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: !_stUse24h }) +
     ' · ' +
     _td.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
