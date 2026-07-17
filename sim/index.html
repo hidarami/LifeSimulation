@@ -3872,6 +3872,9 @@ let _timeFormat24h = localStorage.getItem('TIME_FORMAT_24H') === '1';
 document.getElementById('btn-time-format')?.addEventListener('click', () => {
   _timeFormat24h = !_timeFormat24h;
   document.getElementById('time-format-tog')?.classList.toggle('on', _timeFormat24h);
+  if (_timeFormat24h) localStorage.setItem('TIME_FORMAT_24H', '1');
+  else localStorage.removeItem('TIME_FORMAT_24H');
+  if (WS) renderAll();
 });
 [document.getElementById('btn-mcancel'), document.getElementById('btn-mcancel2')].forEach(b => b?.addEventListener('click', () => document.getElementById('modal').classList.remove('open')));
 document.getElementById('modal').addEventListener('click', e => { if (e.target===e.currentTarget) e.currentTarget.classList.remove('open'); });
