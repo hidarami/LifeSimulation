@@ -100,7 +100,7 @@ export async function callGrok(turnBrief, mode) {
     } catch (err) {
       window._devlog?.error('Narrator primary failed', { provider, error: err.message });
       if (_shouldCool(err.message)) _markCooling(provider, err.message.match(/HTTP\s*\d+/)?.[0] ?? 'error');
-      const isOutage = !navigator.onLine || err.message?.includes('502') || err.message?.includes('503') || err.message === 'Failed to fetch';
+      const isOutage = !navigator.onLine || err.message?.includes('429') || err.message?.includes('502') || err.message?.includes('503') || err.message === 'Failed to fetch';
       if (FALLBACK_ON_OUTAGE_ONLY && !isOutage) {
         throw new Error(`Narrator failed (${err.message}) — check your ${getProviderDisplayName(provider)} API key and model.`);
       }

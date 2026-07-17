@@ -1115,6 +1115,11 @@ window._devlog = (function(){
           <option value="openrouter">OpenRouter</option>
           <option value="groq">Groq</option>
           <option value="gemini">Google Gemini</option>
+          <option value="huggingface">HuggingFace (Inference API)</option>
+          <option value="mistral">Mistral AI</option>
+          <option value="cerebras">Cerebras</option>
+          <option value="github">GitHub Models</option>
+          <option value="cohere">Cohere</option>
           <option value="custom">Custom (OpenAI-compatible)</option>
         </select>
       </div>
@@ -1147,6 +1152,11 @@ window._devlog = (function(){
           <option value="openrouter">OpenRouter</option>
           <option value="groq">Groq</option>
           <option value="gemini">Google Gemini</option>
+          <option value="huggingface">HuggingFace (Inference API)</option>
+          <option value="mistral">Mistral AI</option>
+          <option value="cerebras">Cerebras</option>
+          <option value="github">GitHub Models</option>
+          <option value="cohere">Cohere</option>
           <option value="custom">Custom (OpenAI-compatible)</option>
         </select>
       </div>
@@ -1202,6 +1212,11 @@ window._devlog = (function(){
           <option value="openrouter">OpenRouter</option>
           <option value="groq">Groq</option>
           <option value="gemini">Google Gemini</option>
+          <option value="huggingface">HuggingFace (Inference API)</option>
+          <option value="mistral">Mistral AI</option>
+          <option value="cerebras">Cerebras</option>
+          <option value="github">GitHub Models</option>
+          <option value="cohere">Cohere</option>
           <option value="custom">Custom (OpenAI-compatible)</option>
         </select>
       </div>
@@ -1436,7 +1451,8 @@ import { checkWorldEvents, checkNpcEvents, applyEventEffect, applyNpcEventEffect
          progressDiseases, progressNpcDiseases, checkDiseaseContraction, checkNpcDiseaseSpread,
          calculateAlcoholEffect, getIntoxicationLevel, tickSchoolSuspension,
          tickDebts, tickAddictions, feedAddiction, addAddiction,
-         addCrime, decreaseWantedLevel } from './events.js';
+         addCrime, decreaseWantedLevel,
+         runSimulationDirector, GSD_INTERVAL } from './events.js';
 import { challengeFromDisease, challengeFromNpcEvent, challengeFromWorldEvent,
          challengeFromHangover, checkChallengeResolution,
          challengeFromDebt, challengeFromCrime, challengeFromAddiction,
@@ -2805,6 +2821,9 @@ async function processTurn(input) {
         ws.npcs[npcId] = incrementSignificance(ws.npcs[npcId]);
         relDeltas[npcId] = rxn.relationship_delta ?? 0;
         npcReactions.push({ npc_id: npcId, summary: rxn.reaction_summary });
+        // Track last interaction for GSD relationship drift calculation
+        ws.npcs[npcId]._hidden = ws.npcs[npcId]._hidden ?? {};
+        ws.npcs[npcId]._hidden.last_interaction_turn = ws.turn;
         // Trait drift on significant events
         const _rd = rxn.relationship_delta ?? 0, _td2 = rxn.trust_delta ?? 0;
         if (_rd <= -8)  ws.npcs[npcId] = driftTraits(ws.npcs[npcId], { mistreated: true });
@@ -2873,7 +2892,9 @@ async function processTurn(input) {
               relDeltas[_targetNpc.id] = _expRxn.relationship_delta ?? 0;
               if (_expRxn.reaction_summary) {
                 npcReactions.push({ npc_id: _targetNpc.id, summary: _expRxn.reaction_summary });
-                const _ri = ws.npcs[_targetNpc.id].recent_interactions ?? [];
+              ws.npcs[_targetNpc.id]._hidden = ws.npcs[_targetNpc.id]._hidden ?? {};
+              ws.npcs[_targetNpc.id]._hidden.last_interaction_turn = ws.turn;
+              const _ri = ws.npcs[_targetNpc.id].recent_interactions ?? [];
                 ws.npcs[_targetNpc.id].recent_interactions = [..._ri, _expRxn.reaction_summary].slice(-5);
               }
               if ((_expRxn.relationship_delta ?? 0) <= -5)
@@ -2975,6 +2996,19 @@ async function processTurn(input) {
     ws = tickAddictions(ws);
     // ── Fame update ─────────────────────────────────────────────────────────
     ws = updateFame(ws);
+    // ── Global Simulation Director ─────────────────────────────────────────────
+    // Runs every GSD_INTERVAL turns. Multi-hop cascade engine — no AI.
+    let _directorEvents = [];
+    if (ws.turn % GSD_INTERVAL === 0) {
+      const { worldState: _wsGSD, directorEvents: _de } = runSimulationDirector(ws);
+      ws = _wsGSD;
+      _directorEvents = _de;
+      for (const de of _de) {
+        window._devlog?.system(`GSD: ${de.type}`, { desc: de.description, severity: de.severity, hidden: de.hidden ?? false });
+        if (!de.hidden) ws = appendSignificantEvent(ws, `[Director] ${de.description}`);
+      }
+    }
+
     // ── Alcohol addiction feed ───────────────────────────────────────────────
     if (route === ROUTE.PATH_2_NOVEL && _cls2Result?.alcohol_consumed?.detected) {
       ws = feedAddiction(ws, 'alcohol');
@@ -3029,6 +3063,22 @@ async function processTurn(input) {
 
     // ── Disease contraction from environment ─────────────────────────────────
     const newChallenges = [];
+    // Convert significant director events into active challenges
+    for (const de of _directorEvents.filter(e => ['major','critical','moderate'].includes(e.severity) && !e.hidden)) {
+      const _dCh = {
+        id: `dir_${de.type}_${ws.turn}`,
+        type: de.type ?? 'simulation_event',
+        title: de.description,
+        cause: 'Simulation cascade',
+        effects_text: de.description,
+        resolution_steps: 'Address the underlying situation to clear this.',
+        severity: de.severity,
+        active: true, resolved: false,
+        turn_created: ws.turn, acknowledged: false,
+      };
+      ws.challenges = [...(ws.challenges ?? []), _dCh];
+      newChallenges.push(_dCh);
+    }
     const _envDisease = checkDiseaseContraction(ws, _contextTags);
     if (_envDisease) {
       const { disease, cause } = _envDisease;
@@ -3527,10 +3577,17 @@ function _renderFallbackSlots() {
   if (!container) return;
   const saved = _loadFallbackSlots();
   container.innerHTML = '';
+  const _ALL_PROVS = [
+    ['grok','Grok/xAI'],['openai','OpenAI'],['anthropic','Anthropic'],
+    ['openrouter','OpenRouter'],['groq','Groq'],['gemini','Google Gemini'],
+    ['huggingface','HuggingFace'],['mistral','Mistral AI'],['cerebras','Cerebras'],
+    ['github','GitHub Models'],['cohere','Cohere'],
+  ];
   for (let i = 0; i < 8; i++) {
     const s = saved[i] ?? { slot: i+1, enabled: false, key: '', provider: '', model: '', roles: [] };
     const _autoP = s.key ? (detectProvider(s.key) ?? '') : '';
-    const _pName = _autoP ? (getProviderDisplayName(_autoP)) : '';
+    const _pName = _autoP ? getProviderDisplayName(_autoP) : '';
+    const _provOpts = _ALL_PROVS.map(([v,n]) => `<option value="${v}"${s.provider===v?' selected':''}>${n}</option>`).join('');
     const el = document.createElement('div');
     el.className = 'fb-slot';
     el.style.cssText = 'border:1px solid var(--bdr);border-radius:4px;margin-bottom:6px;overflow:hidden';
@@ -3549,34 +3606,34 @@ function _renderFallbackSlots() {
             <input class="field-input fb-key" type="password" value="${s.key.replace(/"/g,'&quot;')}" placeholder="Any supported API key">
             <button class="fb-pw-toggle" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--dim);font-size:14px;background:none;border:none;padding:0">👁</button>
           </div>
-          <div class="fb-badge" style="font-size:10px;color:var(--pos);margin-top:3px;${_autoP&&s.key?'':'display:none'}">${_autoP&&s.key?'✓ Detected: '+_pName:''}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+            <div class="fb-badge" style="font-size:10px;color:var(--pos);flex:1;${_autoP&&s.key?'':'display:none'}">${_autoP&&s.key?'✓ Detected: '+_pName:''}</div>
+            <button class="fb-test-btn" type="button" style="font-size:10px;padding:3px 10px;flex-shrink:0;background:transparent;border:1px solid var(--bdr);border-radius:3px;cursor:pointer;color:var(--dim);font-family:inherit">Test</button>
+          </div>
+          <div class="fb-test-result" style="font-size:10px;margin-top:3px;display:none"></div>
         </div>
-        <div class="field-row" style="margin-bottom:8px">
-          <div class="field">
-            <label class="field-label">Provider</label>
-            <select class="field-input fb-provider" style="font-size:12px">
-              <option value="">Auto-detect</option>
-              <option value="grok"       ${s.provider==='grok'?'selected':''}>Grok/xAI</option>
-              <option value="openai"     ${s.provider==='openai'?'selected':''}>OpenAI</option>
-              <option value="anthropic"  ${s.provider==='anthropic'?'selected':''}>Anthropic</option>
-              <option value="openrouter" ${s.provider==='openrouter'?'selected':''}>OpenRouter</option>
-              <option value="groq"       ${s.provider==='groq'?'selected':''}>Groq</option>
-              <option value="gemini"     ${s.provider==='gemini'?'selected':''}>Gemini</option>
-            </select>
+        <div style="margin-bottom:8px">
+          <label class="field-label">Provider</label>
+          <select class="field-input fb-provider" style="font-size:12px;margin-bottom:6px">
+            <option value="">Auto-detect</option>
+            ${_provOpts}
+          </select>
+          <label class="field-label">Model</label>
+          <div style="display:flex;gap:4px;margin-bottom:4px">
+            <select class="field-input fb-model-list" style="flex:1;font-size:11px"><option value="">— provider default —</option>${s.model?`<option value="${s.model.replace(/"/g,'&quot;')}" selected>${s.model}</option>`:''}</select>
+            <button class="fb-discover-btn" type="button" title="Discover models from provider" style="padding:0 10px;height:36px;font-size:12px;background:transparent;border:1px solid var(--bdr);border-radius:3px;cursor:pointer;color:var(--dim);font-family:inherit;white-space:nowrap">↻</button>
           </div>
-          <div class="field">
-            <label class="field-label">Model (optional)</label>
-            <input class="field-input fb-model" value="${s.model.replace(/"/g,'&quot;')}" placeholder="e.g. gpt-4o" style="font-size:12px">
-          </div>
+          <input class="field-input fb-model" value="${s.model.replace(/"/g,'&quot;')}" placeholder="Override: exact model id (optional)" style="font-size:11px">
         </div>
         <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Roles</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap">
-          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);cursor:pointer"><input type="checkbox" class="fb-role" value="narrator"   ${(s.roles??[]).includes('narrator')?'checked':''}   style="accent-color:var(--acc)"> Narrator fallback</label>
-          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);cursor:pointer"><input type="checkbox" class="fb-role" value="classifier" ${(s.roles??[]).includes('classifier')?'checked':''} style="accent-color:var(--acc)"> Classifier fallback</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);cursor:pointer"><input type="checkbox" class="fb-role" value="narrator"   ${(s.roles??[]).includes('narrator')?'checked':''}   style="accent-color:var(--acc)"> Narrator</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);cursor:pointer"><input type="checkbox" class="fb-role" value="classifier" ${(s.roles??[]).includes('classifier')?'checked':''} style="accent-color:var(--acc)"> Classifier</label>
           <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--dim);cursor:pointer"><input type="checkbox" class="fb-role" value="enricher"   ${(s.roles??[]).includes('enricher')?'checked':''}   style="accent-color:var(--acc)"> Enricher</label>
         </div>
       </div>`;
-    // Toggle head click (not on checkbox)
+
+    // Toggle head (not on checkbox)
     el.querySelector('.fb-slot-head').addEventListener('click', ev => {
       if (ev.target.tagName === 'INPUT') return;
       const body = el.querySelector('.fb-slot-body');
@@ -3592,20 +3649,65 @@ function _renderFallbackSlots() {
       body.style.display = ev.target.checked ? 'block' : 'none';
       icon.textContent   = ev.target.checked ? '▼' : '▶';
     });
-    // Auto-detect provider from key
+    // Key input → auto-detect + auto-fill provider select
     el.querySelector('.fb-key').addEventListener('input', function() {
       const badge = el.querySelector('.fb-badge');
       const auto  = detectProvider(this.value.trim());
       const pn    = auto ? getProviderDisplayName(auto) : '';
-      badge.textContent    = auto ? '✓ Detected: ' + pn : '';
-      badge.style.display  = (auto && this.value.trim()) ? 'block' : 'none';
+      badge.textContent   = auto ? '✓ Detected: ' + pn : '';
+      badge.style.display = (auto && this.value.trim()) ? 'block' : 'none';
+      const provSel = el.querySelector('.fb-provider');
+      if (auto && !provSel.value) provSel.value = auto;
     });
-    // PW toggle for key field
+    // PW toggle
     el.querySelector('.fb-pw-toggle').addEventListener('click', function() {
       const inp = el.querySelector('.fb-key');
       inp.type = inp.type === 'password' ? 'text' : 'password';
       this.textContent = inp.type === 'password' ? '👁' : '🙈';
     });
+    // Test key button
+    el.querySelector('.fb-test-btn').addEventListener('click', async function() {
+      const key      = el.querySelector('.fb-key').value.trim();
+      const provSel  = el.querySelector('.fb-provider').value.trim();
+      const autoP    = detectProvider(key);
+      const provider = provSel || autoP;
+      const resultEl = el.querySelector('.fb-test-result');
+      resultEl.style.display = 'block';
+      if (!key)      { resultEl.textContent = '⚠ Enter a key first';                  resultEl.style.color = 'var(--low)';  return; }
+      if (!provider) { resultEl.textContent = '⚠ Select provider (prefix unknown)';   resultEl.style.color = 'var(--low)';  return; }
+      resultEl.textContent = 'Testing…'; resultEl.style.color = 'var(--dim)';
+      try {
+        const reply = await _providerDispatchChat(provider, key, null,
+          [{ role: 'user', content: 'Reply with the single word: OK' }], 20, 8000);
+        resultEl.textContent = reply?.length
+          ? `✓ Works — ${getProviderDisplayName(provider)}`
+          : '⚠ Empty response';
+        resultEl.style.color = reply?.length ? 'var(--pos)' : 'var(--low)';
+      } catch(e) {
+        resultEl.textContent = `✗ ${e.message.slice(0, 80)}`;
+        resultEl.style.color = 'var(--crit)';
+      }
+    });
+    // Discover models button
+    el.querySelector('.fb-discover-btn').addEventListener('click', async function() {
+      const key      = el.querySelector('.fb-key').value.trim();
+      const provSel  = el.querySelector('.fb-provider').value.trim();
+      const autoP    = detectProvider(key);
+      const provider = provSel || autoP;
+      const listEl   = el.querySelector('.fb-model-list');
+      if (!key || !provider) { listEl.innerHTML = '<option value="">Enter key + provider first</option>'; return; }
+      listEl.innerHTML = '<option value="">Discovering…</option>';
+      const models = await fetchModels(provider, key).catch(() => []);
+      if (!models.length) { listEl.innerHTML = '<option value="">No models found — type override below</option>'; return; }
+      const current = el.querySelector('.fb-model').value.trim();
+      listEl.innerHTML = '<option value="">— provider default —</option>' +
+        models.slice(0, 100).map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${m}</option>`).join('');
+    });
+    // Model select → sync to override text input
+    el.querySelector('.fb-model-list').addEventListener('change', function() {
+      if (this.value) el.querySelector('.fb-model').value = this.value;
+    });
+
     container.appendChild(el);
   }
 }

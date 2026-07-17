@@ -1,11 +1,13 @@
 // providers.js — Universal API provider abstraction for The Sim
-// Supports: Grok/xAI, OpenAI, Anthropic, OpenRouter, Groq, Google Gemini
+// Supports: Grok/xAI, OpenAI, Anthropic, OpenRouter, Groq, Google Gemini,
+//           HuggingFace (Inference API), Mistral AI, Cerebras, GitHub Models, Cohere
 'use strict';
 
 // ─── PROVIDER CONFIGURATIONS ──────────────────────────────────────────────────
 export const PROVIDER_ENDPOINTS = {
   grok: {
     chat:                   'https://api.x.ai/v1/chat/completions',
+    models:                 'https://api.x.ai/v1/models',
     default_narrator_model: 'grok-4.20-non-reasoning',
     default_helper_model:   'grok-4.20-non-reasoning',
     format:                 'openai',
@@ -13,6 +15,7 @@ export const PROVIDER_ENDPOINTS = {
   },
   openai: {
     chat:                   'https://api.openai.com/v1/chat/completions',
+    models:                 'https://api.openai.com/v1/models',
     default_narrator_model: 'gpt-4o',
     default_helper_model:   'gpt-4o-mini',
     format:                 'openai',
@@ -20,6 +23,7 @@ export const PROVIDER_ENDPOINTS = {
   },
   anthropic: {
     chat:                   'https://api.anthropic.com/v1/messages',
+    models:                 'https://api.anthropic.com/v1/models',
     default_narrator_model: 'claude-sonnet-4-6',
     default_helper_model:   'claude-haiku-4-5-20251001',
     format:                 'anthropic',
@@ -27,6 +31,7 @@ export const PROVIDER_ENDPOINTS = {
   },
   openrouter: {
     chat:                   'https://openrouter.ai/api/v1/chat/completions',
+    models:                 'https://openrouter.ai/api/v1/models',
     default_narrator_model: 'nousresearch/hermes-3-llama-3.1-405b:free',
     default_helper_model:   'meta-llama/llama-3.1-8b-instruct:free',
     format:                 'openai',
@@ -34,20 +39,63 @@ export const PROVIDER_ENDPOINTS = {
   },
   groq: {
     chat:                   'https://api.groq.com/openai/v1/chat/completions',
+    models:                 'https://api.groq.com/openai/v1/models',
     default_narrator_model: 'llama-3.3-70b-versatile',
     default_helper_model:   'llama-3.1-8b-instant',
     format:                 'openai',
     auth: k => ({ 'Authorization': `Bearer ${k}` }),
   },
   gemini: {
-    chat:                   null, // special URL construction
+    chat:                   null,
+    models:                 null,
     default_narrator_model: 'gemini-2.0-flash',
     default_helper_model:   'gemini-2.0-flash',
     format:                 'gemini',
     auth:                   null,
   },
+  huggingface: {
+    chat:                   'https://router.huggingface.co/v1/chat/completions',
+    models:                 'https://router.huggingface.co/v1/models',
+    default_narrator_model: 'meta-llama/Llama-3.1-8B-Instruct',
+    default_helper_model:   'meta-llama/Llama-3.1-8B-Instruct',
+    format:                 'openai',
+    auth: k => ({ 'Authorization': `Bearer ${k}` }),
+  },
+  mistral: {
+    chat:                   'https://api.mistral.ai/v1/chat/completions',
+    models:                 'https://api.mistral.ai/v1/models',
+    default_narrator_model: 'mistral-large-latest',
+    default_helper_model:   'mistral-small-latest',
+    format:                 'openai',
+    auth: k => ({ 'Authorization': `Bearer ${k}` }),
+  },
+  cerebras: {
+    chat:                   'https://api.cerebras.ai/v1/chat/completions',
+    models:                 'https://api.cerebras.ai/v1/models',
+    default_narrator_model: 'llama3.1-70b',
+    default_helper_model:   'llama3.1-8b',
+    format:                 'openai',
+    auth: k => ({ 'Authorization': `Bearer ${k}` }),
+  },
+  github: {
+    chat:                   'https://models.inference.ai.azure.com/chat/completions',
+    models:                 null, // no standard list endpoint
+    default_narrator_model: 'gpt-4o',
+    default_helper_model:   'gpt-4o-mini',
+    format:                 'openai',
+    auth: k => ({ 'Authorization': `Bearer ${k}` }),
+  },
+  cohere: {
+    chat:                   'https://api.cohere.com/v2/chat',
+    models:                 'https://api.cohere.com/v1/models',
+    default_narrator_model: 'command-r-plus',
+    default_helper_model:   'command-r',
+    format:                 'cohere',
+    auth: k => ({ 'Authorization': `Bearer ${k}` }),
+  },
   custom: {
-    chat:                   null, // resolved from CUSTOM_BASE_URL at dispatch time
+    chat:                   null,
+    models:                 null,
     default_narrator_model: 'gpt-4o',
     default_helper_model:   'gpt-4o-mini',
     format:                 'openai',
@@ -55,8 +103,47 @@ export const PROVIDER_ENDPOINTS = {
   },
 };
 
-// Base URL for a user-supplied OpenAI-compatible endpoint (localStorage CUSTOM_BASE_URL).
-// e.g. 'https://my-host/v1' — dispatch appends '/chat/completions', discovery appends '/models'.
+// ─── RATE SPACING ─────────────────────────────────────────────────────────────
+// Minimum ms between consecutive calls to the same provider.
+// Smooths burst patterns that trigger RPS limits without blocking simulation.
+const _SPACING_MS = {
+  groq:        420,
+  gemini:      320,
+  huggingface: 520,
+  cerebras:    320,
+  cohere:      350,
+  default:     160,
+};
+const _lastCallTs = new Map();
+
+async function _enforceSpacing(provider) {
+  const ms   = _SPACING_MS[provider] ?? _SPACING_MS.default;
+  const last = _lastCallTs.get(provider) ?? 0;
+  const wait = ms - (Date.now() - last);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  _lastCallTs.set(provider, Date.now());
+}
+
+// ─── EXPONENTIAL BACKOFF ──────────────────────────────────────────────────────
+// Retries on 429 with jittered exponential delay before giving up and failing over.
+// maxRetries=2 + baseMs=900 means max ~3.2s added latency before failover.
+export async function withBackoff(fn, provider, { maxRetries = 2, baseMs = 900, maxMs = 6000 } = {}) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const is429   = /429|rate.?limit|too.?many.?request|quota/i.test(err.message ?? '');
+      const canRetry = is429 && attempt < maxRetries;
+      if (!canRetry) throw err;
+      const jitter = Math.random() * 400;
+      const delay  = Math.min(baseMs * Math.pow(1.8, attempt) + jitter, maxMs);
+      window._devlog?.system(`${provider} 429 — backoff ${Math.round(delay)}ms (retry ${attempt + 1}/${maxRetries})`, { err: err.message.slice(0, 80) });
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+}
+
+// ─── CUSTOM BASE URL ──────────────────────────────────────────────────────────
 export function getCustomBaseUrl(baseUrl) {
   const raw = (baseUrl || (typeof localStorage !== 'undefined' ? localStorage.getItem('CUSTOM_BASE_URL') : '') || '').trim();
   return raw.replace(/\/+$/, '');
@@ -66,22 +153,30 @@ export function getCustomBaseUrl(baseUrl) {
 export function detectProvider(key) {
   if (!key || typeof key !== 'string') return null;
   const k = key.trim();
-  if (k.startsWith('xai-'))    return 'grok';
-  if (k.startsWith('AIza'))    return 'gemini';
-  if (k.startsWith('sk-or-'))  return 'openrouter';
-  if (k.startsWith('gsk_'))    return 'groq';
-  if (k.startsWith('sk-ant-')) return 'anthropic';
-  if (k.startsWith('sk-'))     return 'openai';
-  return null; // unknown prefix — let the UI prompt for a provider (or Custom)
+  if (k.startsWith('xai-'))                              return 'grok';
+  if (k.startsWith('AIza'))                              return 'gemini';
+  if (k.startsWith('sk-or-'))                            return 'openrouter';
+  if (k.startsWith('gsk_'))                              return 'groq';
+  if (k.startsWith('sk-ant-'))                           return 'anthropic';
+  if (k.startsWith('hf_'))                               return 'huggingface';
+  if (k.startsWith('csk-'))                              return 'cerebras';
+  if (k.startsWith('ghp_') || k.startsWith('github_pat_')) return 'github';
+  // Mistral & Cohere have no standard prefix — requires manual provider selection
+  if (k.startsWith('sk-'))                               return 'openai';
+  return null;
 }
 
 export function getProviderDisplayName(provider) {
-  const MAP = { grok:'Grok/xAI', openai:'OpenAI', anthropic:'Anthropic', openrouter:'OpenRouter', groq:'Groq', gemini:'Google Gemini', custom:'Custom (OpenAI-compatible)' };
+  const MAP = {
+    grok:'Grok/xAI', openai:'OpenAI', anthropic:'Anthropic',
+    openrouter:'OpenRouter', groq:'Groq', gemini:'Google Gemini',
+    huggingface:'HuggingFace', mistral:'Mistral AI', cerebras:'Cerebras',
+    github:'GitHub Models', cohere:'Cohere', custom:'Custom (OpenAI-compatible)',
+  };
   return MAP[provider] ?? provider ?? 'Unknown';
 }
 
 // ─── SLOT CONFIGURATION ───────────────────────────────────────────────────────
-// Narrator slot: creative prose generation
 export function getNarratorSlot() {
   const key      = localStorage.getItem('NARRATOR_KEY')?.trim()      || localStorage.getItem('GROK_API_KEY')?.trim()   || null;
   const provider = localStorage.getItem('NARRATOR_PROVIDER')?.trim() || (key ? detectProvider(key) : null);
@@ -89,7 +184,6 @@ export function getNarratorSlot() {
   return { key, provider, model };
 }
 
-// Classifier slot: JSON structured tasks
 export function getClassifierSlot() {
   const key      = localStorage.getItem('CLASSIFIER_KEY')?.trim()      || localStorage.getItem('GEMINI_API_KEY')?.trim() || null;
   const provider = localStorage.getItem('CLASSIFIER_PROVIDER')?.trim() || (key ? detectProvider(key) : null);
@@ -97,7 +191,6 @@ export function getClassifierSlot() {
   return { key, provider, model };
 }
 
-// Helper slot: cheapest available for background tasks
 export function getHelperSlot() {
   const groqKey = localStorage.getItem('GROQ_API_KEY')?.trim();
   if (groqKey) return { key: groqKey, provider: 'groq', model: 'llama-3.1-8b-instant' };
@@ -114,12 +207,10 @@ export function getHelperSlot() {
   return { key: null, provider: null, model: null };
 }
 
-// Content mode: 'filtered' suppresses explicit routing to PATH_1
 export function isExplicitModeEnabled() {
   return localStorage.getItem('CONTENT_MODE') !== 'filtered';
 }
 
-// Ordered fallback list for narrator (used when primary refuses or fails)
 export function getNarratorFallbacks() {
   const list = [];
   const orKey = localStorage.getItem('OPENROUTER_API_KEY')?.trim();
@@ -134,18 +225,14 @@ export function getNarratorFallbacks() {
   return list;
 }
 
-// ─── ENRICHER SLOT ────────────────────────────────────────────────────────────
-// Dedicated to world-building (enrichWorldDetails) — slower, smarter, independent of classifier
 export function getEnricherSlot() {
   const key      = localStorage.getItem('ENRICHER_KEY')?.trim()      || null;
   const provider = localStorage.getItem('ENRICHER_PROVIDER')?.trim() || (key ? detectProvider(key) : null);
   const model    = localStorage.getItem('ENRICHER_MODEL')?.trim()    || null;
   if (key && provider) return { key, provider, model };
-  return getClassifierSlot(); // fall through to classifier
+  return getClassifierSlot();
 }
 
-// ─── CONFIGURABLE FALLBACK SLOTS ──────────────────────────────────────────────
-// Returns enabled slots for the given role, sorted by slot number (slot 1 = highest priority)
 export function getFallbackSlots(role) {
   try {
     const raw = localStorage.getItem('FALLBACK_SLOTS');
@@ -157,11 +244,20 @@ export function getFallbackSlots(role) {
   } catch { return []; }
 }
 
+// ─── COHERE HELPERS ───────────────────────────────────────────────────────────
+function _cohereBody(model, messages, maxTokens) {
+  return { model: model || 'command-r-plus', messages, max_tokens: maxTokens };
+}
+function _cohereText(data) {
+  // v2: data.message.content[0].text | v1 fallback: data.text
+  return data?.message?.content?.[0]?.text?.trim() ?? data?.text?.trim() ?? '';
+}
+
 // ─── CORE DISPATCH: CHAT → string ────────────────────────────────────────────
-// messages: [{role, content}] — system role supported for all providers
 export async function dispatchChat(provider, key, model, messages, maxTokens = 600, timeoutMs = 30000) {
   const cfg = PROVIDER_ENDPOINTS[provider];
   if (!cfg) throw new Error(`Unknown provider: ${provider}`);
+  await _enforceSpacing(provider);
   const _t0 = Date.now();
 
   const _fetch = async (url, opts) => {
@@ -171,155 +267,173 @@ export async function dispatchChat(provider, key, model, messages, maxTokens = 6
     finally { clearTimeout(id); }
   };
 
-  // Anthropic: system is a top-level field, not a message
-  if (provider === 'anthropic') {
-    const sysContent  = messages.find(m => m.role === 'system')?.content ?? '';
-    const convMessages = messages.filter(m => m.role !== 'system');
-    const res = await _fetch('https://api.anthropic.com/v1/messages', {
+  const text = await withBackoff(async () => {
+    // ── Anthropic ──────────────────────────────────────────────────────────
+    if (provider === 'anthropic') {
+      const sys  = messages.find(m => m.role === 'system')?.content ?? '';
+      const conv = messages.filter(m => m.role !== 'system');
+      const res  = await _fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
+        body: JSON.stringify({ model: model || cfg.default_narrator_model, max_tokens: maxTokens, system: sys, messages: conv }),
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(`Anthropic HTTP ${res.status}: ${t.slice(0, 160)}`); }
+      return (await res.json()).content?.[0]?.text?.trim() ?? '';
+    }
+    // ── Gemini ─────────────────────────────────────────────────────────────
+    if (provider === 'gemini') {
+      const sys      = messages.find(m => m.role === 'system')?.content ?? '';
+      const lastUser = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
+      const gModel   = model || cfg.default_narrator_model;
+      const url      = `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${key}`;
+      const body     = { generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 }, contents: [{ parts: [{ text: lastUser }] }] };
+      if (sys) body.system_instruction = { parts: [{ text: sys }] };
+      const res = await _fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) { const t = await res.text(); throw new Error(`Gemini HTTP ${res.status}: ${t.slice(0, 160)}`); }
+      return (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+    }
+    // ── Cohere ─────────────────────────────────────────────────────────────
+    if (provider === 'cohere') {
+      const res = await _fetch(cfg.chat, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
+        body: JSON.stringify(_cohereBody(model || cfg.default_narrator_model, messages, maxTokens)),
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(`Cohere HTTP ${res.status}: ${t.slice(0, 160)}`); }
+      return _cohereText(await res.json());
+    }
+    // ── OpenAI-compatible: Grok, OpenAI, OpenRouter, Groq, HuggingFace, Mistral, Cerebras, GitHub, Custom
+    let chatUrl = cfg.chat;
+    if (provider === 'custom') {
+      const base = getCustomBaseUrl();
+      if (!base) throw new Error('Custom provider requires a base URL. Set it in ⚙ Settings.');
+      chatUrl = `${base}/chat/completions`;
+    }
+    const res = await _fetch(chatUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
-      body: JSON.stringify({ model: model || cfg.default_narrator_model, max_tokens: maxTokens, system: sysContent, messages: convMessages }),
+      body: JSON.stringify({ model: model || cfg.default_narrator_model, max_tokens: maxTokens, messages, stream: false }),
     });
-    if (!res.ok) { const t = await res.text(); throw new Error(`Anthropic HTTP ${res.status}: ${t.slice(0, 160)}`); }
-    const _aOut = (await res.json()).content?.[0]?.text?.trim() ?? '';
-    window._devlog?.api('dispatchChat OK', { provider, model: model||cfg.default_narrator_model, elapsed_ms: Date.now()-_t0, chars: _aOut.length });
-    return _aOut;
-  }
+    if (!res.ok) { const t = await res.text(); throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}: ${t.slice(0, 160)}`); }
+    return (await res.json()).choices?.[0]?.message?.content?.trim() ?? '';
+  }, provider);
 
-  // Gemini: system_instruction separate, only last user message used (no history in v1beta)
-  if (provider === 'gemini') {
-    const sysContent = messages.find(m => m.role === 'system')?.content ?? '';
-    const lastUser   = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
-    const gModel = model || cfg.default_narrator_model;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${key}`;
-    const body = { generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 }, contents: [{ parts: [{ text: lastUser }] }] };
-    if (sysContent) body.system_instruction = { parts: [{ text: sysContent }] };
-    const res = await _fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!res.ok) { const t = await res.text(); throw new Error(`Gemini HTTP ${res.status}: ${t.slice(0, 160)}`); }
-    const _gOut = (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
-    window._devlog?.api('dispatchChat OK', { provider, model: gModel, elapsed_ms: Date.now()-_t0, chars: _gOut.length });
-    return _gOut;
-  }
-
-  // OpenAI-compatible: Grok, OpenAI, OpenRouter, Groq, Custom
-  let chatUrl = cfg.chat;
-  if (provider === 'custom') {
-    const base = getCustomBaseUrl();
-    if (!base) throw new Error('Custom provider requires a base URL. Set it in ⚙ Settings.');
-    chatUrl = `${base}/chat/completions`;
-  }
-  const res = await _fetch(chatUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
-    body: JSON.stringify({ model: model || cfg.default_narrator_model, max_tokens: maxTokens, messages, stream: false }),
-  });
-  if (!res.ok) { const t = await res.text(); throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}: ${t.slice(0, 160)}`); }
-  const _oOut = (await res.json()).choices?.[0]?.message?.content?.trim() ?? '';
-  window._devlog?.api('dispatchChat OK', { provider, model: model||cfg.default_narrator_model, elapsed_ms: Date.now()-_t0, chars: _oOut.length });
-  return _oOut;
+  window._devlog?.api('dispatchChat OK', { provider, model: model || cfg?.default_narrator_model, elapsed_ms: Date.now() - _t0, chars: text.length });
+  return text;
 }
 
 // ─── CORE DISPATCH: JSON → parsed object ─────────────────────────────────────
 export async function dispatchJSON(provider, key, model, prompt, maxTokens = 400) {
   const cfg = PROVIDER_ENDPOINTS[provider];
   if (!cfg) throw new Error(`Unknown provider: ${provider}`);
+  await _enforceSpacing(provider);
   const _t0 = Date.now();
 
-  // Gemini: native JSON mode
-  if (provider === 'gemini') {
-    const gModel = model || cfg.default_helper_model;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${key}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, response_mime_type: 'application/json' } }),
+  const parsed = await withBackoff(async () => {
+    // ── Gemini native JSON ─────────────────────────────────────────────────
+    if (provider === 'gemini') {
+      const gModel = model || cfg.default_helper_model;
+      const url    = `https://generativelanguage.googleapis.com/v1beta/models/${gModel}:generateContent?key=${key}`;
+      const res    = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens, response_mime_type: 'application/json' } }),
+      });
+      if (res.status === 429) throw new Error('Gemini HTTP 429: rate limit');
+      if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
+      const raw = (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+      try { return JSON.parse(raw); } catch { return {}; }
+    }
+    // ── Anthropic ──────────────────────────────────────────────────────────
+    if (provider === 'anthropic') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
+        body: JSON.stringify({ model: model || cfg.default_helper_model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }),
+      });
+      if (!res.ok) throw new Error(`Anthropic HTTP ${res.status}`);
+      const raw = (await res.json()).content?.[0]?.text ?? '{}';
+      try { return JSON.parse(raw.replace(/```json|```/g, '').trim()); } catch { return {}; }
+    }
+    // ── Cohere ─────────────────────────────────────────────────────────────
+    if (provider === 'cohere') {
+      const res = await fetch(cfg.chat, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
+        body: JSON.stringify(_cohereBody(model || cfg.default_helper_model, [{ role: 'user', content: prompt }], maxTokens)),
+      });
+      if (!res.ok) throw new Error(`Cohere HTTP ${res.status}`);
+      const raw = _cohereText(await res.json());
+      try { return JSON.parse(raw.replace(/```json|```/g, '').trim()); } catch { return {}; }
+    }
+    // ── OpenAI-compatible ──────────────────────────────────────────────────
+    let chatUrl = cfg.chat;
+    if (provider === 'custom') {
+      const base = getCustomBaseUrl();
+      if (!base) throw new Error('Custom provider requires a base URL. Set it in ⚙ Settings.');
+      chatUrl = `${base}/chat/completions`;
+    }
+    const res = await fetch(chatUrl, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
+      body: JSON.stringify({ model: model || cfg.default_helper_model, max_tokens: maxTokens, temperature: 0.1, messages: [{ role: 'user', content: prompt }] }),
     });
-    if (res.status === 429) throw new Error('GEMINI_RATE_LIMIT');
-    if (!res.ok) throw new Error(`Gemini HTTP ${res.status}`);
-    const text = (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
-    try { const _r = JSON.parse(text); window._devlog?.api('dispatchJSON OK', { provider, model: model||cfg.default_helper_model, elapsed_ms: Date.now()-_t0 }); return _r; } catch { return {}; }
-  }
+    if (!res.ok) {
+      const eb = await res.text().catch(() => '');
+      throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}: ${eb.slice(0, 160)}`);
+    }
+    const raw = (await res.json()).choices?.[0]?.message?.content ?? '{}';
+    const clean = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim() || '{}';
+    try { return JSON.parse(clean); } catch { return {}; }
+  }, provider);
 
-  // Anthropic
-  if (provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
-      body: JSON.stringify({ model: model || cfg.default_helper_model, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }] }),
-    });
-    if (!res.ok) throw new Error(`Anthropic HTTP ${res.status}`);
-    const text = (await res.json()).content?.[0]?.text ?? '{}';
-    try { const _r = JSON.parse(text.replace(/```json|```/g, '').trim()); window._devlog?.api('dispatchJSON OK', { provider, model: model||cfg.default_helper_model, elapsed_ms: Date.now()-_t0 }); return _r; } catch { return {}; }
-  }
-
-  // OpenAI-compatible
-  let chatUrl = cfg.chat;
-  if (provider === 'custom') {
-    const base = getCustomBaseUrl();
-    if (!base) throw new Error('Custom provider requires a base URL. Set it in ⚙ Settings.');
-    chatUrl = `${base}/chat/completions`;
-  }
-  const res = await fetch(chatUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...cfg.auth(key) },
-    body: JSON.stringify({ model: model || cfg.default_helper_model, max_tokens: maxTokens, temperature: 0.1, messages: [{ role: 'user', content: prompt }] }),
-  });
-  if (!res.ok) {
-    const _eb = await res.text().catch(() => '');
-    throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}: ${_eb.slice(0, 160)}`);
-  }
-  const _djData = await res.json();
-  const text = _djData.choices?.[0]?.message?.content ?? '{}';
-  const _djClean = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim() || '{}';
-  try {
-    const _r = JSON.parse(_djClean);
-    window._devlog?.api('dispatchJSON OK', { provider, model: model||cfg.default_helper_model, elapsed_ms: Date.now()-_t0 });
-    return _r;
-  } catch (e) {
-    window._devlog?.error('dispatchJSON JSON parse error', { provider, model: model||cfg.default_helper_model, preview: _djClean.slice(0, 300), parse_error: e.message });
-    return {};
-  }
+  window._devlog?.api('dispatchJSON OK', { provider, model: model || cfg?.default_helper_model, elapsed_ms: Date.now() - _t0 });
+  return parsed;
 }
 
 // ─── DYNAMIC MODEL DISCOVERY ─────────────────────────────────────────────────
-// Queries the provider's model-list endpoint and returns an array of model id strings.
-// Model names churn constantly, so discovery is the source of truth; default_*_model
-// values are only a last-resort fallback. Returns [] on any error/CORS/non-200 so the
-// UI can gracefully fall back to a free-text input.
 export async function fetchModels(provider, key, baseUrl) {
   if (!provider || !key) return [];
   try {
-    // Gemini: models[].name, strip the "models/" prefix
     if (provider === 'gemini') {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
       if (!res.ok) return [];
-      const data = await res.json();
-      return (data.models ?? []).map(m => (m.name ?? '').replace(/^models\//, '')).filter(Boolean);
+      return ((await res.json()).models ?? []).map(m => (m.name ?? '').replace(/^models\//, '')).filter(Boolean);
     }
-
-    // Anthropic: data[].id, x-api-key + anthropic-version headers
     if (provider === 'anthropic') {
       const res = await fetch('https://api.anthropic.com/v1/models', {
         headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       });
       if (!res.ok) return [];
+      return ((await res.json()).data ?? []).map(m => m.id).filter(Boolean);
+    }
+    if (provider === 'cohere') {
+      const res = await fetch('https://api.cohere.com/v1/models', {
+        headers: { 'Authorization': `Bearer ${key}` },
+      });
+      if (!res.ok) return [];
       const data = await res.json();
-      return (data.data ?? []).map(m => m.id).filter(Boolean);
+      return (data.models ?? data.data ?? []).map(m => m.name ?? m.id).filter(Boolean);
     }
-
-    // OpenAI-compatible: Grok, OpenAI, OpenRouter, Groq, Custom — GET {chatBase}/models
+    if (provider === 'github') {
+      // No standard list endpoint — return curated set of available GitHub Models
+      return ['gpt-4o', 'gpt-4o-mini', 'meta-llama-3.1-70b-instruct', 'meta-llama-3.1-8b-instruct', 'phi-3.5-mini-instruct', 'mistral-nemo'];
+    }
+    if (provider === 'huggingface') {
+      const res = await fetch('https://router.huggingface.co/v1/models', {
+        headers: { 'Authorization': `Bearer ${key}` },
+      });
+      if (!res.ok) return [];
+      return ((await res.json()).data ?? []).map(m => m.id).filter(Boolean).slice(0, 120);
+    }
+    // OpenAI-compatible: Grok, OpenAI, OpenRouter, Groq, Mistral, Cerebras, Custom
     const cfg = PROVIDER_ENDPOINTS[provider];
-    let base;
+    let modelsUrl = cfg?.models;
     if (provider === 'custom') {
-      base = getCustomBaseUrl(baseUrl);
-    } else {
-      base = (cfg?.chat ?? '').replace(/\/chat\/completions$/, '');
+      const base = getCustomBaseUrl(baseUrl);
+      if (!base) return [];
+      modelsUrl = `${base}/models`;
     }
-    if (!base) return [];
-    const res = await fetch(`${base}/models`, { headers: { 'Authorization': `Bearer ${key}` } });
+    if (!modelsUrl) return [];
+    const res = await fetch(modelsUrl, { headers: { 'Authorization': `Bearer ${key}` } });
     if (!res.ok) return [];
-    const data = await res.json();
-    return (data.data ?? []).map(m => m.id).filter(Boolean);
+    return ((await res.json()).data ?? []).map(m => m.id).filter(Boolean);
   } catch { return []; }
 }
 

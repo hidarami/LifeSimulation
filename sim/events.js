@@ -1000,3 +1000,186 @@ export function decreaseWantedLevel(worldState, amount = 1) {
   }
   return ws;
 }
+
+// ─── GLOBAL SIMULATION DIRECTOR ──────────────────────────────────────────────
+// Runs every GSD_INTERVAL turns. Handles multi-hop cascade chains that
+// individual-turn event checks can't see. Engine-only — zero AI calls.
+// Philosophy: engine owns what IS true; AI only narrates what already happened.
+export const GSD_INTERVAL = 3;
+
+export function runSimulationDirector(worldState) {
+  let ws = JSON.parse(JSON.stringify(worldState));
+  const directorEvents = [];
+  const turn = ws.turn ?? 0;
+
+  // ── 1. EMPLOYMENT CASCADE ──────────────────────────────────────────────────
+  if (ws.job) {
+    const pf = ws.job.performance_flags ?? [];
+    // Accumulated absences without formal warning → issue one
+    if ((ws.job.absent_count ?? 0) >= 3 && !pf.includes('formal_warning')) {
+      ws.job.performance_flags = [...new Set([...pf, 'formal_warning', 'poor_attendance'])];
+      directorEvents.push({
+        type: 'job_formal_warning', severity: 'moderate',
+        description: `${ws.job.employer ?? 'Your employer'} has issued a formal warning about your attendance.`,
+      });
+    }
+    // Formal warning + poor performance = termination risk
+    if (pf.includes('formal_warning') && pf.includes('poor_performance') && Math.random() < 0.15) {
+      ws.job = null;
+      ws.player.stats.mood       = Math.max(0, ws.player.stats.mood - 22);
+      ws.player.stats.reputation = Math.max(0, ws.player.stats.reputation - 12);
+      directorEvents.push({
+        type: 'job_terminated', severity: 'major',
+        description: 'You have been terminated from your job.',
+      });
+    }
+    // Increment days employed (once per GSD cycle)
+    if (ws.job) ws.job.days_employed = (ws.job.days_employed ?? 0) + GSD_INTERVAL;
+  }
+
+  // ── 2. FINANCIAL CASCADE ───────────────────────────────────────────────────
+  const _broke = ws.player.cash < 150;
+  const _jobless = !ws.job;
+  if (_broke && _jobless) {
+    ws.player.stats.mood   = Math.max(0, ws.player.stats.mood - 4);
+    ws.player.stats.health = Math.max(0, ws.player.stats.health - 1);
+    if (ws.player.stats.mood < 25) {
+      ws.player.stats.social = Math.max(0, ws.player.stats.social - 3);
+    }
+  }
+
+  // ── 3. HEALTH CASCADE ─────────────────────────────────────────────────────
+  for (const disease of (ws.player.diseases ?? [])) {
+    const data = DISEASE_POOL.find(d => d.id === disease.id);
+    if (!data) continue;
+    const turnsElapsed = (data.base_duration ?? 7) - (disease.duration_remaining ?? 0);
+    // Disease not improving after 5+ turns → escalate severity
+    if (turnsElapsed >= 5 && disease.severity === 'minor') {
+      const threshold = data.resolution_threshold?.health ?? 50;
+      if (ws.player.stats.health < threshold - 8) {
+        disease.severity = 'moderate';
+        directorEvents.push({
+          type: 'disease_worsening', severity: 'moderate',
+          description: `Your ${disease.name} is getting worse instead of better.`,
+        });
+      }
+    }
+    // Moderate/serious disease flags job as having medical absence
+    if (['moderate','serious'].includes(disease.severity) && ws.job) {
+      ws.job.performance_flags = [...new Set([...(ws.job.performance_flags ?? []), 'medical_absence'])];
+    }
+  }
+
+  // ── 4. NPC HIDDEN STATE & RELATIONSHIP DRIFT ───────────────────────────────
+  for (const npcId of Object.keys(ws.npcs ?? {})) {
+    const npc = ws.npcs[npcId];
+    if (npc.status !== 'active') continue;
+
+    // Initialize hidden state bucket
+    if (!npc._hidden) npc._hidden = {};
+
+    // Relationship drift toward neutral when no interaction
+    const sinceInteraction = turn - (npc._hidden.last_interaction_turn ?? 0);
+    if (sinceInteraction > 8) {
+      const driftDir = npc.relationship_meter > 2 ? -1 : npc.relationship_meter < -2 ? 1 : 0;
+      npc.relationship_meter = Math.max(-100, Math.min(100, npc.relationship_meter + driftDir * 0.5));
+    }
+
+    // Low-relationship NPC sets a "leaving" timer (they drift away, no drama)
+    if (npc.relationship_meter < -40 && (npc.significance ?? 1) < 2 && !npc._hidden.leaving_risk) {
+      npc._hidden.leaving_risk = true;
+      npc._hidden.leave_turn   = turn + Math.floor(Math.random() * 10 + 5);
+    }
+    // Execute departure when timer fires
+    if (npc._hidden.leaving_risk && turn >= (npc._hidden.leave_turn ?? Infinity)) {
+      npc.status            = 'inactive';
+      npc.departure_reason  = 'drifted away';
+      directorEvents.push({
+        type: 'npc_drifted_away', severity: 'moderate',
+        description: `${npc.name} has quietly drifted out of your life.`,
+        npc_id: npcId,
+      });
+      continue;
+    }
+
+    // Hostile rival actively undermines reputation (hidden — player doesn't know who)
+    if (npc.relationship_meter < -60 && (npc.traits?.dominance ?? 50) > 65 && Math.random() < 0.04) {
+      ws.player.stats.reputation = Math.max(0, ws.player.stats.reputation - 3);
+      npc._hidden.sabotage_count = (npc._hidden.sabotage_count ?? 0) + 1;
+      directorEvents.push({
+        type: 'reputation_sabotaged', severity: 'minor',
+        description: 'Someone is quietly undermining your reputation.',
+        npc_id: npcId, hidden: true, // hidden=true means narrator doesn't attribute to specific NPC
+      });
+    }
+
+    // High-significance NPC hurt by being ignored
+    if ((npc.significance ?? 1) >= 3 && sinceInteraction > 15) {
+      npc._hidden.neglect_stress = (npc._hidden.neglect_stress ?? 0) + 1;
+      if (npc._hidden.neglect_stress >= 4) {
+        npc.relationship_meter = Math.max(-100, npc.relationship_meter - 2);
+        if (npc.traits?.warmth !== undefined) npc.traits.warmth = Math.max(10, npc.traits.warmth - 1);
+        npc._hidden.neglect_stress = 0;
+        directorEvents.push({
+          type: 'npc_hurt_by_neglect', severity: 'minor',
+          description: `${npc.name} misses hearing from you.`,
+          npc_id: npcId,
+        });
+      }
+    }
+  }
+
+  // ── 5. SOCIAL ISOLATION CASCADE ───────────────────────────────────────────
+  if (ws.player.stats.social < 18 && ws.player.stats.mood < 30) {
+    ws.player.stats.health = Math.max(0, ws.player.stats.health - 1);
+    // Add emotional slump consequence if not already present
+    const hasSlump = (ws.consequences ?? []).some(c => c.type === 'emotional_slump');
+    if (!hasSlump) {
+      ws.consequences = [...(ws.consequences ?? []), { type: 'emotional_slump', severity: 'moderate', duration: 6 }];
+    }
+  }
+
+  // ── 6. ADDICTION RELATIONSHIP STRAIN ──────────────────────────────────────
+  for (const addiction of (ws.addictions ?? [])) {
+    if (addiction.status !== 'active' || addiction.severity !== 'severe') continue;
+    for (const [npcId, npc] of Object.entries(ws.npcs ?? {})) {
+      if (npc.status !== 'active' || (npc.significance ?? 1) < 2) continue;
+      if (Math.random() < 0.05) {
+        npc.relationship_meter = Math.max(-100, npc.relationship_meter - 2);
+        npc._hidden = npc._hidden ?? {};
+        npc._hidden.noticed_addiction = true;
+      }
+    }
+  }
+
+  // ── 7. SCHOOL PERFORMANCE CASCADE ─────────────────────────────────────────
+  if (ws.school?.status === 'active') {
+    const pf  = ws.school.performance_flags ?? [];
+    const abs = ws.school.absence_count ?? 0;
+    if (abs >= 5 && !pf.includes('academic_warning')) {
+      ws.school.performance_flags = [...new Set([...pf, 'academic_warning'])];
+      directorEvents.push({
+        type: 'school_academic_warning', severity: 'moderate',
+        description: `Your school sent an academic warning — ${abs} absences recorded.`,
+      });
+    }
+    if (pf.includes('academic_warning') && pf.includes('poor_performance') && Math.random() < 0.12) {
+      ws.school.at_risk_of_failing = true;
+      directorEvents.push({
+        type: 'school_failing_risk', severity: 'major',
+        description: 'You are now at risk of failing the school year.',
+      });
+    }
+  }
+
+  // ── 8. FAME PRESSURE CASCADE ──────────────────────────────────────────────
+  if ((ws.fame?.level ?? 0) >= 2 && ws.player.stats.reputation < 50 && Math.random() < 0.04) {
+    ws.player.stats.mood = Math.max(0, ws.player.stats.mood - 8);
+    directorEvents.push({
+      type: 'fame_pressure', severity: 'minor',
+      description: 'The public scrutiny of your growing fame is wearing on you.',
+    });
+  }
+
+  return { worldState: ws, directorEvents };
+}
