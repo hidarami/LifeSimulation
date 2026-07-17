@@ -59,13 +59,13 @@ export function setConversationHistory(h) { _conversationHistory = Array.isArray
 
 function buildGrokUserMessage(turnBrief, mode) {
   const instruction = {
-    notable:   'Expand the scene. 2–4 paragraphs.',
-    crisis:    'Write with urgency and weight. 3–5 paragraphs.',
-    death:     'Write the death scene with gravity. 4–6 paragraphs.',
+    notable:   'Expand the scene. 1–3 paragraphs.',
+    crisis:    'Write with urgency and weight. 2–3 paragraphs.',
+    death:     'Write the death scene with gravity. 4–5 paragraphs.',
     legacy:    'Write a post-death reflection from the world\'s perspective: how the death of the player character ripples outward. Show the successor NPC\'s immediate reaction and the weight they now carry. Do NOT resurrect the deceased. 3–5 paragraphs.',
-    pov_shift: 'This is the first scene from a new player POV after the previous character died. Establish the new POV character — their location, body, and the immediate emotional weight of what they know happened. Do not rush past the loss. 3–4 paragraphs.',
-    init:      'This is the opening scene of a new game. Establish the character in their immediate physical environment at the exact time shown in sim_time_formatted. CRITICAL: Do NOT default to waking up or morning scenes unless sim_time_formatted shows a time before 9:00 AM. If it shows afternoon, noon, or evening, the character is already mid-day — scene must reflect that hour with appropriate ambient sounds, light, activity, and body state. Never open with the character just having woken up unless the sim time genuinely warrants it. 3–4 paragraphs.',
-  }[mode] ?? '2–3 paragraphs.';
+    pov_shift: 'This is the first scene from a new player POV after the previous character died. Establish the new POV character — their location, body, and the immediate emotional weight of what they know happened. Do not rush past the loss. 2–3 paragraphs.',
+    init:      'This is the opening scene of a new game. Establish the character in their immediate physical environment at the exact time shown in sim_time_formatted. CRITICAL: Do NOT default to waking up or morning scenes unless sim_time_formatted shows a time before 9:00 AM. If it shows afternoon, noon, or evening, the character is already mid-day — scene must reflect that hour with appropriate ambient sounds, light, activity, and body state. Never open with the character just having woken up unless the sim time genuinely warrants it. 2–3 paragraphs.',
+  }[mode] ?? '1–2 paragraphs.';
   return JSON.stringify({ ...turnBrief, narration_instruction: instruction });
 }
 
