@@ -13,9 +13,6 @@
 <title>The Sim</title>
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="styles.css">
-
-</style>
-<script src="devlog.js"></script>
 </head>
 <body>
 
@@ -63,7 +60,7 @@
           <div class="menu-line"></div>
         </div>
       </div>
-      <div id="char-overview" style="font-size:10px;color:var(--dim);padding:2px 6px 4px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;line-height:1.5"></div>
+      <div id="char-overview" style="font-size:10px;color:var(--dim);padding:2px 6px 4px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;line-height:1.3;word-break:break-word"></div>
     </div>
     <div id="processing-bar"></div>
     <div id="center-stats-wrap"><div id="center-stats"></div></div>
@@ -113,11 +110,11 @@
 </div>
 
 <!-- ── CHALLENGE NOTIFICATION OVERLAY ───────────────────────────────────────── -->
-<div id="challenge-overlay" style="display:none;position:fixed;bottom:90px;left:50%;transform:translateX(-50%);width:min(400px,calc(100% - 32px));z-index:160;display:flex;flex-direction:column;gap:8px;align-items:stretch;pointer-events:none">
+<div id="challenge-overlay" style="display:none;position:fixed;bottom:90px;left:50%;transform:translateX(-50%);width:min(400px,calc(100% - 32px));z-index:160;display:flex;flex-direction:column;gap:8px;align-items:center">
   <div id="challenge-stack" style="display:flex;flex-direction:column;gap:8px;pointer-events:all"></div>
 </div>
 
-<!-- ── DEV CONSOLE ───────────────────────────────────────────────────────────── -->
+<!-- ── DEV CONSOLE ─────────────────────────────────────────────────────────── -->
 <div id="panel-devcon">
   <div class="devcon-hdr">
     <span class="devcon-title">⚙ DEV CONSOLE</span>
@@ -149,7 +146,7 @@
   </div>
 </div>
 
-<!-- ── UPDATE BANNER ─────────────────────────────────────────────────────────── -->
+<!-- ── UPDATE BANNER ────────────────────────────────────────────────────────── -->
 <div id="update-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:210;background:var(--sur);border-top:2px solid var(--acc);padding:10px 16px">
   <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
     <div>
@@ -163,7 +160,7 @@
   </div>
 </div>
 
-<!-- ── META CONSOLE ───────────────────────────────────────────────────────────── -->
+<!-- ── META CONSOLE ────────────────────────────────────────────────────────── -->
 <div id="panel-console">
   <div class="console-header">
     <div class="console-brand-block">
@@ -171,14 +168,14 @@
       <div class="console-brand-sub">Game guide · Mechanics · Dev tool</div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
-      <button class="console-close" id="btn-console-export-md" title="Export conversation as markdown" style="font-size:11px;width:auto;padding:0 10px;border:1px solid var(--bdr);border-radius:4px;letter-spacing:.04em">↓ Export</button>
+      <button class="console-close" id="btn-console-export-md" title="Export conversation as markdown" style="font-size:11px;width:auto;padding:0 10px;border:1px solid var(--bdr);border-radius:4px;cursor:pointer">MD</button>
       <button class="console-close" id="btn-console-close">✕</button>
     </div>
   </div>
   <div id="console-feed">
     <div id="console-empty">
       <div class="ce-icon">⌘</div>
-      <div class="ce-text" style="text-align:left;max-width:340px;font-size:11px;line-height:1.9;opacity:1"><strong style="color:var(--acc);display:block;margin-bottom:8px;font-size:12px;letter-spacing:.06em">AI CONSOLE</strong><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Live Data (no AI):</span><br><span style="color:var(--txt)">show npcs &nbsp;·&nbsp; show npc [name] &nbsp;·&nbsp; show world</span><br><span style="color:var(--txt)">show errors &nbsp;·&nbsp; show logs [cat] &nbsp;·&nbsp; show model</span><br><span style="color:var(--txt)">show patches &nbsp;·&nbsp; check &nbsp;·&nbsp; undo</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Engine Actions (no AI):</span><br><span style="color:var(--txt)">generate npcs &nbsp;·&nbsp; regenerate bio [name]</span><br><span style="color:var(--txt)">rerun enrichment &nbsp;·&nbsp; reparse lorebook</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Ask Anything:</span><br><span style="color:var(--dim)">Other questions go to AI. Type <strong>help</strong> for this list.</span></div>
+      <div class="ce-text" style="text-align:left;max-width:340px;font-size:11px;line-height:1.9;opacity:1"><strong style="color:var(--acc);display:block;margin-bottom:8px;font-size:12px;letter-spacing:.06em">Ask the AI anything about the game</strong>Game mechanics, world lore, strategy tips, or get help troubleshooting. This console has access to all game state.</div>
     </div>
   </div>
   <div id="console-input-area">
@@ -187,7 +184,7 @@
   </div>
 </div>
 
-<!-- ── API KEYS MODAL ──────────────────────────────────────────────────────── -->
+<!-- ── API KEYS MODAL ────────────────────────────────────────────────────────── -->
 <div id="modal" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-hdr">
@@ -290,7 +287,7 @@
         <div class="field"><label class="field-label">Local Language</label><input class="field-input" id="k-language" type="text" placeholder="Tagalog"></div>
       </div>
       <div class="field-row" style="margin-top:6px">
-        <div class="field" style="flex:0 0 120px"><label class="field-label">Currency Symbol</label><input class="field-input" id="k-currency" type="text" placeholder="₱" maxlength="4" style="font-size:16px;text-align:center"></div>
+        <div class="field" style="flex:0 0 120px"><label class="field-label">Currency Symbol</label><input class="field-input" id="k-currency" type="text" placeholder="₱" maxlength="4" style="font-size:13px;text-align:center"></div>
         <div class="field"><label class="field-label">Notes</label><div style="font-size:10px;color:var(--dim);margin-top:6px;line-height:1.6">Affects UI cash display. Leave blank for ₱ (Philippine Peso).</div></div>
       </div>
       <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Affects UI cash display. Leave blank for ₱ (Philippine Peso).</div>
@@ -300,7 +297,7 @@
         <span style="font-size:13px">24-Hour Clock</span>
         <div class="tog" id="time-format-tog"><div class="tog-knob"></div></div>
       </div>
-      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Toggle between 12-hour (3:00 PM) and 24-hour (15:00) format used throughout the game and narration.</div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Toggle between 12-hour (3:00 PM) and 24-hour (15:00) format used throughout the game and narrations.</div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Content Mode</div>
       <div class="menu-toggle-row" id="btn-content-mode" style="padding:10px 0;cursor:pointer">
@@ -310,7 +307,7 @@
       <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6">When off, explicit player actions skip narration and run as autopilot. Useful for filtered-model users.</div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Enricher — World-building AI (game init only)</div>
-      <div style="font-size:10px;color:var(--dim);margin-bottom:8px;line-height:1.6">Dedicated slot for <strong>enrichWorldDetails()</strong> — the slowest, most creative init call. Falls through to Classifier if empty. Use a smarter model here without slowing real-time classification.</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:8px;line-height:1.6">Dedicated slot for <strong>enrichWorldDetails()</strong> — the slowest, most creative init call. Falls through to fallback slots if it fails.</div>
       <div class="field">
         <label class="field-label">Enricher Key <span style="font-weight:400;opacity:.6">(any supported key — provider auto-detected)</span></label>
         <div class="pw-wrapper"><input class="field-input" id="k-enricher" type="password" placeholder="Paste API key for world-building"><button class="pw-toggle" data-target="k-enricher">👁</button></div>
@@ -348,20 +345,20 @@
       </div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Additional / Fallback Keys</div>
-      <div class="field"><label class="field-label">Grok API Key <span style="font-weight:400;opacity:.6">(used as narrator if Narrator Key is empty)</span></label><div class="pw-wrapper"><input class="field-input" id="k-grok" type="password" placeholder="xai-..."><button class="pw-toggle" data-target="k-grok">👁</button></div></div>
-      <div class="field"><label class="field-label">Gemini API Key <span style="font-weight:400;opacity:.6">(used as classifier if Classifier Key is empty)</span></label><div class="pw-wrapper"><input class="field-input" id="k-gem" type="password" placeholder="AIza..."><button class="pw-toggle" data-target="k-gem">👁</button></div></div>
-      <div class="field"><label class="field-label">Groq API Key <span style="font-weight:400;opacity:.6">(fast helper for NPC analysis &amp; world building)</span></label><div class="pw-wrapper"><input class="field-input" id="k-groq" type="password" placeholder="gsk_..."><button class="pw-toggle" data-target="k-groq">👁</button></div></div>
-      <div class="field"><label class="field-label">OpenRouter API Key <span style="font-weight:400;opacity:.6">(narrator fallbacks — free uncensored models)</span></label><div class="pw-wrapper"><input class="field-input" id="k-or" type="password" placeholder="sk-or-..."><button class="pw-toggle" data-target="k-or">👁</button></div></div>
+      <div class="field"><label class="field-label">Grok API Key <span style="font-weight:400;opacity:.6">(used as narrator if Narrator Key is empty)</span></label><div class="pw-wrapper"><input class="field-input" id="k-grok" type="password"><button class="pw-toggle" data-target="k-grok">👁</button></div></div>
+      <div class="field"><label class="field-label">Gemini API Key <span style="font-weight:400;opacity:.6">(used as classifier if Classifier Key is empty)</span></label><div class="pw-wrapper"><input class="field-input" id="k-gem" type="password"><button class="pw-toggle" data-target="k-gem">👁</button></div></div>
+      <div class="field"><label class="field-label">Groq API Key <span style="font-weight:400;opacity:.6">(fast helper for NPC analysis &amp; world building)</span></label><div class="pw-wrapper"><input class="field-input" id="k-groq" type="password"><button class="pw-toggle" data-target="k-groq">👁</button></div></div>
+      <div class="field"><label class="field-label">OpenRouter API Key <span style="font-weight:400;opacity:.6">(narrator fallbacks — free uncensored models)</span></label><div class="pw-wrapper"><input class="field-input" id="k-or" type="password"><button class="pw-toggle" data-target="k-or">👁</button></div></div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
-      <div class="field"><label class="field-label">Lorebook — world &amp; character facts sent every narrator prompt</label><textarea class="field-input field-textarea" id="k-lorebook" placeholder="e.g. Name: Rico Diaz, 18, male. Lives alone in Cavite..."></textarea></div>
+      <div class="field"><label class="field-label">Lorebook — world &amp; character facts sent every narrator prompt</label><textarea class="field-input field-textarea" id="k-lorebook" placeholder="Add context here..." style="min-height:80px"></textarea></div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Fallback Slots — 8 configurable cascade providers</div>
-      <div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.6">Each enabled slot becomes available as a fallback when the primary slot fails or refuses. Slot 1 has highest priority. Assign roles to control which call chains use each slot.</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.6">Each enabled slot becomes available as a fallback when the primary slot fails or refuses. Slot 1 has highest priority.</div>
       <div id="fallback-slots-list"></div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div class="field"><label class="field-label">Supabase URL</label><input class="field-input" id="k-sb-url" placeholder="https://xxx.supabase.co"></div>
       <div class="field"><label class="field-label">Supabase Anon Key</label><div class="pw-wrapper"><input class="field-input" id="k-sb-key" type="password" placeholder="eyJ..."><button class="pw-toggle" data-target="k-sb-key">👁</button></div></div>
-      <div class="field"><label class="field-label">Email (cross-device sync)</label><input class="field-input" id="k-email" type="email" placeholder="you@email.com"><button class="btn" id="btn-login-link" style="margin-top:6px;width:100%">Send Login Link →</button><div id="auth-status" style="font-size:10px;color:var(--dim);margin-top:4px"></div></div>
+      <div class="field"><label class="field-label">Email (cross-device sync)</label><input class="field-input" id="k-email" type="email" placeholder="you@email.com"><button class="btn" id="btn-login-link" style="margin-top:6px;width:100%">Send Login Link</button><div id="auth-status" style="font-size:10px;color:var(--dim);margin-top:4px"></div></div>
     </div>
     <div class="modal-footer">
       <button class="btn" id="btn-mcancel2">Cancel</button>
@@ -423,12 +420,12 @@
             </label>
             <label class="lb-radio-label" style="display:flex;gap:8px;align-items:flex-start;padding:7px 10px;border-radius:4px">
               <input type="radio" name="lb-mode" value="ai" style="margin-top:2px;flex-shrink:0">
-              <span><strong>AI Generates Everything</strong><span style="display:block;font-size:10px;color:var(--dim);margin-top:1px">Skip the lorebook — AI builds the world from your name, age, and sex alone</span></span>
+              <span><strong>AI Generates Everything</strong><span style="display:block;font-size:10px;color:var(--dim);margin-top:1px">Skip the lorebook — AI builds the world from your name, age, sex</span></span>
             </label>
           </div>
         </div>
-        <div id="lb-ai-notice" style="display:none;padding:12px;background:var(--acc2);border:1px solid var(--acc);border-radius:4px;font-size:12px;color:var(--dim);margin-bottom:10px;line-height:1.8">
-          ✦ The AI will invent your character's home, neighborhood, job or school, possessions, and starting relationships entirely from your name, age, and sex. You can always refine the world through the AI Console after the game starts.
+        <div id="lb-ai-notice" style="display:none;padding:12px;background:var(--acc2);border:1px solid var(--acc);border-radius:4px;font-size:12px;color:var(--dim);margin-bottom:10px;line-height:1.6">
+          ✦ The AI will invent your character's home, neighborhood, job or school, possessions, and starting relationships entirely from your name, age, and sex. You can always refine the world later.
         </div>
 
         <!-- Lorebook Builder (collapsible) -->
@@ -458,7 +455,7 @@
                 <label class="lb-radio-label"><input type="radio" name="lb-status" value="neither" checked> Neither</label>
               </div>
               <div id="lb-student-fields" style="display:none">
-                <div class="field"><label class="field-label">School name & grade / year level</label><input class="field-input" id="lb-school" placeholder="e.g. School name — Grade 12, HUMSS strand"></div>
+                <div class="field"><label class="field-label">School name & grade / year level</label><input class="field-input" id="lb-school" placeholder="e.g. School name — Grade 12, HUMSS"></div>
                 <div class="field"><label class="field-label">Schedule</label><input class="field-input" id="lb-school-sched" placeholder="e.g. Mon–Fri 7:30 AM – 4:00 PM"></div>
               </div>
               <div id="lb-work-fields" style="display:none">
@@ -473,19 +470,19 @@
                 <div class="field"><label class="field-label">Starting cash (₱)</label><input class="field-input" id="lb-cash" type="number" placeholder="How much money do you have?"></div>
                 <div class="field"><label class="field-label">Language(s) spoken</label><input class="field-input" id="lb-lang" placeholder="e.g. Filipino, English"></div>
               </div>
-              <div class="field"><label class="field-label">Key possessions (separate with commas)</label><input class="field-input" id="lb-possessions" placeholder="e.g. old phone, bicycle, laptop..."></div>
+              <div class="field"><label class="field-label">Key possessions (separate with commas)</label><input class="field-input" id="lb-possessions" placeholder="e.g. old phone, bicycle, laptop"></div>
             </div>
 
             <div class="lb-section">
               <div class="lb-section-title">People in Your Life</div>
-              <div style="font-size:10px;color:var(--dim);margin-bottom:7px;line-height:1.6">Family, friends, romantic partners, roommates, coworkers, rivals — anyone who matters. Include their relationship to you and any important context.</div>
+              <div style="font-size:10px;color:var(--dim);margin-bottom:7px;line-height:1.6">Family, friends, romantic partners, roommates, coworkers, rivals — anyone who matters.</div>
               <div id="lb-npc-list"></div>
               <button class="btn" id="lb-add-npc" style="width:100%;margin-top:4px;font-size:11px">+ Add Person</button>
             </div>
 
             <div class="lb-section">
               <div class="lb-section-title">Background & Additional Context</div>
-              <div style="font-size:10px;color:var(--dim);margin-bottom:6px;line-height:1.6">Personality, backstory, habits, health conditions, relationship history, recent events, goals, secrets, anything the AI should know that doesn't fit above.</div>
+              <div style="font-size:10px;color:var(--dim);margin-bottom:6px;line-height:1.6">Personality, backstory, habits, health conditions, goals, secrets — anything you want the AI to know.</div>
               <textarea class="field-input" id="lb-notes" style="min-height:60px;resize:vertical;font-size:12px" placeholder="Write freely here — this is added verbatim to the lorebook."></textarea>
             </div>
 
@@ -496,7 +493,7 @@
         <!-- Final editable lorebook -->
         <div class="field" id="w-lorebook-wrap" style="margin-top:10px">
           <label class="field-label">Lorebook — the AI reads this every turn. Edit freely.</label>
-          <textarea class="field-input field-textarea" id="w-lorebook" style="min-height:160px" placeholder="Describe your character, their world, situation, and the people in their life. The more detail you provide here, the more grounded and consistent the simulation will be. You can use the builder above or write freely."></textarea>
+          <textarea class="field-input field-textarea" id="w-lorebook" style="min-height:160px" placeholder="Describe your character, their world, situation, and the people in their life..."></textarea>
         </div>
       </div>
       <!-- Step 3: Init loading -->
@@ -538,612 +535,14 @@
   </div>
 </div>
 
+<!-- ── EXTERNAL LIBRARY: Supabase ─────────────────────────────────────────── -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script type="module">
-import { loadWorldState, saveWorldState, createInitialWorldState,
-         createNewSaveSlot, listSaves, deleteSave,
-         assembleTurnBrief, appendSignificantEvent, updateEventIndex, logEvent,
-         saveNarration, loadNarrations, savePlayerAction, loadPlayerActions,
-         setSupabaseClient, saveWorldStateCloud, loadWorldStateCloud,
-         getCurrentSaveId, saveConsoleMessage, loadConsoleHistory,
-         saveImage, loadImage, loadAllImages,
-         addDebt, payDebt, computeFameTier, updateFame, FAME_TIERS,
-         exportNpc, exportWorldSummary, exportLorebook,
-         exportPatchAuditLog, savePatchAuditEntry, saveClassifierOutput,
-         exportClassifierHistory } from './state.js';
-import { applyDecay, applyDeltas, advanceTime, formatTimestamp,
-         rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION,
-         applyCascadingEffects, computeCharacterEmotions, applyCascadeEffectsToExternal,
-         getCircadianModifiers, getSleepEfficiency } from './engine.js';
-import { routeInput, isExplicit, classifyExplicitActivity,
-         EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE,
-         hasThirdPartyPresence } from './sanitizer.js';
-import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversationHistory,
-         callGeminiAutopilot, compressSessionContext, parseLorebookToWorldState,
-         buildWorldWithMultipleAIs, evaluateDescribedNpc,
-         enrichWorldDetails, evaluateNpcFlagsInContext, callMetaConsole,
-         extractNarrativeStateChanges, extractSceneContext, compressLorebook } from './api.js';
-import { renderNpcPanel, renderJobPanel,
-         renderPossessionsPanel, renderNarration, renderTurnAnchor, renderChallengesPanel,
-         livesWithPlayer, getSmartNpcLabel } from './renderer.js';
-import { checkWorldEvents, checkNpcEvents, applyEventEffect, applyNpcEventEffect,
-         progressDiseases, progressNpcDiseases, checkDiseaseContraction, checkNpcDiseaseSpread,
-         calculateAlcoholEffect, getIntoxicationLevel, tickSchoolSuspension,
-         tickDebts, tickAddictions, feedAddiction, addAddiction,
-         addCrime, decreaseWantedLevel,
-         runSimulationDirector, GSD_INTERVAL } from './events.js';
-import { challengeFromDisease, challengeFromNpcEvent, challengeFromWorldEvent,
-         challengeFromHangover, checkChallengeResolution,
-         challengeFromDebt, challengeFromCrime, challengeFromAddiction,
-         challengeFromScandal, challengeFromLoanShark } from './challenges.js';
-import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
-         buildNpcContextForGemini, applyRelationshipDelta, createNpc,
-         driftTraits, getNpcCurrentTask, updateNpcCareer } from './npc.js';
-import { detectProvider, getProviderDisplayName, fetchModels, dispatchChat as _providerDispatchChat } from './providers.js';
 
-// ── New split modules ──────────────────────────────────────────────────────────
-import S from './gameState.js';
-import { _applySimPatch, _resolveNpcPatchKey, _resolveEnrichmentKey,
-         _tryParsePatchJson, _extractAndApplyStateChange, validatePatch } from './patch.js';
-import { setStatus, setProcessing, renderAll, renderCenterStats,
-         renderSchedulePanel, buildCharacterOverview, renderActionLog,
-         openCharModal, openNpcModal, runIntegrityCheck,
-         showChallengeQueue } from './uiCore.js';
-import { initWizard, startNewGame } from './wizard.js';
-import { initSettings, initSupabaseAuth, initLoadModal } from './settingsUI.js';
-import { initConsoleUI, sendConsoleMessage, loadConsoleHistoryForCurrentSave,
-         appendConsoleMsg } from './consoleUI.js';
-import { initDevConsole } from './devConsoleUI.js';
-import { initImageUpload, loadImageCache, showCameraFlash } from './imageUpload.js';
+<!-- ── BOOT: devlog must load first (non-module) ──────────────────────────── -->
+<script src="devlog.js"></script>
 
-// ── Boot init ─────────────────────────────────────────────────────────────────
-let _processTurnCounter = 0;
+<!-- ── MAIN APPLICATION ENTRY POINT (ES Module) ──────────────────────────── -->
+<script type="module" src="main.js"></script>
 
-// ── PANEL NAVIGATION ──────────────────────────────────────────────────────────
-let currentPanel = 'center';
-let _tx = 0, _ty = 0, _tt = 0;
-let _panelLock = false;
-
-function showPanel(p) {
-  currentPanel = p; _panelLock = true;
-  const w = document.getElementById('panels-wrapper');
-  w.className = p === 'left' ? 'show-left' : p === 'right' ? 'show-right' : 'show-center';
-  setTimeout(() => { _panelLock = false; }, 400);
-}
-document.querySelectorAll('.panel-back').forEach(btn => {
-  btn.addEventListener('click', () => showPanel(btn.dataset.target));
-});
-document.addEventListener('touchstart', e => { _tx = e.touches[0].clientX; _ty = e.touches[0].clientY; _tt = Date.now(); }, { passive: true });
-document.addEventListener('touchend', e => {
-  if (_panelLock) return;
-  if (document.querySelector('.modal-overlay.open')) return;
-  if (document.getElementById('menu-drawer').classList.contains('open')) return;
-  const dx = e.changedTouches[0].clientX - _tx;
-  const dy = e.changedTouches[0].clientY - _ty;
-  if (Math.abs(dy) > Math.abs(dx) * 1.2 || Math.abs(dx) < 50 || Date.now() - _tt > 500) return;
-  if (dx < 0) { if (currentPanel === 'left') showPanel('center'); else if (currentPanel === 'center') showPanel('right'); }
-  else        { if (currentPanel === 'right') showPanel('center'); else if (currentPanel === 'center') showPanel('left'); }
-}, { passive: true });
-
-// ── MENU ───────────────────────────────────────────────────────────────────────
-function openMenu()  { document.getElementById('menu-overlay').classList.add('open');    document.getElementById('menu-drawer').classList.add('open'); }
-function closeMenu() { document.getElementById('menu-overlay').classList.remove('open'); document.getElementById('menu-drawer').classList.remove('open'); }
-document.getElementById('menu-btn').addEventListener('click', openMenu);
-document.getElementById('menu-overlay').addEventListener('click', closeMenu);
-
-// ── THEME ──────────────────────────────────────────────────────────────────────
-let isDark = localStorage.getItem('theme') !== 'light';
-function applyTheme(dark) {
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  document.getElementById('theme-tog').classList.toggle('on', !dark);
-  localStorage.setItem('theme', dark ? 'dark' : 'light');
-}
-applyTheme(isDark);
-document.getElementById('btn-theme').addEventListener('click', () => { isDark = !isDark; applyTheme(isDark); });
-
-// ── TABS ───────────────────────────────────────────────────────────────────────
-document.querySelectorAll('.p-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.p-tab').forEach(t => t.classList.remove('on'));
-    document.querySelectorAll('.panel-section').forEach(p => p.classList.remove('on'));
-    tab.classList.add('on');
-    document.getElementById(`p-${tab.dataset.p}`).classList.add('on');
-    if (tab.dataset.p === 'log') renderActionLog(showPanel);
-  });
-});
-document.getElementById('btn-logs').addEventListener('click', () => {
-  closeMenu(); showPanel('left');
-  document.querySelectorAll('.p-tab').forEach(t => t.classList.remove('on'));
-  document.querySelectorAll('.panel-section').forEach(p => p.classList.remove('on'));
-  const lt = document.querySelector('.p-tab[data-p="log"]');
-  if (lt) { lt.classList.add('on'); document.getElementById('p-log').classList.add('on'); }
-  renderActionLog(showPanel);
-});
-
-// ── CHAR / NPC MODALS ──────────────────────────────────────────────────────────
-document.getElementById('char-avatar').addEventListener('click', openCharModal);
-document.getElementById('btn-char-close').addEventListener('click', () => document.getElementById('modal-char').classList.remove('open'));
-document.getElementById('modal-char').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('open'); });
-document.getElementById('npc-cards').addEventListener('click', e => { const btn = e.target.closest('.npc-detail-btn'); if (btn && S.WS) openNpcModal(btn.dataset.id); });
-document.getElementById('btn-npc-close').addEventListener('click', () => document.getElementById('modal-npc').classList.remove('open'));
-document.getElementById('modal-npc').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('open'); });
-
-// ── SCHEDULE MISS DETECTION ────────────────────────────────────────────────────
-function _parseMissEndHour(schedStr, fallback) {
-  if (!schedStr) return fallback;
-  const m = schedStr.match(/[-–]\s*(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i); if (!m) return fallback;
-  let h = parseInt(m[1]); const mn = m[2] ? parseInt(m[2]) : 0; const ap = m[3]?.toUpperCase();
-  if (ap === 'PM' && h < 12) h += 12; if (ap === 'AM' && h === 12) h = 0;
-  return h + mn / 60;
-}
-function detectScheduleMiss(prevIso, newIso, playerAction, ws) {
-  const prev = new Date(prevIso); const next = new Date(newIso); const missed = [];
-  if (ws.school?.status === 'active') {
-    const schoolAction = /\b(school|class|attend|lecture|go\s*to\s*school|pasok|eskwela)\b/i.test(playerAction);
-    if (!schoolAction) {
-      const endH = _parseMissEndHour(ws.school.schedule, 16);
-      const d = new Date(prev); d.setHours(0,0,0,0); const last = new Date(next); last.setHours(0,0,0,0);
-      while (d <= last) { const dow = d.getDay(); if (dow >= 1 && dow <= 5) { const end = new Date(d); end.setHours(endH,0,0,0); if (prev < end && next >= end) missed.push({ type: 'school' }); } d.setDate(d.getDate()+1); }
-    }
-  }
-  if (ws.job?.employer && ws.job?.schedule) {
-    const workAction = /\b(work|shift|clocked?\s*(in|out)|go\s*to\s*work|office|overtime)\b/i.test(playerAction);
-    if (!workAction) {
-      const endH = _parseMissEndHour(ws.job.schedule, 17);
-      const d = new Date(prev); d.setHours(0,0,0,0); const last = new Date(next); last.setHours(0,0,0,0);
-      while (d <= last) { const dow = d.getDay(); if (dow >= 1 && dow <= 5) { const end = new Date(d); end.setHours(endH,0,0,0); if (prev < end && next >= end) missed.push({ type: 'job' }); } d.setDate(d.getDate()+1); }
-    }
-  }
-  return missed;
-}
-
-// ── DEATH: POV SHIFT ──────────────────────────────────────────────────────────
-async function _handleDeath(deathProse) {
-  if (!S.WS) return;
-  window._devlog?.system('DEATH: initiating POV shift');
-  const _candidates = Object.values(S.WS.npcs).filter(n => n.status === 'active' && n.significance >= 1).sort((a,b) => b.significance - a.significance || b.relationship_meter - a.relationship_meter);
-  const _successor = _candidates[0] ?? null;
-  if (!_successor) { setStatus('☠ Character has died. No active characters remain — game over.', 'err'); return; }
-  const _deceasedName = S.WS.player.name ?? 'the previous character';
-  setStatus(`☠ Generating post-death summary... POV shifts to ${_successor.name}.`, 'err');
-  let legacyProse = '';
-  try {
-    const _lb = assembleTurnBrief(S.WS, { turnNumber: S.WS.turn, simTime: S.WS.sim_time, location: S.WS.player.location, actionDescription: '[death_legacy]', statDeltas: {}, riskResult: null, consequenceUpdate: null, npcReactions: [], turnClass: 'DEATH', isExplicit: false, rawInput: `[${_deceasedName} has died. ${_successor.name} will carry the story forward.]` });
-    legacyProse = await callGrok({ ..._lb, successor_npc: { name: _successor.name, relationship: _successor.relationship_type ?? _successor.npc_class } }, 'legacy', { isDeath: true, isCrisis: true });
-  } catch { legacyProse = `${_deceasedName} is gone. The world moves on. ${_successor.name} is left to carry what remains.`; }
-  const _la = renderTurnAnchor(S.WS.turn, S.WS.sim_time, S.WS.player.location);
-  renderNarration(legacyProse, _la, document.getElementById('feed'), S.WS.turn);
-  document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior: 'smooth' });
-  const _deadId = `${_deceasedName.toLowerCase().replace(/\s+/g,'_')}_deceased`;
-  S.WS.npcs[_deadId] = { id: _deadId, name: _deceasedName, age: S.WS.player.age ?? 18, npc_class: 'household', relationship_type: 'deceased_player', status: 'inactive', departure_reason: 'deceased', significance: 3, relationship_meter: 0, trust_meter: 0, traits: {}, active_flags: [], flag_timers: {}, recent_interactions: [`Died on turn ${S.WS.turn}`], schedule: { weekday_routine: [], weekend_routine: [], interruptions: [] } };
-  delete S.WS.npcs[_successor.id];
-  S.WS.player = { name: _successor.name, age: _successor.age ?? 20, sex: _successor.sex ?? (S.WS.player.sex ?? 'unknown'), location: S.WS.player.location, stats: { health: 75, energy: 65, hunger: 30, hygiene: 65, mood: 35, arousal: 0, social: 50, reputation: Math.max(10, Math.min(60, Math.round((_successor.relationship_meter + 100) / 3.33))), alcohol: 0 }, cash: 200, skills: {}, habits: [], irreversible: [], possessions: [], diseases: [], alcohol_tolerance: 0 };
-  S.WS.challenges = []; S.WS.consequences = [];
-  S.WS.last_narration_prose = legacyProse; S.WS.session_context_flavor = '';
-  S.WS.recent_significant_events = [`${_successor.name} takes over after ${_deceasedName} died on turn ${S.WS.turn}`];
-  S.WS.turn += 1;
-  await saveWorldState(S.WS); await saveNarration(S.WS.turn, S.WS.sim_time, S.WS.player.location, legacyProse);
-  renderAll(); resetConvId();
-  setTimeout(async () => {
-    try {
-      const _ib = assembleTurnBrief(S.WS, { turnNumber: S.WS.turn + 1, simTime: S.WS.sim_time, location: S.WS.player.location, actionDescription: '[pov_shift_start]', statDeltas: {}, riskResult: null, consequenceUpdate: null, npcReactions: [], turnClass: 'NOTABLE', isExplicit: false, rawInput: `[Begin playing as ${S.WS.player.name}, reacting to the recent death of ${_deceasedName}]` });
-      const _ip = await callGrok(_ib, 'pov_shift', { isDeath: true, isCrisis: true });
-      S.WS.turn += 1; S.WS.last_narration_prose = _ip;
-      const _ia = renderTurnAnchor(S.WS.turn, S.WS.sim_time, S.WS.player.location);
-      renderNarration(_ip, _ia, document.getElementById('feed'), S.WS.turn);
-      document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior: 'smooth' });
-      await saveWorldState(S.WS); await saveNarration(S.WS.turn, S.WS.sim_time, S.WS.player.location, _ip);
-      renderAll(); setStatus(`${S.WS.player.name} — Turn ${S.WS.turn}`);
-    } catch { setStatus(`${S.WS.player.name} — Continue.`); }
-    document.getElementById('submit-btn').disabled = false;
-    document.getElementById('action-input').disabled = false;
-    setProcessing(false);
-  }, 800);
-}
-
-// ── PROCESS TURN ───────────────────────────────────────────────────────────────
-function autopilotHours(i) { if (/sleep|nap/i.test(i)) return 7; if (/commute/i.test(i)) return 1; if (/shift|work\s*day/i.test(i)) return 8; return 1; }
-function autopilotDeltas(i, h) { if (/sleep|nap/i.test(i)) return { energy: Math.min(h*8,80), mood: Math.min(h*3,30) }; return { energy: -(h*4) }; }
-
-async function processTurn(input) {
-  if (!S.WS) { alert('Start a new game first.'); return; }
-  const _turnToken = ++_processTurnCounter;
-  setStatus('Processing…', 'load'); setProcessing(true);
-  let _turnCommitted = false;
-  try {
-    let ws = JSON.parse(JSON.stringify(S.WS));
-    let statDeltas={}, relDeltas={}, timeCost=0.25, locationChange=null, npcReactions=[];
-    let riskResult={roll:100,severity:null,event:null}, consequenceUpd=null;
-    let actionDesc = input;
-    let _mentionedNpc = null;
-    let _p1ShouldDetectNpc = false;
-    let _cls2Result = null;
-    let route = routeInput(input);
-    if (route === ROUTE.PATH_1_EXPLICIT && localStorage.getItem('CONTENT_MODE') === 'filtered') {
-      route = ROUTE.PATH_3_AUTOPILOT;
-      setStatus('Explicit content is off — action processed as time skip.', 'load');
-    }
-    window._devlog?.system(`processTurn start T${(S.WS?.turn??0)+1}`, { input: input.slice(0,80), route });
-
-    if (route === ROUTE.PATH_1_EXPLICIT) {
-      let type = classifyExplicitActivity(input);
-      const NEEDS_PARTNER = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
-      const hasActiveNpc  = Object.values(ws.npcs).some(n => n.status==='active' && n.significance>=1);
-      const thirdParty    = hasThirdPartyPresence(input);
-      if (NEEDS_PARTNER.includes(type) && !hasActiveNpc && !thirdParty) type = 'solo_masturbation';
-      statDeltas = { ...(EXPLICIT_ACTIVITY_TABLE[type] ?? {}) };
-      const compound = extractCompoundContext(input);
-      if (compound.ate) { statDeltas.hunger=(statDeltas.hunger??0)-30; statDeltas.mood=(statDeltas.mood??0)+5; }
-      if (compound.location_hint) locationChange = compound.location_hint;
-      timeCost = 0.5;
-      const _inputLower = input.toLowerCase();
-      const _possNpc = Object.values(ws.npcs).find(n => n.status === 'active' && n.name && _inputLower.includes(n.name.toLowerCase() + "'s"));
-      let _closestNpc = null, _minVerbDist = Infinity;
-      if (!_possNpc) {
-        const _aVerbs = ['jerk','stroke','finger','suck','blow','fuck','ride','mount','massage','grab','lick','eat','penetrat','makeout','rub','squeeze','pump','touch'];
-        for (const _cn of Object.values(ws.npcs)) {
-          if (_cn.status !== 'active' || !_cn.name) continue;
-          const _ni = _inputLower.indexOf(_cn.name.toLowerCase()); if (_ni === -1) continue;
-          for (const _vb of _aVerbs) { const _vi = _inputLower.indexOf(_vb); if (_vi === -1) continue; const _d = Math.abs(_ni - _vi); if (_d < _minVerbDist) { _minVerbDist = _d; _closestNpc = _cn; } }
-        }
-      }
-      _mentionedNpc = _possNpc ?? _closestNpc ?? Object.values(ws.npcs).find(n => n.status === 'active' && n.name && _inputLower.includes(n.name.toLowerCase()));
-      const _bystanders = Object.values(ws.npcs).filter(n => n.status === 'active' && n.name && input.toLowerCase().includes(n.name.toLowerCase()) && n.id !== _mentionedNpc?.id).map(n => { const _bt = getNpcCurrentTask(n, ws.sim_time); return `${n.name} (${_bt.task.replace(/_/g,' ')} — bystander)`; });
-      const _bystanderNote = _bystanders.length ? ` — others present but uninvolved: ${_bystanders.join('; ')}` : '';
-      const partnerTag = (thirdParty && NEEDS_PARTNER.includes(type)) ? ` — described partner in scene${_mentionedNpc ? ': ' + _mentionedNpc.name : ''}` : (!hasActiveNpc && !thirdParty ? ' — no established partner' : '');
-      actionDesc = `[explicit: ${type}${partnerTag}${_bystanderNote}]` + (compound.ate ? ' + ate' : '');
-      if (thirdParty && !hasActiveNpc && NEEDS_PARTNER.includes(type)) {
-        evaluateDescribedNpc(input).then(nd => {
-          if (_turnToken !== _processTurnCounter) return;
-          const _exists = Object.values(S.WS?.npcs ?? {}).some(n => n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim());
-          const _NH = ['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf'];
-          const _human = nd?.name && /^[A-Z]/.test(nd.name) && nd.name.split(/\s+/).length <= 3 && nd.name.length <= 28 && !_NH.some(w => nd.name.toLowerCase().includes(w));
-          if (nd?.id && !S.WS?.npcs?.[nd.id] && !_exists && _human && nd.significance !== 'none') {
-            const newNpc = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} });
-            newNpc.relationship_meter = nd.relationship_meter ?? 20; newNpc.trust_meter = nd.trust_meter ?? 10; newNpc.significance = 1;
-            S.WS.npcs[nd.id] = newNpc; saveWorldState(S.WS).catch(() => {}); renderAll();
-          }
-        }).catch(() => {});
-      }
-      riskResult = rollRisk('low', ws.player.stats);
-    }
-    else if (route === ROUTE.PATH_2_NOVEL) {
-      const safe = sanitizeStateForGemini(ws);
-      const cls  = await classifyAction(input, safe);
-      _cls2Result = cls;
-      window._devlog?.turn('Gemini classify result', { action_type: cls.action_type, time_cost_hours: cls.time_cost_hours, risk_class: cls.risk_class, stat_deltas: cls.stat_deltas, npc_ids: cls.npc_ids_involved });
-      saveClassifierOutput(ws.turn + 1, ws.sim_time, _cls2Result).catch(() => {});
-      statDeltas=cls.stat_deltas??{}; timeCost=Math.min(Math.max(cls.time_cost_hours??0.25, 0.08), 4.0);
-      locationChange=cls.location_change??null; actionDesc=`[${cls.action_type??'action'}]`;
-      riskResult=rollRisk(cls.risk_class??'none', ws.player.stats);
-      for (const npcId of (cls.npc_ids_involved??[])) {
-        if (!ws.npcs[npcId]) continue;
-        const ctx = buildNpcContextForGemini(ws.npcs[npcId], ws.sim_time);
-        const rxn = await evaluateNpcReaction(ctx, input, ws.player.stats).catch(()=>null);
-        if (!rxn) continue;
-        window._devlog?.npc(`${ws.npcs[npcId].name} reacted`, { rel_delta: rxn.relationship_delta, trust_delta: rxn.trust_delta, summary: rxn.reaction_summary });
-        ws.npcs[npcId] = applyRelationshipDelta(ws.npcs[npcId], rxn.relationship_delta??0, rxn.trust_delta??null);
-        for (const f of rxn.flags_to_add??[]) ws.npcs[npcId] = addFlag(ws.npcs[npcId], f.flag, FLAG_DECAY[f.decay_rate]??FLAG_DECAY.medium);
-        ws.npcs[npcId] = incrementSignificance(ws.npcs[npcId]);
-        relDeltas[npcId] = rxn.relationship_delta ?? 0;
-        npcReactions.push({ npc_id: npcId, summary: rxn.reaction_summary });
-        ws.npcs[npcId]._hidden = ws.npcs[npcId]._hidden ?? {};
-        ws.npcs[npcId]._hidden.last_interaction_turn = ws.turn;
-        const _rd = rxn.relationship_delta ?? 0, _td2 = rxn.trust_delta ?? 0;
-        if (_rd <= -8)  ws.npcs[npcId] = driftTraits(ws.npcs[npcId], { mistreated: true });
-        else if (_td2 >= 8) ws.npcs[npcId] = driftTraits(ws.npcs[npcId], { deepTrust: true });
-        else if (_rd >= 5 && ws.npcs[npcId].relationship_meter >= 35) ws.npcs[npcId] = driftTraits(ws.npcs[npcId], { consistent_positive: true });
-        if (_rd <= -15) ws.npcs[npcId] = driftTraits(ws.npcs[npcId], { betrayed: true });
-        if (rxn.reaction_summary) { const ri = ws.npcs[npcId].recent_interactions ?? []; ws.npcs[npcId].recent_interactions = [...ri, rxn.reaction_summary].slice(-5); }
-      }
-      if (Array.isArray(cls.future_plans) && cls.future_plans.length) {
-        const _planBase = ws.sim_time;
-        for (const plan of cls.future_plans) {
-          if (!ws.npcs[plan.npc_id] || !(plan.offset_hours > 0) || !(plan.duration_hours > 0)) continue;
-          const _ps = advanceTime(_planBase, plan.offset_hours).toISOString();
-          const _pe = advanceTime(_planBase, plan.offset_hours + plan.duration_hours).toISOString();
-          ws.npcs[plan.npc_id].schedule = ws.npcs[plan.npc_id].schedule ?? { weekday_routine: [], weekend_routine: [], interruptions: [] };
-          ws.npcs[plan.npc_id].schedule.interruptions = ws.npcs[plan.npc_id].schedule.interruptions ?? [];
-          const _pS = new Date(_ps).getTime(), _pE = new Date(_pe).getTime();
-          const _noOv = (ws.npcs[plan.npc_id].schedule.interruptions ?? []).every(ex => { const eS = new Date(ex.start).getTime(), eE = new Date(ex.end).getTime(); return _pE <= eS || _pS >= eE; });
-          if (_noOv) { ws.npcs[plan.npc_id].schedule.interruptions.push({ start: _ps, end: _pe, task: plan.task ?? 'outing with player', interruptible: false, available: true, location: plan.location ?? 'outside', note: `Planned with player — turn ${ws.turn}` }); }
-        }
-      }
-    }
-    else { timeCost=autopilotHours(input); statDeltas=autopilotDeltas(input,timeCost); actionDesc='[autopilot]'; }
-
-    if (route === ROUTE.PATH_1_EXPLICIT) {
-      const _EXP_PARTNER_TYPES = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
-      const _explicitType = actionDesc.match(/\[explicit:\s*(\w+)/)?.[1] ?? '';
-      if (_EXP_PARTNER_TYPES.includes(_explicitType) && !actionDesc.includes('no established partner')) {
-        const _targetNpc = _mentionedNpc ?? Object.values(ws.npcs).find(n => n.status === 'active' && n.significance >= 1);
-        if (_targetNpc && ws.npcs[_targetNpc.id]) {
-          try {
-            const _expCtx = buildNpcContextForGemini(_targetNpc, ws.sim_time);
-            const _expRxn = await evaluateNpcReaction(_expCtx, `[explicit: ${_explicitType}] — player performs this with ${_targetNpc.name}`, ws.player.stats);
-            if (_expRxn) {
-              ws.npcs[_targetNpc.id] = applyRelationshipDelta(ws.npcs[_targetNpc.id], _expRxn.relationship_delta ?? 0, _expRxn.trust_delta ?? null);
-              for (const f of _expRxn.flags_to_add ?? []) ws.npcs[_targetNpc.id] = addFlag(ws.npcs[_targetNpc.id], f.flag, FLAG_DECAY[f.decay_rate] ?? FLAG_DECAY.medium);
-              ws.npcs[_targetNpc.id] = incrementSignificance(ws.npcs[_targetNpc.id]);
-              relDeltas[_targetNpc.id] = _expRxn.relationship_delta ?? 0;
-              if (_expRxn.reaction_summary) { npcReactions.push({ npc_id: _targetNpc.id, summary: _expRxn.reaction_summary }); ws.npcs[_targetNpc.id]._hidden = ws.npcs[_targetNpc.id]._hidden ?? {}; ws.npcs[_targetNpc.id]._hidden.last_interaction_turn = ws.turn; const _ri = ws.npcs[_targetNpc.id].recent_interactions ?? []; ws.npcs[_targetNpc.id].recent_interactions = [..._ri, _expRxn.reaction_summary].slice(-5); }
-              if ((_expRxn.relationship_delta ?? 0) <= -5) ws.npcs[_targetNpc.id] = driftTraits(ws.npcs[_targetNpc.id], { mistreated: true });
-              else if ((_expRxn.trust_delta ?? 0) >= 6) ws.npcs[_targetNpc.id] = driftTraits(ws.npcs[_targetNpc.id], { deepTrust: true });
-            }
-          } catch { const _ri = ws.npcs[_targetNpc.id].recent_interactions ?? []; ws.npcs[_targetNpc.id] = { ...ws.npcs[_targetNpc.id], recent_interactions: [..._ri, `Intimate encounter — turn ${ws.turn + 1}`].slice(-5) }; }
-        }
-      }
-    }
-
-    const prevSimTime = ws.sim_time;
-    if (route === ROUTE.PATH_3_AUTOPILOT && /sleep|nap/i.test(input)) {
-      const _sH = new Date(prevSimTime).getHours(); const _eff = getSleepEfficiency(_sH);
-      statDeltas.energy = Math.round(Math.min(timeCost * 9 * _eff, 90));
-      statDeltas.mood   = Math.round(Math.min(timeCost * 3 * _eff, 35));
-      statDeltas.health = (statDeltas.health ?? 0) + Math.round(timeCost * 0.4 * _eff);
-    }
-    ws.sim_time = advanceTime(ws.sim_time, timeCost).toISOString();
-    if (route === ROUTE.PATH_1_EXPLICIT && _mentionedNpc && ws.npcs[_mentionedNpc.id]) {
-      ws.npcs[_mentionedNpc.id].schedule = ws.npcs[_mentionedNpc.id].schedule ?? { weekday_routine: [], weekend_routine: [], interruptions: [] };
-      ws.npcs[_mentionedNpc.id].schedule.interruptions = ws.npcs[_mentionedNpc.id].schedule.interruptions ?? [];
-      const _intS = new Date(prevSimTime).getTime(); const _intE = new Date(ws.sim_time).getTime();
-      const _noOv = ws.npcs[_mentionedNpc.id].schedule.interruptions.every(ex => { const eS = new Date(ex.start).getTime(), eE = new Date(ex.end).getTime(); return _intE <= eS || _intS >= eE; });
-      if (_noOv) ws.npcs[_mentionedNpc.id].schedule.interruptions.push({ start: prevSimTime, end: ws.sim_time, task: 'with_player', interruptible: false, available: true, location: 'with_player', note: `Explicit scene — turn ${ws.turn + 1}` });
-    }
-    ws.player.stats = applyDecay(ws.player.stats, timeCost);
-    const _circ = getCircadianModifiers(ws.sim_time); const _cScale = Math.min(timeCost, 3) * 0.25;
-    ws.player.stats.energy = Math.max(0, Math.min(100, ws.player.stats.energy + _circ.energy * _cScale));
-    ws.player.stats.mood   = Math.max(0, Math.min(100, ws.player.stats.mood   + _circ.mood   * _cScale));
-    const missedSchedule = detectScheduleMiss(prevSimTime, ws.sim_time, input, ws);
-    for (const miss of missedSchedule) {
-      if (miss.type === 'school' && ws.school) { ws.school.absence_count = (ws.school.absence_count ?? 0) + 1; const n = ws.school.absence_count; statDeltas.mood = (statDeltas.mood ?? 0) + Math.max(-20, -(4 + n*3)); statDeltas.reputation = (statDeltas.reputation ?? 0) - (n > 2 ? 3 : 1); await logEvent({ turn: ws.turn, category: 'schedule_miss', description: `Missed school — ${n} total absence${n>1?'s':''}` }); }
-      if (miss.type === 'job' && ws.job) { ws.job.absent_count = (ws.job.absent_count ?? 0) + 1; const n = ws.job.absent_count; statDeltas.mood = (statDeltas.mood ?? 0) + Math.max(-15, -(3 + n*2)); statDeltas.reputation = (statDeltas.reputation ?? 0) - (n > 1 ? 2 : 1); if (n >= 3 && ws.job.performance_flags) ws.job.performance_flags = [...new Set([...ws.job.performance_flags, 'poor_attendance'])]; await logEvent({ turn: ws.turn, category: 'schedule_miss', description: `Missed work — ${n} total absence${n>1?'s':''}` }); }
-    }
-    ws.player.stats = applyDeltas(ws.player.stats, statDeltas);
-    ws.player.stats = applyCascadingEffects(ws.player.stats);
-    window._devlog?.stat(`T${ws.turn+1} stats post-cascade`, { ...ws.player.stats });
-    const _CASC = new Set(['too_sick_to_work','too_sick_to_attend','reduced_performance_health','exhausted_at_work','exhausted_at_school','low_energy_performance','severely_depressed','depressed_performance','excellent_mood','poor_hygiene','below_average_hygiene','poor_reputation','excellent_reputation']);
-    if (ws.job)    ws.job.performance_flags    = (ws.job.performance_flags    || []).filter(f => !_CASC.has(f));
-    if (ws.school) ws.school.performance_flags = (ws.school.performance_flags || []).filter(f => !_CASC.has(f));
-    const cascadeEffects = applyCascadeEffectsToExternal(ws.player.stats, ws.job, ws.school, ws.npcs);
-    if (ws.job    && cascadeEffects.jobPerformance.length   > 0) ws.job.performance_flags    = [...new Set([...(ws.job.performance_flags    || []), ...cascadeEffects.jobPerformance])];
-    if (ws.school && cascadeEffects.schoolPerformance.length > 0) ws.school.performance_flags = [...new Set([...(ws.school.performance_flags || []), ...cascadeEffects.schoolPerformance])];
-    if (locationChange) ws.player.location = locationChange;
-    ws = tickSchoolSuspension(ws); ws = tickDebts(ws); ws = tickAddictions(ws); ws = updateFame(ws);
-    let _directorEvents = [];
-    if (ws.turn % GSD_INTERVAL === 0) { const { worldState: _wsGSD, directorEvents: _de } = runSimulationDirector(ws); ws = _wsGSD; _directorEvents = _de; for (const de of _de) { window._devlog?.system(`GSD: ${de.type}`, { desc: de.description, severity: de.severity }); if (!de.hidden) ws = appendSignificantEvent(ws, `[Director] ${de.description}`); } }
-    if (route === ROUTE.PATH_2_NOVEL && _cls2Result?.alcohol_consumed?.detected) ws = feedAddiction(ws, 'alcohol');
-    if ((ws.fame?.level ?? 0) >= 4 && Math.random() < 0.15) setTimeout(showCameraFlash, Math.random() * 3000 + 500);
-    if (ws.school?.status === 'active') { const _sdDow = new Date(ws.sim_time).getDay(); if (_sdDow >= 1 && _sdDow <= 5 && timeCost >= 0.5) ws.school.days_enrolled = (ws.school.days_enrolled ?? 0) + Math.min(1, timeCost / 6); }
-    if (route === ROUTE.PATH_2_NOVEL && _cls2Result?.alcohol_consumed?.detected && _cls2Result.alcohol_consumed.drink_type !== 'none') { const alcoholInc = calculateAlcoholEffect(_cls2Result.alcohol_consumed.drink_type, ws.player) * (_cls2Result.alcohol_consumed.quantity ?? 1); ws.player.stats.alcohol = Math.min(100, (ws.player.stats.alcohol ?? 0) + alcoholInc); if ((ws.player.stats.alcohol ?? 0) > 20) ws.player.alcohol_tolerance = Math.min(100, (ws.player.alcohol_tolerance ?? 0) + 0.5); }
-    let hangoverChallengePending = null;
-    if (route === ROUTE.PATH_3_AUTOPILOT && /sleep|nap/i.test(input)) { if ((ws.player.stats.alcohol ?? 0) > 30 && !(ws.player.diseases ?? []).some(d => d.id === 'hangover')) { const hangoverDisease = { id: 'hangover', name: 'Hangover', severity: 'minor', duration_remaining: 2, cause: 'heavy drinking', per_turn_effects: { health: -2, energy: -15, mood: -20, hygiene: -3 }, resolution: 'Rest and hydrate.', challenge_title: 'Nursing a Hangover', challenge_effects_text: 'Energy -15, Mood -20 per turn.' }; ws.player.diseases = [...(ws.player.diseases ?? []), hangoverDisease]; hangoverChallengePending = challengeFromHangover(ws.turn + 1); } }
-    ws = progressDiseases(ws); ws = progressNpcDiseases(ws);
-    const _contextTags = [...(_cls2Result?.context_tags ?? [])];
-    if (!_contextTags.includes('crowded_place') && /crowd|mall|market|school|church|public|fiesta|concert/i.test(input)) _contextTags.push('crowded_place');
-    if (!_contextTags.includes('rain_exposure') && /rain|wet|storm|baha|ulan/i.test(input)) _contextTags.push('rain_exposure');
-    if (!_contextTags.includes('outdoor') && /outside|outdoors|park|street/i.test(input)) _contextTags.push('outdoor');
-    const newChallenges = [];
-    for (const de of _directorEvents.filter(e => ['major','critical','moderate'].includes(e.severity) && !e.hidden)) { const _dCh = { id: `dir_${de.type}_${ws.turn}`, type: de.type ?? 'simulation_event', title: de.description, cause: 'Simulation cascade', effects_text: de.description, resolution_steps: 'Address the underlying situation.', severity: de.severity, active: true, resolved: false, turn_created: ws.turn, acknowledged: false }; ws.challenges = [...(ws.challenges ?? []), _dCh]; newChallenges.push(_dCh); }
-    const _envDisease = checkDiseaseContraction(ws, _contextTags);
-    if (_envDisease) { const { disease, cause } = _envDisease; ws.player.diseases = [...(ws.player.diseases ?? []), { id: disease.id, name: disease.name, severity: disease.severity, duration_remaining: disease.base_duration, cause, per_turn_effects: disease.per_turn_effects, resolution: disease.resolution, challenge_title: disease.challenge_title, challenge_effects_text: disease.challenge_effects_text }]; await logEvent({ turn: ws.turn, category: 'health', description: `Contracted ${disease.name} — ${cause}` }); const ch = challengeFromDisease(disease, cause, ws.turn); ws.challenges = [...(ws.challenges ?? []), ch]; newChallenges.push(ch); }
-    if (npcReactions.length) { const _spread = checkNpcDiseaseSpread(ws, npcReactions.map(r => r.npc_id)); if (_spread) { ws.player.diseases = [...(ws.player.diseases ?? []), { id: _spread.disease.id, name: _spread.disease.name, severity: _spread.disease.severity, duration_remaining: _spread.disease.base_duration, cause: _spread.cause, per_turn_effects: _spread.disease.per_turn_effects, resolution: _spread.disease.resolution, challenge_title: _spread.disease.challenge_title, challenge_effects_text: _spread.disease.challenge_effects_text }]; const _sch = challengeFromDisease(_spread.disease, _spread.cause, ws.turn); ws.challenges = [...(ws.challenges ?? []), _sch]; newChallenges.push(_sch); } }
-    for (const ev of checkWorldEvents(ws)) { ws = applyEventEffect(ws, ev); await logEvent({ turn: ws.turn, category: ev.category, description: ev.label }); ws = updateEventIndex(ws, `last_${ev.category}`, ev.label, ws.turn); if (ev.challenge_trigger) { const ch = challengeFromWorldEvent(ev, ws); if (ch) { ws.challenges = [...(ws.challenges ?? []), ch]; newChallenges.push(ch); } } }
-    for (const npcEv of checkNpcEvents(ws)) { ws = applyNpcEventEffect(ws, npcEv); await logEvent({ turn: ws.turn, category: 'npc_event', description: `${npcEv.npc_name}: ${npcEv.label}` }); ws = appendSignificantEvent(ws, `Turn ${ws.turn}: ${npcEv.npc_name} ${npcEv.label}`); if (npcEv.creates_player_challenge) { const npc = ws.npcs[npcEv.npc_id]; if (npc) { const ch = challengeFromNpcEvent(npcEv, npc, ws.turn); if (ch) { ws.challenges = [...(ws.challenges ?? []), ch]; newChallenges.push(ch); } } } }
-    for (const debt of (ws.debts ?? [])) { if (debt.status === 'overdue') { const alreadyHas = (ws.challenges ?? []).some(c => c.active && !c.resolved && c.id.includes(debt.id)); if (!alreadyHas) { const ch = challengeFromDebt(debt, ws.turn); ws.challenges = [...(ws.challenges ?? []), ch]; newChallenges.push(ch); if (debt.type === 'loan_shark') { const lsCh = challengeFromLoanShark(debt.amount, ws.turn); ws.challenges = [...ws.challenges, lsCh]; newChallenges.push(lsCh); } } } }
-    for (const addiction of (ws.addictions ?? [])) { if (addiction.status === 'withdrawing' && addiction.severity !== 'mild') { const alreadyHas = (ws.challenges ?? []).some(c => c.active && !c.resolved && c.id.includes(addiction.id)); if (!alreadyHas) { const ch = challengeFromAddiction(addiction, ws.turn); ws.challenges = [...(ws.challenges ?? []), ch]; newChallenges.push(ch); } } }
-    const _scandalEv = (ws.consequences ?? []).find(c => c.type === 'public_scandal');
-    if (_scandalEv) { const alreadyHasScandal = (ws.challenges ?? []).some(c => c.active && !c.resolved && c.type === 'fame'); if (!alreadyHasScandal && (ws.fame?.level ?? 0) >= 2) { const sch = challengeFromScandal('Private behavior became public during your rise to fame.', ws.fame.level, ws.turn); ws.challenges = [...(ws.challenges ?? []), sch]; newChallenges.push(sch); } }
-    for (const ch of (ws.challenges ?? [])) { if (ch.active && !ch.resolved && checkChallengeResolution(ch, ws)) { ch.resolved = true; ch.active = false; } }
-    ws.consequences = advanceConsequences(ws.consequences);
-    if (ws.consequences.length) consequenceUpd = ws.consequences[0];
-    const turnClass = classifyTurn({ stats: ws.player.stats, riskResult, consequenceSeverity: ws.consequences[0]?.severity, statDeltas, relationshipDeltas: relDeltas });
-    for (const id of Object.keys(ws.npcs)) ws.npcs[id] = tickFlagDecay(ws.npcs[id]);
-    ws.turn += 1;
-    let prose = '';
-    if (route === ROUTE.PATH_3_AUTOPILOT && turnClass === TURN_CLASSIFICATION.ROUTINE) {
-      prose = await callGeminiAutopilot(sanitizeStateForGemini(ws), timeCost, input).catch(() => `${timeCost}h passed.`);
-    } else {
-      const brief = assembleTurnBrief(ws, { turnNumber: ws.turn, simTime: ws.sim_time, location: ws.player.location, actionDescription: actionDesc, statDeltas, riskResult, consequenceUpdate: consequenceUpd, npcReactions, turnClass, isExplicit: route === ROUTE.PATH_1_EXPLICIT, rawInput: input });
-      brief.npc_locations = {};
-      const _nlInputLow = input.toLowerCase(); const _nlReacted = new Set(npcReactions.map(r => r.npc_id)); const _nlAwayLocs = new Set(['workplace','school','transit']); const _nlAbsent = [];
-      for (const [_nlId, _nlNpc] of Object.entries(ws.npcs)) {
-        if (_nlNpc.status !== 'active') continue;
-        const _nlTask = getNpcCurrentTask(_nlNpc, ws.sim_time); const _nlLoc = _nlTask.location ?? 'home'; const _nlCo = livesWithPlayer(_nlNpc);
-        const _nlAway = _nlAwayLocs.has(_nlLoc); const _nlNamed = _nlNpc.name && _nlInputLow.includes(_nlNpc.name.toLowerCase());
-        if (_nlAway && !_nlNamed && !_nlReacted.has(_nlId)) { if (_nlNpc.significance >= 1) _nlAbsent.push(`${_nlNpc.name}(${_nlLoc})`); continue; }
-        let _nlCtx = _nlLoc;
-        if      (_nlLoc === 'home' &&  _nlCo)  _nlCtx = 'same household as player — their home IS the player\'s home';
-        else if (_nlLoc === 'home' && !_nlCo)  _nlCtx = 'their own separate home — NOT the player\'s home';
-        else if (_nlLoc === 'player_home')      _nlCtx = 'visiting player\'s home right now';
-        else if (_nlLoc === 'with_player')      _nlCtx = 'physically with the player';
-        brief.npc_locations[_nlId] = { name: _nlNpc.name, task: _nlTask.task, location: _nlLoc, present: _nlTask.present !== false, context: _nlCtx };
-      }
-      if (_nlAbsent.length) brief.absent_npcs_note = `Away this turn: ${_nlAbsent.join(', ')}`;
-      const mode = { [TURN_CLASSIFICATION.ROUTINE]:'notable', [TURN_CLASSIFICATION.NOTABLE]:'notable', [TURN_CLASSIFICATION.CRISIS]:'crisis', [TURN_CLASSIFICATION.DEATH]:'death' }[turnClass] ?? 'notable';
-      prose = await callGrok(brief, mode, { isExplicit: route === ROUTE.PATH_1_EXPLICIT, hasDisease: (ws.player?.diseases?.length ?? 0) > 0, hasAlcohol: (ws.player?.stats?.alcohol ?? 0) >= 15, hasChallenges: (ws.challenges ?? []).some(c => c.active && !c.resolved), hasNpcConditions: (brief.npc_conditions?.length ?? 0) > 0, isAutopilot: route === ROUTE.PATH_3_AUTOPILOT, isInit: false, hasUpcomingSchedule: (brief.upcoming_schedule?.length ?? 0) > 0, isCrisis: turnClass === TURN_CLASSIFICATION.CRISIS || turnClass === TURN_CLASSIFICATION.DEATH, isDeath: turnClass === TURN_CLASSIFICATION.DEATH });
-      window._devlog?.turn(`T${ws.turn} narrated`, { class: turnClass, route, chars: prose.length, first50: prose.slice(0,50) });
-    }
-    if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
-      const _knownNames = new Set(Object.values(ws.npcs).map(n => n.name?.toLowerCase()).filter(Boolean));
-      const _skip = new Set(['The','You','Your','She','He','They','His','Her','Their','What','This','That','Then','Turn','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','January','February','March','April','May','June','July','August','September','October','November','December']);
-      const _objWords = ['holder','curtain','table','chair','door','wall','bed','floor','ceiling','window','lamp','sink','toilet','shower','stove','fan','rod','rack','post','knob','handle','frame','stool','barrel'];
-      const _relTerms = ['mother','father','brother','sister','aunt','uncle','cousin','grandmother','grandfather','mom','dad'];
-      const _newName = (prose.match(/\b([A-Z][a-z]{1,14})\b/g) ?? []).filter(n => !_skip.has(n) && !_knownNames.has(n.toLowerCase()) && !_objWords.some(w => n.toLowerCase().includes(w))).find((n, i, arr) => arr.indexOf(n) === i);
-      const _relTerm = !_newName ? _relTerms.find(term => prose.toLowerCase().includes(term) && !_knownNames.has(term)) : null;
-      const _candidateName = _newName || (_relTerm ? _relTerm.charAt(0).toUpperCase() + _relTerm.slice(1) : null);
-      if (_candidateName) {
-        evaluateDescribedNpc(prose.slice(0, 500)).then(nd => {
-          if (_turnToken !== _processTurnCounter) return;
-          const _proseNpcExists = Object.values(S.WS?.npcs ?? {}).some(n => n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim());
-          const _prNH = ['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf','barrel','pillar','post'];
-          const _prHuman = nd?.name && /^[A-Z]/.test(nd.name) && nd.name.split(/\s+/).length <= 3 && nd.name.length <= 28 && !_prNH.some(w => nd.name.toLowerCase().includes(w));
-          if (nd?.id && nd?.name && S.WS && !S.WS.npcs?.[nd.id] && !_proseNpcExists && _prHuman && nd.significance === 'significant') {
-            const _nn = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} });
-            _nn.relationship_meter = nd.relationship_meter ?? 10; _nn.trust_meter = nd.trust_meter ?? 5; _nn.significance = 1; _nn.recent_interactions = [`Appeared in scene — turn ${ws.turn}`];
-            S.WS.npcs[nd.id] = _nn; saveWorldState(S.WS).catch(() => {}); renderAll();
-          }
-        }).catch(() => {});
-      }
-    }
-    if (turnClass !== TURN_CLASSIFICATION.ROUTINE) ws = appendSignificantEvent(ws, `Turn ${ws.turn}: ${actionDesc}`);
-    if (ws.turn % 10 === 0 && ws.recent_significant_events.length) {
-      const _compressed = await compressSessionContext(ws.recent_significant_events).catch(() => '');
-      ws.session_context_flavor = _compressed;
-      if (_compressed) ws.world_memory = [...(ws.world_memory ?? []), `Turn ~${ws.turn}: ${_compressed}`].slice(-20);
-    }
-    ws.last_narration_prose = prose;
-    const anchor = renderTurnAnchor(ws.turn, ws.sim_time, ws.player.location);
-    renderNarration(prose, anchor, document.getElementById('feed'), ws.turn);
-    document.getElementById('feed').lastElementChild?.scrollIntoView({ behavior: 'smooth' });
-    S.WS = ws; _turnCommitted = true;
-    await saveWorldState(ws); await saveNarration(ws.turn, ws.sim_time, ws.player.location, prose);
-    await savePlayerAction(ws.turn, ws.sim_time, input);
-    saveWorldStateCloud(ws).catch(() => {}); renderAll();
-    if (prose && prose.length > 40) {
-      const _scNpcs = Object.values(ws.npcs).filter(n => n.status === 'active');
-      extractSceneContext(prose, ws.player.location, _scNpcs).then(ctx => { if (ctx && S.WS) { S.WS.scene_context = ctx; saveWorldState(S.WS).catch(() => {}); } }).catch(() => {});
-    }
-    setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
-    if (document.querySelector('.p-tab[data-p="log"]')?.classList.contains('on')) renderActionLog(showPanel);
-    if (newChallenges.length) showChallengeQueue(newChallenges);
-    if (hangoverChallengePending) showChallengeQueue([hangoverChallengePending]);
-    if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
-      extractNarrativeStateChanges(prose, S.WS).then(changes => {
-        if (!changes || !S.WS) return;
-        let _nsWs = JSON.parse(JSON.stringify(S.WS)); let _nsChanged = false;
-        const pc = changes.player_changes ?? {};
-        if (pc.location) { _nsWs.player.location = pc.location; _nsChanged = true; }
-        if (pc.job_lost) { _nsWs.job = null; _nsChanged = true; }
-        if (pc.job_new_employer) { _nsWs.job = { employer: pc.job_new_employer, position: 'Worker', performance_flags: [], days_employed: 0, salary_per_cycle: null, pay_cycle: null, schedule: null }; _nsChanged = true; }
-        if (pc.school_quit && _nsWs.school) { _nsWs.school.status = 'dropped_out'; _nsChanged = true; }
-        if (pc.school_enrolled) { _nsWs.school = { name: pc.school_enrolled, status: 'active', grade_level: null, schedule: null, absence_count: 0, days_enrolled: 0 }; _nsChanged = true; }
-        if (pc.cash_delta != null && typeof pc.cash_delta === 'number' && pc.cash_delta !== 0) { _nsWs.player.cash = Math.max(0, (_nsWs.player.cash ?? 0) + Math.max(-10000, Math.min(10000, Math.round(pc.cash_delta)))); _nsChanged = true; }
-        if (Array.isArray(pc.possessions_gained) && pc.possessions_gained.length) { _nsWs.player.possessions = _nsWs.player.possessions ?? []; const _existNames = new Set(_nsWs.player.possessions.map(p => (p.name ?? '').toLowerCase())); for (const _pg of pc.possessions_gained) { if (!_pg.name || _existNames.has(_pg.name.toLowerCase())) continue; _nsWs.player.possessions.push({ name: _pg.name, note: _pg.note ?? null, condition: 'new', durability: 100, acquired_method: 'scene' }); _existNames.add(_pg.name.toLowerCase()); } _nsChanged = true; }
-        if (Array.isArray(pc.possessions_lost) && pc.possessions_lost.length) { _nsWs.player.possessions = _nsWs.player.possessions ?? []; for (const _pl of pc.possessions_lost) { const _before = _nsWs.player.possessions.length; _nsWs.player.possessions = _nsWs.player.possessions.filter(p => !p.name || p.name.toLowerCase() !== _pl.toLowerCase()); if (_nsWs.player.possessions.length < _before) _nsChanged = true; } }
-        if (pc.appearance_note && typeof pc.appearance_note === 'string') { _nsWs.player.irreversible = _nsWs.player.irreversible ?? []; const _appNote = pc.appearance_note.trim(); if (_appNote && !_nsWs.player.irreversible.some(i => i.toLowerCase().includes(_appNote.toLowerCase().slice(0,20)))) { _nsWs.player.irreversible.push(_appNote); _nsChanged = true; } }
-        for (const nc of (changes.npc_changes ?? [])) {
-          if (!nc.npc_id || !_nsWs.npcs[nc.npc_id]) continue;
-          if (nc.job_lost) { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'quit_job' }); _nsChanged = true; }
-          if (nc.job_new_employer) { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'new_job', details: { employer: nc.job_new_employer } }); _nsChanged = true; }
-          if (nc.school_quit) { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'quit_school' }); _nsChanged = true; }
-          if (nc.school_enrolled) { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'enroll_school', details: { school_name: nc.school_enrolled } }); _nsChanged = true; }
-          if (nc.status && nc.status !== 'null' && nc.status !== 'active') { if (nc.status === 'deceased') { _nsWs.npcs[nc.npc_id].status = 'inactive'; _nsWs.npcs[nc.npc_id].departure_reason = 'deceased'; } else if (nc.status === 'moved_away') { _nsWs.npcs[nc.npc_id] = updateNpcCareer(_nsWs.npcs[nc.npc_id], { action: 'move_away' }); } _nsChanged = true; }
-          if (nc.mood_event && typeof nc.mood_event === 'string') { const _ri = _nsWs.npcs[nc.npc_id].recent_interactions ?? []; _nsWs.npcs[nc.npc_id].recent_interactions = [..._ri, nc.mood_event.trim()].slice(-5); _nsChanged = true; }
-          if (nc.relationship_note && typeof nc.relationship_note === 'string') { const _ri = _nsWs.npcs[nc.npc_id].recent_interactions ?? []; _nsWs.npcs[nc.npc_id].recent_interactions = [..._ri, `[Relationship shift — Turn ${_nsWs.turn}] ${nc.relationship_note.trim()}`].slice(-5); _nsChanged = true; }
-        }
-        if (_nsChanged) { S.WS = _nsWs; saveWorldState(S.WS).catch(() => {}); renderAll(); }
-      }).catch(() => {});
-    }
-    if (route === ROUTE.PATH_1_EXPLICIT && _p1ShouldDetectNpc) {
-      evaluateDescribedNpc(input).then(nd => {
-        const _exists = Object.values(S.WS?.npcs ?? {}).some(n => n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim());
-        const _NH = ['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf'];
-        const _human = nd?.name && /^[A-Z]/.test(nd.name) && nd.name.split(/\s+/).length <= 3 && nd.name.length <= 28 && !_NH.some(w => nd.name.toLowerCase().includes(w));
-        if (nd?.id && !S.WS?.npcs?.[nd.id] && !_exists && _human && nd.significance !== 'none') { const newNpc = createNpc({ id: nd.id, name: nd.name, age: nd.age || 20, npc_class: nd.npc_class || 'household', traits: nd.traits || {} }); newNpc.relationship_meter = nd.relationship_meter ?? 20; newNpc.trust_meter = nd.trust_meter ?? 10; newNpc.significance = 1; S.WS.npcs[nd.id] = newNpc; saveWorldState(S.WS).catch(() => {}); renderAll(); }
-      }).catch(() => {});
-    }
-    if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
-      const _cfNpcs = Object.entries(S.WS.npcs).filter(([, n]) => n.active_flags?.length > 0);
-      if (_cfNpcs.length) {
-        Promise.all(_cfNpcs.map(([_cfId, _cfNpc]) => evaluateNpcFlagsInContext(_cfNpc, prose, timeCost).then(_cfRemove => { if (!_cfRemove.length || !S.WS?.npcs?.[_cfId]) return; S.WS.npcs[_cfId] = { ...S.WS.npcs[_cfId], active_flags: S.WS.npcs[_cfId].active_flags.filter(f => !_cfRemove.includes(f)), flag_timers: Object.fromEntries(Object.entries(S.WS.npcs[_cfId].flag_timers ?? {}).filter(([k]) => !_cfRemove.includes(k))) }; }).catch(() => {}))).then(() => { if (_turnToken !== _processTurnCounter) return; saveWorldState(S.WS).catch(() => {}); renderAll(); });
-      }
-    }
-    if (turnClass === TURN_CLASSIFICATION.DEATH) { setStatus('☠ Character has died — processing...', 'err'); document.getElementById('submit-btn').disabled = true; document.getElementById('action-input').disabled = true; setTimeout(() => _handleDeath(prose), 500); }
-  } catch(err) {
-    window._devlog?.error(`processTurn error`, { message: err.message, stack: err.stack?.slice(0,400) });
-    if (_turnCommitted) { setStatus(`Turn processed — narrator failed. Type anything to continue.`, 'err'); }
-    else { setStatus(`Error: ${err.message}`, 'err'); }
-    console.error('[processTurn]', err);
-  } finally {
-    if (!S.WS || S.WS.player?.stats?.health > 0) setProcessing(false);
-  }
-}
-
-// ── INPUT ──────────────────────────────────────────────────────────────────────
-document.getElementById('submit-btn').addEventListener('click', () => {
-  const v = document.getElementById('action-input').value.trim(); if (!v) return;
-  document.getElementById('action-input').value = ''; document.getElementById('action-input').style.height = 'auto';
-  processTurn(v);
-});
-document.getElementById('action-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('submit-btn').click(); } });
-document.getElementById('action-input').addEventListener('input', function() { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 110) + 'px'; });
-
-// ── UPDATE SYSTEM ──────────────────────────────────────────────────────────────
-async function checkForUpdate() {
-  try {
-    const res = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' }); if (!res.ok) return;
-    const { version, notes } = await res.json();
-    const stored = localStorage.getItem('sim_version');
-    if (!stored) { localStorage.setItem('sim_version', version); return; }
-    if (stored !== version) {
-      const banner = document.getElementById('update-banner'); const notesEl = document.getElementById('update-notes');
-      if (notesEl) notesEl.textContent = notes || `Version ${version} is ready`;
-      if (banner) banner.style.display = '';
-      banner?.dataset && (banner.dataset.newVersion = version);
-    }
-  } catch {}
-}
-document.getElementById('btn-dismiss-update')?.addEventListener('click', () => { document.getElementById('update-banner').style.display = 'none'; });
-document.getElementById('btn-apply-update')?.addEventListener('click', async () => {
-  try { const res = await fetch('version.json?_=' + Date.now(), { cache: 'no-store' }); if (res.ok) { const { version } = await res.json(); localStorage.setItem('sim_version', version); } } catch {}
-  window.location.reload(true);
-});
-
-// ── BOOT ───────────────────────────────────────────────────────────────────────
-async function boot() {
-  const su = localStorage.getItem('SUPABASE_URL'); const sk = localStorage.getItem('SUPABASE_ANON_KEY');
-  let signedIn = false;
-  if (su && sk && window.supabase) {
-    if (!S._sbClient) { S._sbClient = window.supabase.createClient(su, sk); setSupabaseClient(S._sbClient); }
-    await S._sbClient.auth.getSession(); window.history.replaceState(null, '', window.location.pathname);
-    const { data: { user } } = await S._sbClient.auth.getUser();
-    if (user) { signedIn = true; setStatus(`Signed in: ${user.email}`); }
-  }
-  S.WS = await loadWorldState();
-  await loadImageCache().catch(() => {});
-  const _bootCloud = await loadWorldStateCloud();
-  if (_bootCloud) { S.WS = _bootCloud; await saveWorldState(S.WS); }
-  if (S.WS) {
-    loadConsoleHistoryForCurrentSave(getCurrentSaveId()).catch(() => {});
-    renderAll();
-    try {
-      const saved = await loadNarrations(50, getCurrentSaveId()); const feed = document.getElementById('feed');
-      if (saved.length) {
-        feed.innerHTML = '';
-        for (const n of saved) { const a = renderTurnAnchor(n.turn, n.data?.simTime ?? n.timestamp, n.data?.location ?? ''); renderNarration(n.description, a, feed, n.turn); }
-        feed.scrollTop = feed.scrollHeight;
-        const history = [];
-        for (const n of saved.slice(-3)) { history.push({ role: 'user', content: `[turn ${n.turn} context restored]` }); history.push({ role: 'assistant', content: n.description }); }
-        setConversationHistory(history);
-        if (!signedIn) setStatus(`Turn ${S.WS.turn} · ${S.WS.player.name}`);
-      } else { if (!signedIn) setStatus(`Loaded — Turn ${S.WS.turn} · ${S.WS.player.name} (no narrations)`); }
-    } catch(e) { console.warn('[boot] narration restore failed:', e.message); if (!signedIn) setStatus(`Loaded — Turn ${S.WS.turn} · ${S.WS.player.name}`); }
-  } else if (!signedIn) { setStatus('Ready. Start a new game or load a save.'); }
-}
-
-// ── INIT ALL MODULES ───────────────────────────────────────────────────────────
-initWizard(closeMenu);
-initSettings(closeMenu);
-initSupabaseAuth();
-initLoadModal(loadImageCache);
-initConsoleUI(closeMenu);
-initDevConsole(() => S.WS, closeMenu);
-initImageUpload();
-
-// Mobile keyboard fix
-if ('visualViewport' in window) {
-  window.visualViewport.addEventListener('resize', () => {
-    const _vvOffset = Math.max(0, window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop);
-    document.getElementById('input-area').style.paddingBottom = Math.max(10, _vvOffset) + 'px';
-  });
-}
-document.getElementById('action-input').addEventListener('focus', () => {
-  if (window.innerWidth < 768) setTimeout(() => { const _f = document.getElementById('feed'); if (_f) _f.scrollTop = _f.scrollHeight; }, 350);
-});
-
-boot();
-checkForUpdate();
-</script>
 </body>
 </html>
