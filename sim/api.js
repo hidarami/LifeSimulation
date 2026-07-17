@@ -472,9 +472,15 @@ Return ONLY valid JSON:
 
   try {
     const parsed = await dispatchJSON(helper.provider, helper.key, helper.model, prompt, 150);
-    return (parsed?.has_initiative && parsed.npc_id && parsed.brief)
-      ? [{ npc_id: parsed.npc_id, type: parsed.type ?? 'message', brief: parsed.brief }]
-      : [];
+    if (!parsed?.has_initiative || !parsed.npc_id || !parsed.brief) return [];
+    const _brief = String(parsed.brief).trim();
+    // Quality filter: reject generic, too-short, or formulaic briefs
+    const _GENERIC = /\b(just\s+checking|what'?s?\s+up|hey\s+there|how\s+are\s+you|hi\s+there|checking\s+in|hello[^,]|how'?s?\s+it\s+going|thinking\s+of\s+you)\b/i;
+    if (_brief.length < 28 || _GENERIC.test(_brief)) {
+      window._devlog?.npc(`NPC initiative filtered (generic)`, { npc_id: parsed.npc_id, brief: _brief.slice(0, 60) });
+      return [];
+    }
+    return [{ npc_id: parsed.npc_id, type: parsed.type ?? 'message', brief: _brief }];
   } catch { return []; }
 }
 
@@ -738,18 +744,28 @@ export async function extractNarrativeStateChanges(prose, worldState) {
     .filter(n => n.status === 'active')
     .map(n => `${n.id}: ${n.name} (${n.relationship_type ?? n.npc_class})`)
     .join('\n');
+  const _curPoss = (worldState.player?.possessions ?? []).map(p => p.name).join(', ') || 'none';
   const prompt = `Analyze this simulation narration for DEFINITIVELY STATED changes only.
 
-Narration: "${prose.slice(0, 800)}"
+Narration: "${prose.slice(0, 1000)}"
 
 Current context:
 - Player job: ${worldState.job ? `${worldState.job.position ?? 'worker'} at ${worldState.job.employer ?? 'unknown'}` : 'unemployed'}
 - Player school: ${worldState.school?.name ?? 'none'} (${worldState.school?.status ?? 'n/a'})
 - Player location: ${worldState.player?.location ?? 'unknown'}
+- Player cash: ${worldState.player?.cash ?? 0}
+- Player possessions: ${_curPoss}
 - Active NPCs:
 ${npcList || 'none'}
 
-RULES: Only extract if EXPLICITLY AND DEFINITIVELY stated in the narration. "might leave" = NO. "decides to quit" = YES. "moves to Manila" = YES.
+RULES:
+- Only extract if EXPLICITLY AND DEFINITIVELY stated. "might leave" = NO. "decides to quit" = YES. "moves to Cebu" = YES.
+- cash_delta: ONLY when a specific peso amount is explicitly exchanged ("pays ₱150", "receives ₱500", "finds ₱200"). Range: -10000 to +10000. Do NOT infer from general activity.
+- possessions_gained: ONLY when a physical item is explicitly given to, bought by, or found by the player. One entry per item.
+- possessions_lost: ONLY when an item is definitively taken, broken beyond use, lost, or given away. Use exact names from possessions list above.
+- appearance_note: ONLY when a PERMANENT physical change is definitively completed (tattoo done, scar received, haircut finished). One per turn max. null if none.
+- NPC mood_event: one sentence describing a significant emotional moment for that NPC in this scene, if clearly stated. Used for interaction log only.
+- NPC relationship_note: ONLY if narration states an explicit declaration or irreversible shift in the relationship between player and NPC.
 
 Return ONLY valid JSON:
 {
@@ -759,7 +775,11 @@ Return ONLY valid JSON:
     "job_lost": boolean,
     "job_new_employer": string_or_null,
     "school_quit": boolean,
-    "school_enrolled": string_or_null
+    "school_enrolled": string_or_null,
+    "cash_delta": number_or_null,
+    "possessions_gained": [{"name": string, "note": string_or_null}],
+    "possessions_lost": [string],
+    "appearance_note": string_or_null
   },
   "npc_changes": [
     {
@@ -768,7 +788,9 @@ Return ONLY valid JSON:
       "job_new_employer": string_or_null,
       "school_quit": boolean,
       "school_enrolled": string_or_null,
-      "status": "active|deceased|moved_away|null"
+      "status": "active|deceased|moved_away|null",
+      "mood_event": string_or_null,
+      "relationship_note": string_or_null
     }
   ]
 }
@@ -838,23 +860,22 @@ LIVE GAME STATE SUMMARY:
   Active NPCs (${_activeNpcs.length}): ${_activeNpcs.map(n => `${n.name}[${n.id}]`).join(', ') || 'none'}
 
 ━━ CONSOLE IDENTITY ━━
-You are the SIM CONSOLE — the official management and diagnostic interface for The Sim.
-You have FULL authority over the game world. You are NOT a passive chatbot.
+You are the SIM CONSOLE — official management and diagnostic interface for The Sim.
+You operate through defined channels: SIM_PATCH (data changes), SIM_ACTION (engine operations), direct answers (from state blocks and ENGINE LOG).
 
-YOUR CAPABILITIES:
-- Modify ANY part of game state using <SIM_PATCH> — always emit the block to commit changes
-- Answer questions using ENGINE LOG data when it is injected into the conversation
-- Diagnose initialization/enrichment/generation failures from injected logs
-- Apply schedule, relationship, stat, job, school, NPC, world, and inventory changes
+CHANNEL AUTHORITY:
+- SIM_PATCH: full authority to modify any data field — stats, cash, job, school, NPCs, bios, possessions, setting, flags
+- SIM_ACTION: authority to trigger whitelisted engine functions — generate_npcs, regenerate_bio, rerun_enrichment, reparse_lorebook, generate_items, repair_schedules, read_narrations, read_actions
+- Direct answers: authority to read ENGINE LOG data and CURRENT GAME STATE and answer from them
 
-ENGINE LOG SECTIONS: When [ENGINE LOG] appears in the conversation, those are REAL devlog entries from the running engine. Use them as authoritative evidence. Never say "I don't have access to logs" when logs are present in context.
+ENGINE LOG: When [ENGINE LOG] appears in the conversation, those are REAL devlog entries. Use them as authoritative evidence. Never say "I can't access logs" when logs are present in context.
 
 WHEN ASKED "why did X not happen / which model / why no items":
   1. Check ENGINE LOG for ERROR or SYSTEM entries first
   2. Cross-reference with ACTIVE API SLOTS above
-  3. Give a specific, grounded answer based on what the logs show
+  3. Give a specific, grounded answer — emit the correct SIM_ACTION if a fix is possible
 
-NEVER output vague statements like "check documentation" or "I can't access logs" — you ARE the console.`;
+Always emit SIM_PATCH or SIM_ACTION to commit changes. Prose alone does nothing.`;
   const systemPrompt = _basePrompt + _consoleCtx;
   const _sysTokenEst = Math.ceil(systemPrompt.length / 4);
   const _msgTokenEst = messages.slice(-24).reduce((acc, m) => acc + Math.ceil((m.content?.length ?? 0) / 4), 0);

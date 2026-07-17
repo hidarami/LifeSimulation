@@ -116,6 +116,7 @@ export function createNpc({ id, name, age, npc_class, relationship_type = null, 
     id, name, age, npc_class,
     relationship_type: relationship_type ?? npc_class,
     status: 'active',
+    known_npcs: {},
     traits: {
       jealousy:    traits.jealousy    ?? 30,
       honesty:     traits.honesty     ?? 60,

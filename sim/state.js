@@ -87,6 +87,8 @@ export function createInitialWorldState(playerName, startDate) {
     last_narration_prose: '',
     session_context_flavor: '',
     setting_description: '',
+    // Ring buffer of compressed turn summaries — injected into AI Console context
+    world_memory: [],
     challenges: [],
     debts: [],
     criminal_record: { wanted_level: 0, crimes: [], has_record: false },
@@ -119,6 +121,7 @@ export function migrateSaveState(state) {
   if (state.setting_description    == null)            state.setting_description      = '';
   if (state.session_context_flavor == null)            state.session_context_flavor   = '';
   if (!Array.isArray(state.recent_significant_events)) state.recent_significant_events = [];
+  if (!Array.isArray(state.world_memory))              state.world_memory             = [];
   if (!state.last_narration_prose)                     state.last_narration_prose     = '';
   if (!state.event_index) state.event_index = {
     last_arrest: null, last_hospitalization: null, last_breakup: null,
@@ -151,6 +154,7 @@ export function migrateSaveState(state) {
     }
     if (!npc.schedule) npc.schedule = { weekday_routine: [], weekend_routine: [], interruptions: [] };
     else if (!Array.isArray(npc.schedule.interruptions)) npc.schedule.interruptions = [];
+    if (!npc.known_npcs || typeof npc.known_npcs !== 'object' || Array.isArray(npc.known_npcs)) npc.known_npcs = {};
   }
   return state;
 }

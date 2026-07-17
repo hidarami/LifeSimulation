@@ -525,6 +525,72 @@ export const WORLD_EVENT_TABLE = [
     effect: () => ({ stat_deltas: { mood: -20, social: -10, energy: -8 } }),
     challenge_trigger: false,
   },
+  // ── CULTURAL / CALENDAR EVENTS ───────────────────────────────────────────
+  {
+    id: 'christmas_season',
+    category: 'social',
+    label: 'Christmas season in full swing',
+    condition: ws => {
+      const mo = new Date(ws.sim_time).getMonth();
+      const locale = (typeof localStorage !== 'undefined' ? localStorage.getItem('LOCALE') : null) ?? 'Philippines';
+      return /philippine|filipin/i.test(locale) && (mo >= 9 && mo <= 11);
+    },
+    probability: 0.07,
+    effect: () => ({ stat_deltas: { mood: +12, social: +15 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'holy_week',
+    category: 'social',
+    label: 'Holy Week atmosphere',
+    condition: ws => {
+      const mo = new Date(ws.sim_time).getMonth();
+      const locale = (typeof localStorage !== 'undefined' ? localStorage.getItem('LOCALE') : null) ?? 'Philippines';
+      return /philippine|filipin/i.test(locale) && (mo === 2 || mo === 3);
+    },
+    probability: 0.06,
+    effect: () => ({ stat_deltas: { social: -5, mood: +5, energy: -3 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'undas',
+    category: 'social',
+    label: 'Undas — All Saints\' Day gatherings',
+    condition: ws => {
+      const d = new Date(ws.sim_time);
+      const locale = (typeof localStorage !== 'undefined' ? localStorage.getItem('LOCALE') : null) ?? 'Philippines';
+      return /philippine|filipin/i.test(locale) && d.getMonth() === 10 && (d.getDate() <= 3);
+    },
+    probability: 0.30,
+    effect: () => ({ stat_deltas: { social: +20, mood: -5, energy: -5 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'local_fiesta',
+    category: 'social',
+    label: 'Local fiesta in the neighborhood',
+    condition: ws => {
+      const mo = new Date(ws.sim_time).getMonth();
+      const locale = (typeof localStorage !== 'undefined' ? localStorage.getItem('LOCALE') : null) ?? 'Philippines';
+      return /philippine|filipin/i.test(locale) && [0, 4, 5, 6].includes(mo);
+    },
+    probability: 0.04,
+    effect: () => ({ stat_deltas: { mood: +18, social: +22, energy: -8, hygiene: -5 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'hot_season',
+    category: 'health',
+    label: 'Peak summer heat takes a toll',
+    condition: ws => {
+      const mo = new Date(ws.sim_time).getMonth();
+      const locale = (typeof localStorage !== 'undefined' ? localStorage.getItem('LOCALE') : null) ?? 'Philippines';
+      return /philippine|filipin/i.test(locale) && (mo >= 3 && mo <= 5);
+    },
+    probability: 0.09,
+    effect: () => ({ stat_deltas: { energy: -8, health: -2, hygiene: -5 } }),
+    challenge_trigger: false,
+  },
 ];
 
 // ─── NPC EVENT TABLE ──────────────────────────────────────────────────────────
@@ -1179,6 +1245,56 @@ export function runSimulationDirector(worldState) {
       type: 'fame_pressure', severity: 'minor',
       description: 'The public scrutiny of your growing fame is wearing on you.',
     });
+  }
+
+  // ── 9. NPC AGING — increment age when sim year advances ───────────────────
+  const _ageYear = new Date(ws.sim_time).getFullYear();
+  for (const npc of Object.values(ws.npcs)) {
+    if (npc.status !== 'active') continue;
+    npc._hidden = npc._hidden ?? {};
+    if (npc._hidden.last_age_year === undefined) {
+      npc._hidden.last_age_year = _ageYear;
+    } else if (_ageYear > npc._hidden.last_age_year) {
+      const _yearsGained = _ageYear - npc._hidden.last_age_year;
+      npc.age = (npc.age ?? 20) + _yearsGained;
+      npc._hidden.last_age_year = _ageYear;
+      if (npc.age === 18) {
+        // Transition out of student schedule on adulthood
+        if ((npc.schedule?.weekday_routine ?? []).some(b => b.task === 'school')) {
+          npc.schedule = { ...npc.schedule, weekday_routine: [] };
+        }
+        directorEvents.push({ type: 'npc_turned_18', severity: 'minor', description: `${npc.name} has turned 18.`, npc_id: npc.id, hidden: true });
+      }
+      if (npc.age >= 65) npc._hidden.elder_risk = true;
+    }
+    // Passive NPC-to-NPC familiarity: household NPCs living together develop gradual mutual knowledge
+    if (npc.npc_class === 'household' && turn % 5 === 0) {
+      for (const [otherId, other] of Object.entries(ws.npcs)) {
+        if (otherId === npc.id || other.status !== 'active' || other.npc_class !== 'household') continue;
+        npc.known_npcs = npc.known_npcs ?? {};
+        npc.known_npcs[otherId] = npc.known_npcs[otherId] ?? { meter: 0, label: other.relationship_type ?? 'acquaintance' };
+        npc.known_npcs[otherId].meter = Math.min(60, (npc.known_npcs[otherId].meter ?? 0) + 0.5);
+      }
+    }
+  }
+
+  // ── 10. POSSESSION DEGRADATION ─────────────────────────────────────────────
+  if (ws.player?.possessions?.length && turn % GSD_INTERVAL === 0) {
+    for (const poss of ws.player.possessions) {
+      if (poss.durability == null) poss.durability = 100;
+      const _isElectronic = /phone|laptop|tablet|computer|device|gadget|earphone|speaker/i.test(poss.name);
+      const _isClothing   = /shirt|pants|shoes|jacket|uniform|bag|sandal|slipper|clothes/i.test(poss.name);
+      const _rate = _isElectronic ? 0.6 : _isClothing ? 0.35 : 0.2;
+      poss.durability = Math.max(0, +(poss.durability - _rate).toFixed(1));
+      if (poss.durability <= 10 && !/broken|destroyed|ruined/i.test(poss.condition ?? '')) {
+        poss.condition = 'broken — barely functional';
+        directorEvents.push({ type: 'possession_broken', severity: 'minor', description: `Your ${poss.name} is broken and barely functional.`, hidden: false });
+      } else if (poss.durability <= 30 && poss.durability > 10 && !/worn|damaged/i.test(poss.condition ?? '')) {
+        poss.condition = 'worn — showing significant use';
+      } else if (poss.durability <= 60 && poss.durability > 30 && /new|mint|excellent/i.test(poss.condition ?? '')) {
+        poss.condition = 'used — in decent shape';
+      }
+    }
   }
 
   return { worldState: ws, directorEvents };

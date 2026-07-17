@@ -259,17 +259,29 @@ PRIORITY HIERARCHY — resolve all conflicts by higher rank:
 
 // ─── GEMINI: ACTION CLASSIFICATION ───────────────────────────────────────────
 export function buildGeminiClassifyPrompt(input, sanitizedState) {
+  const _inputLow = input.toLowerCase();
+  const _matchedPoss = (sanitizedState.player?.possessions ?? []).filter(p =>
+    p.name && _inputLow.includes(p.name.toLowerCase())
+  );
   const ctx = {
     location: sanitizedState.player?.location,
     stats:    sanitizedState.player?.stats,
     job:      sanitizedState.job ?? null,
+    ...(_matchedPoss.length ? { inventory_used: _matchedPoss.map(p => ({ name: p.name, condition: p.condition ?? 'used', durability: p.durability ?? 100 })) } : {}),
   };
+  const _possNote = _matchedPoss.length
+    ? `\nPossession context: ${_matchedPoss.map(p => {
+        const _broken = p.durability != null && p.durability <= 10;
+        const _worn   = p.durability != null && p.durability <= 30;
+        return `${p.name}${_broken ? ' (BROKEN — add failure penalty to stat_deltas)' : _worn ? ' (worn — slight penalty)' : ''}`;
+      }).join(', ')}. Adjust time_cost_hours and stat_deltas to reflect item condition.`
+    : '';
   return `You are a simulation action classifier. Return JSON only. No prose, no explanation, no markdown fences.
 
 Player action: "${input}"
 
 Player context:
-${JSON.stringify(ctx, null, 2)}
+${JSON.stringify(ctx, null, 2)}${_possNote}
 
 Return exactly this JSON shape:
 {
@@ -450,6 +462,7 @@ export function buildMetaConsolePrompt(gameState) {
     ws.challenges?.filter(c => c.active && !c.resolved).length ? `Active challenges: ${ws.challenges.filter(c => c.active && !c.resolved).map(c => c.title).join(' | ')}` : null,
     ws.recent_significant_events?.length ? `Recent events: ${ws.recent_significant_events.slice(-3).join(' | ')}` : null,
     ws.sim_time ? `Sim time (ISO): ${ws.sim_time}` : null,
+    ws.world_memory?.length ? `World memory (compressed event history, oldest→newest):\n${ws.world_memory.slice(-8).join('\n')}` : null,
     (() => {
       const lb = (typeof localStorage !== 'undefined' ? localStorage.getItem('LOREBOOK') : null) ?? 'None set';
       const MAX_LB = 6000; // FIX 8B: ~1500 token cap prevents context overflow on small models
@@ -487,26 +500,38 @@ ARCHITECTURE:
 - Persistence: IndexedDB via Dexie.js (world, events, actions, sim_console tables)
 - Files: index.html (main app), state.js (persistence), engine.js (stat math, turn class), api.js (all API calls), prompt.js (system prompts), renderer.js (UI), npc.js (NPC logic), sanitizer.js (routing), events.js (world events)
 
-CAPABILITY BOUNDARIES — READ BEFORE RESPONDING:
-You are a text-based console layer. You have EXACTLY these capabilities:
-- Read the CURRENT GAME STATE block provided below
-- Read the LOREBOOK block provided below
-- Output SIM_PATCH JSON to modify world state
-- Answer questions about game mechanics from your training
+CAPABILITY CHANNELS — READ BEFORE RESPONDING:
+You operate through exactly three channels. Use the correct one — prose alone does nothing.
 
-You CANNOT:
-- Call Gemini, Groq, OpenRouter, or any external API
-- Trigger background processes, integrity checks, or enrichment passes
-- Force-regenerate NPC cards or bios
-- Read IndexedDB, Dexie tables, or any live database
-- Execute code in the simulation engine
-- Access any information not in the state blocks below
+CHANNEL 1 — SIM_PATCH (instant, no API call, modifies data):
+- Modify any field in world state: stats, cash, job, school, NPCs, setting, possessions, flags
+- Write NPC bio content directly into npc_updates — you CAN write bios via SIM_PATCH
+- Apply schedule changes, relationship changes, stat adjustments, all world data
+- Run integrity checks from the state data already in context
 
-If asked to do something outside these limits:
-- Say clearly what you cannot do
-- Say what the user CAN do instead (e.g. "To rebuild NPCs, start a new game with a corrected lorebook")
-- NEVER claim to have executed an operation you did not execute via SIM_PATCH
-- NEVER output SIM_PATCH and then claim the patch "triggered" an external call
+CHANNEL 2 — SIM_ACTION (triggers engine functions, costs 1 API call each, max 2 per response):
+Output: <SIM_ACTION>{"action":"action_name","args":{"key":"value"}}</SIM_ACTION>
+Whitelist:
+  generate_npcs          — parse lorebook and create missing NPCs with bios/schedules
+  regenerate_bio         — args: {npc_id: "exact_id"} — rebuild one NPC bio via AI
+  rerun_enrichment       — re-run full world enrichment: possessions, schedules, bios
+  reparse_lorebook       — add missing NPCs without overwriting existing ones
+  generate_items         — create starting possessions from lorebook context
+  repair_schedules       — fix broken NPC schedule blocks (no API, instant)
+  read_narrations        — args: {limit: 5} — read recent narrations from DB
+  read_actions           — args: {limit: 10} — read recent player actions from DB
+Use SIM_ACTION when user asks you to run, generate, rebuild, retrieve, or fix something needing engine functions.
+
+CHANNEL 3 — DIRECT ANSWER (from state blocks and engine knowledge in context):
+- Answer questions about mechanics, world state, NPCs, game systems
+- Diagnose failures from ENGINE LOG entries when present in context
+- Never claim to answer from live data you don't have — say which state block you're reading from
+
+HARD HONESTY RULES:
+- NEVER claim to have done something without emitting SIM_PATCH or SIM_ACTION — prose commits nothing
+- NEVER output SIM_PATCH and claim it "triggered" an API call — patches only modify stored data
+- NEVER invent capabilities outside these three channels
+- If a request genuinely cannot be done via these channels, say so plainly and offer the closest alternative
 
 CURRENT GAME STATE:
 ${stateBlock}
