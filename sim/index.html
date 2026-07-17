@@ -1454,7 +1454,7 @@ import { callGrok, classifyAction, evaluateNpcReaction, resetConvId, setConversa
          callGeminiAutopilot, compressSessionContext, parseLorebookToWorldState,
          buildWorldWithMultipleAIs, evaluateDescribedNpc,
          enrichWorldDetails, evaluateNpcFlagsInContext, callMetaConsole,
-         extractNarrativeStateChanges } from './api.js';
+         extractNarrativeStateChanges, extractSceneContext, compressLorebook } from './api.js';
 import { renderNpcPanel, renderJobPanel,
          renderPossessionsPanel, renderNarration, renderTurnAnchor, renderChallengesPanel,
          livesWithPlayer, getSmartNpcLabel } from './renderer.js';
@@ -2515,6 +2515,11 @@ async function startNewGame() {
       }
     }
 
+    // Stage 1.6: Compress lorebook for future Grok calls (Fix 3 — non-blocking)
+    if (lorebook.trim()) {
+      compressLorebook(lorebook, name, Object.values(ws.npcs).map(n => n.name).filter(Boolean)).catch(() => {});
+    }
+
     // Stage 2: Save
     setStage('Saving world state...', 'Writing to storage...', 54);
     await createNewSaveSlot(ws);
@@ -2541,7 +2546,7 @@ async function startNewGame() {
       structured_history: null, session_flavor: null, last_narration: null,
     };
 
-    const prose = await callGrok(initBrief, 'init');
+    const prose = await callGrok(initBrief, 'init', { isInit: true });
     pfill.style.width = '100%';
     await new Promise(r => setTimeout(r, 300));
 
@@ -2653,7 +2658,7 @@ async function _handleDeath(deathProse) {
     });
     legacyProse = await callGrok(
       { ..._lb, successor_npc: { name: _successor.name, relationship: _successor.relationship_type ?? _successor.npc_class } },
-      'legacy'
+      'legacy', { isDeath: true, isCrisis: true }
     );
   } catch {
     legacyProse = `${_deceasedName} is gone. The world moves on. ${_successor.name} is left to carry what remains.`;
@@ -2700,7 +2705,7 @@ async function _handleDeath(deathProse) {
         consequenceUpdate: null, npcReactions: [], turnClass: 'NOTABLE', isExplicit: false,
         rawInput: `[Begin playing as ${WS.player.name}, reacting to the recent death of ${_deceasedName}]`,
       });
-      const _ip = await callGrok(_ib, 'pov_shift');
+      const _ip = await callGrok(_ib, 'pov_shift', { isDeath: true, isCrisis: true });
       WS.turn += 1; WS.last_narration_prose = _ip;
       const _ia = renderTurnAnchor(WS.turn, WS.sim_time, WS.player.location);
       renderNarration(_ip, _ia, document.getElementById('feed'), WS.turn);
@@ -3243,7 +3248,18 @@ async function processTurn(input) {
       }
       if (_nlAbsent.length) brief.absent_npcs_note = `Away this turn (not in scene): ${_nlAbsent.join(', ')}`;
       const mode = { [TURN_CLASSIFICATION.ROUTINE]:'notable', [TURN_CLASSIFICATION.NOTABLE]:'notable', [TURN_CLASSIFICATION.CRISIS]:'crisis', [TURN_CLASSIFICATION.DEATH]:'death' }[turnClass] ?? 'notable';
-      prose = await callGrok(brief, mode);
+      prose = await callGrok(brief, mode, {
+        isExplicit:          route === ROUTE.PATH_1_EXPLICIT,
+        hasDisease:          (ws.player?.diseases?.length ?? 0) > 0,
+        hasAlcohol:          (ws.player?.stats?.alcohol ?? 0) >= 15,
+        hasChallenges:       (ws.challenges ?? []).some(c => c.active && !c.resolved),
+        hasNpcConditions:    (brief.npc_conditions?.length ?? 0) > 0,
+        isAutopilot:         route === ROUTE.PATH_3_AUTOPILOT,
+        isInit:              false,
+        hasUpcomingSchedule: (brief.upcoming_schedule?.length ?? 0) > 0,
+        isCrisis:            turnClass === TURN_CLASSIFICATION.CRISIS || turnClass === TURN_CLASSIFICATION.DEATH,
+        isDeath:             turnClass === TURN_CLASSIFICATION.DEATH,
+      });
     window._devlog?.turn(`T${ws.turn} narrated`, { class: turnClass, route, chars: prose.length, first50: prose.slice(0,50) });
     }
     // Auto-create NPCs Grok introduces that aren't in the system yet
@@ -3301,6 +3317,13 @@ async function processTurn(input) {
     await savePlayerAction(ws.turn, ws.sim_time, input);
     saveWorldStateCloud(ws).catch(()=>{});
     renderAll();
+    // Fix 2: Extract structured scene state for next Grok call (Groq, non-blocking)
+    if (prose && prose.length > 40) {
+      const _scNpcs = Object.values(ws.npcs).filter(n => n.status === 'active');
+      extractSceneContext(prose, ws.player.location, _scNpcs)
+        .then(ctx => { if (ctx && WS) { WS.scene_context = ctx; saveWorldState(WS).catch(() => {}); } })
+        .catch(() => {});
+    }
     setStatus(`Turn ${ws.turn} · ${formatTimestamp(ws.sim_time).time}`);
     // Auto-refresh log tab if currently open
     if (document.querySelector('.p-tab[data-p="log"]')?.classList.contains('on')) renderActionLog();
@@ -3870,7 +3893,12 @@ document.getElementById('btn-msave').addEventListener('click', () => {
   localStorage.setItem('GROQ_API_KEY',       _sv('k-groq'));
   localStorage.setItem('SUPABASE_URL',       _sv('k-sb-url'));
   localStorage.setItem('SUPABASE_ANON_KEY',  _sv('k-sb-key'));
-  localStorage.setItem('LOREBOOK',           document.getElementById('k-lorebook')?.value ?? '');
+  const _newLb = document.getElementById('k-lorebook')?.value ?? '';
+  localStorage.setItem('LOREBOOK', _newLb);
+  localStorage.removeItem('LOREBOOK_COMPRESSED');
+  if (_newLb.trim() && WS?.player?.name) {
+    compressLorebook(_newLb, WS.player.name, Object.values(WS?.npcs ?? {}).map(n => n.name).filter(Boolean)).catch(() => {});
+  }
   _set('ENRICHER_KEY',      _sv('k-enricher'));
   _set('ENRICHER_MODEL',    _sv('k-enricher-model') || _sv('k-enricher-model-list'));
   _set('ENRICHER_PROVIDER', _sv('k-enricher-provider'));

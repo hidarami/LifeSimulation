@@ -6,7 +6,7 @@
 import {
   buildGrokNarrationPrompt, buildGeminiClassifyPrompt,
   buildGeminiNpcPrompt, buildGeminiAutopilotPrompt,
-  buildMetaConsolePrompt,
+  buildMetaConsolePrompt, buildSceneContextPrompt, buildLorebookCompressionPrompt,
 } from './prompt.js';
 import {
   detectProvider, dispatchChat, dispatchJSON,
@@ -69,22 +69,26 @@ function buildGrokUserMessage(turnBrief, mode) {
   return JSON.stringify({ ...turnBrief, narration_instruction: instruction });
 }
 
-export async function callGrok(turnBrief, mode) {
-  const lorebook  = typeof localStorage !== 'undefined' ? (localStorage.getItem('LOREBOOK')  ?? '') : '';
+export async function callGrok(turnBrief, mode, flags = {}) {
+  // Fix 3: Use compressed lorebook if available, fall back to raw
+  const lorebook  = typeof localStorage !== 'undefined'
+    ? (localStorage.getItem('LOREBOOK_COMPRESSED') || localStorage.getItem('LOREBOOK') || '')
+    : '';
   const locale    = typeof localStorage !== 'undefined' ? (localStorage.getItem('LOCALE')    ?? 'Philippines') : 'Philippines';
   const language  = typeof localStorage !== 'undefined' ? (localStorage.getItem('LANGUAGE')  ?? 'Tagalog') : 'Tagalog';
-  const sys = buildGrokNarrationPrompt(lorebook, locale, language);
+  // Fix 1: Dynamic prompt — only includes sections relevant to this turn
+  const sys = buildGrokNarrationPrompt(lorebook, locale, language, flags);
   const usr = buildGrokUserMessage(turnBrief, mode);
 
   const { key, provider, model } = getNarratorSlot();
-  if (!key || !provider) throw new Error('Narrator API key not configured. Open ⚙ Settings → Narrator Key.');
+  if (!key || !provider) throw new Error(`Narrator API key not configured. Open ⚙ Settings → Narrator Key.`);
 
   const cfg = PROVIDER_ENDPOINTS[provider];
   window._devlog?.api(`Narrator call`, { provider, model: model || cfg?.default_narrator_model });
 
+  // Fix 2: scene_context in turn brief replaces multi-turn conversation history
   const messages = [
     { role: 'system', content: sys },
-    ..._conversationHistory.slice(-4),
     { role: 'user', content: usr },
   ];
 
@@ -121,17 +125,10 @@ export async function callGrok(turnBrief, mode) {
     try {
       const _fbProse = await _callNarratorFallback(sys, usr);
       if (_fbProse && _fbProse.length > 80) {
-        _conversationHistory.push({ role: 'user', content: usr });
-        _conversationHistory.push({ role: 'assistant', content: _fbProse });
-        if (_conversationHistory.length > 20) _conversationHistory = _conversationHistory.slice(-20);
         return _fbProse;
       }
     } catch (_fe) { window._devlog?.error('Narrator fallback also refused/failed', { error: _fe.message }); }
   }
-
-  _conversationHistory.push({ role: 'user', content: usr });
-  _conversationHistory.push({ role: 'assistant', content: prose });
-  if (_conversationHistory.length > 20) _conversationHistory = _conversationHistory.slice(-20);
 
   window._devlog?.api(`Narrator OK`, { provider, model: model || cfg?.default_narrator_model, elapsed_ms: Date.now()-_t0, chars: prose.length });
   return prose;
@@ -164,6 +161,51 @@ async function _callNarratorFallback(systemPrompt, userMessage) {
     } catch (e) { window._devlog?.error(`Narrator hardcoded fallback failed`, { provider, model, error: e.message }); }
   }
   throw new Error('All narrator fallbacks exhausted. Configure fallback slots or OpenRouter/Groq keys in ⚙ Settings.');
+}
+
+// ─── SCENE CONTEXT EXTRACTOR ──────────────────────────────────────────────────
+// Post-narration: Groq extracts structured scene state to replace conversation history.
+export async function extractSceneContext(prose, location, activeNpcs) {
+  const helper = getHelperSlot();
+  if (!helper.key || !helper.provider || !prose || prose.length < 60) return null;
+  const npcNames = (activeNpcs ?? [])
+    .filter(n => n.status === 'active' && n.significance >= 1 && n.name)
+    .map(n => n.name);
+  try {
+    const parsed = await dispatchJSON(
+      helper.provider, helper.key, helper.model,
+      buildSceneContextPrompt(prose, location, npcNames), 200
+    );
+    if (!parsed?.ongoing_thread) return null;
+    window._devlog?.system('Scene context extracted', {
+      location, thread: (parsed.ongoing_thread ?? '').slice(0, 60),
+    });
+    return parsed;
+  } catch { return null; }
+}
+
+// ─── LOREBOOK COMPRESSOR ──────────────────────────────────────────────────────
+// One-time at init. Groq compresses raw lorebook → dense factual shorthand.
+// Saved to LOREBOOK_COMPRESSED; callGrok uses this on every subsequent call.
+export async function compressLorebook(lorebook, playerName, npcNames = []) {
+  if (!lorebook?.trim() || lorebook.trim().length < 80) return;
+  const helper = getHelperSlot();
+  if (!helper.key || !helper.provider) return;
+  try {
+    const compressed = await dispatchChat(
+      helper.provider, helper.key, helper.model,
+      [{ role: 'user', content: buildLorebookCompressionPrompt(lorebook, playerName, npcNames) }],
+      500, 15000
+    );
+    if (compressed?.trim().length > 40 && compressed.trim().length < lorebook.length) {
+      localStorage.setItem('LOREBOOK_COMPRESSED', compressed.trim());
+      window._devlog?.system('Lorebook compressed', {
+        original: lorebook.length + 'c',
+        result: compressed.trim().length + 'c',
+        saved: Math.round((1 - compressed.trim().length / lorebook.length) * 100) + '%',
+      });
+    }
+  } catch (e) { window._devlog?.error('Lorebook compression failed', { error: e.message }); }
 }
 
 // ─── GEMINI ───────────────────────────────────────────────────────────────────

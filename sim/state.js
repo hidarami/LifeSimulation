@@ -86,6 +86,7 @@ export function createInitialWorldState(playerName, startDate) {
     // Last Grok prose — for narrative continuity across turns and page reloads
     last_narration_prose: '',
     session_context_flavor: '',
+    scene_context: null,
     setting_description: '',
     // Ring buffer of compressed turn summaries — injected into AI Console context
     world_memory: [],
@@ -123,6 +124,7 @@ export function migrateSaveState(state) {
   if (!Array.isArray(state.recent_significant_events)) state.recent_significant_events = [];
   if (!Array.isArray(state.world_memory))              state.world_memory             = [];
   if (!state.last_narration_prose)                     state.last_narration_prose     = '';
+  if (state.scene_context === undefined)               state.scene_context            = null;
   if (!state.event_index) state.event_index = {
     last_arrest: null, last_hospitalization: null, last_breakup: null,
     last_job_change: null, last_death_nearby: null, last_major_conflict: null,
@@ -384,6 +386,7 @@ export function assembleTurnBrief(worldState, turnData) {
     session_flavor:     session_context_flavor || null,
     // Previous turn prose — for narrative continuity
     last_narration:     worldState.last_narration_prose || null,
+    scene_context:      worldState.scene_context ?? null,
     // Raw player input — Grok uses this to honor location hints and compound actions
     player_raw_input:   rawInput || null,
     // Upcoming schedule commitments within 2 hours
