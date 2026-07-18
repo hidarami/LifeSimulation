@@ -39,6 +39,30 @@ export function isExplicit(input) {
   return EXPLICIT_PATTERNS.some(p => p.test(n));
 }
 
+// Detects VIEWING/RECEIVING explicit content (not performing an act).
+// When true, routes to PATH_2_NOVEL instead of PATH_1_EXPLICIT.
+export function isPassiveExplicit(input) {
+  const n = input.toLowerCase();
+  // If active explicit acts are present, it is NOT purely passive
+  const _activeActs = [
+    /\b(fuck|screw|bang|rail|nail|shag|bone|plow|pound|penetrat)\b/i,
+    /\b(blowjob|blow\s*job|fellatio|cunnilingus|go\s*down\s*on)\b/i,
+    /\bjerk(s|ed)?\s*(off|it)\b/i,
+    /\bstroke\s+(his|her|their|my)\s*(cock|dick|pussy|clit)\b/i,
+    /\b(finger\s*bang|handjob|masturbat|makeout|french\s*kiss)\b/i,
+  ];
+  if (_activeActs.some(p => p.test(n))) return false;
+  // Detect passive viewing/receiving patterns
+  const _viewPatterns = [
+    /\b(receive[sd]?|got|someone|friend|he|she|they)\s+(sent?|sends?|messaged?|shared?|forward)\b/i,
+    /\b(dick|cock|nude|naked|explicit|lewd)\s*(pic|pick|photo|picture|image|video|snap|selfie)\b/i,
+    /\bphone\s+(notif|notified|rang|buzz|beeped?|alert)\b/i,
+    /\b(check(ed)?|look(ed)?|open(ed)?|saw|see|view(ed)?|watch(ed)?)\s+.{0,60}(notification|notif|message|pic|photo|image|video|phone|screen|nude|naked)\b/i,
+    /\b(message[sd]?|sent|text(ed)?)\s+.{0,50}(pic|photo|image|dick|nude|naked)\b/i,
+  ];
+  return _viewPatterns.some(p => p.test(n));
+}
+
 // ─── EXPLICIT ACTIVITY CLASSIFICATION ────────────────────────────────────────
 // Pattern-based — not keyword lists. Returns an activity key for EXPLICIT_ACTIVITY_TABLE.
 
@@ -70,7 +94,7 @@ export function classifyExplicitActivity(input) {
   if (/\b(jakol|jakolihin|magjakol|nagjajakol|jakolin)\b/i.test(n)) return 'solo_masturbation';
   if (/\b(chupa|chupahin|magchupa|nagchuchupa|ichupa)\b/i.test(n)) return 'oral_giving';
   if (/\b(puke|pek-pek|pekpek|tite|oten|burat)\b/i.test(n)) return 'intercourse';
-  return 'intercourse'; // ambiguous explicit default
+  return 'solo_masturbation'; // safe fallback when no partner act can be identified — prevents inventing a partner
 }
 
 // ─── EXPLICIT ACTIVITY TABLE ─────────────────────────────────────────────────
@@ -102,7 +126,11 @@ const AUTOPILOT_PATTERNS = [
 ];
 
 export function routeInput(input) {
-  if (isExplicit(input))                             return ROUTE.PATH_1_EXPLICIT;
+  if (isExplicit(input)) {
+    // Viewing/receiving explicit content ≠ performing an act — classify via Gemini instead
+    if (isPassiveExplicit(input)) return ROUTE.PATH_2_NOVEL;
+    return ROUTE.PATH_1_EXPLICIT;
+  }
   if (AUTOPILOT_PATTERNS.some(p => p.test(input)))  return ROUTE.PATH_3_AUTOPILOT;
   return ROUTE.PATH_2_NOVEL;
 }

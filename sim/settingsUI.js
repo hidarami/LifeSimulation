@@ -1,7 +1,8 @@
 // settingsUI.js — settings modal, API key testing, fallback slots, load modal
 import S from './gameState.js';
 import { saveWorldState, setSupabaseClient, saveWorldStateCloud, getCurrentSaveId,
-         loadWorldState, loadNarrations, listSaves, deleteSave } from './state.js';
+         loadWorldState, loadNarrations, listSaves, deleteSave, exportFullSave } from './state.js';
+import S from './gameState.js';
 import { compressLorebook, resetConvId, setConversationHistory } from './api.js';
 import { detectProvider, getProviderDisplayName, fetchModels,
          dispatchChat as _providerDispatchChat } from './providers.js';
@@ -375,5 +376,29 @@ export function initPreferences(closeMenuFn) {
     document.getElementById('modal-preferences').classList.remove('open');
     setStatus('Preferences saved.');
     if (S.WS) renderAll();
+  });
+}
+
+// ── EXPORT SAVE ───────────────────────────────────────────────────────────────
+export function initExportButton(closeMenuFn) {
+  document.getElementById('btn-export-save')?.addEventListener('click', async () => {
+    closeMenuFn?.();
+    if (!S.WS) { alert('No save loaded. Load a game first.'); return; }
+    const sid = getCurrentSaveId();
+    const statusEl = document.getElementById('status');
+    if (statusEl) { statusEl.textContent = 'Exporting…'; statusEl.className = 's-load'; }
+    try {
+      const text = await exportFullSave(S.WS, sid);
+      if (!text) { alert('Export failed — no data found.'); return; }
+      const fname = `sim-export-T${S.WS.turn}-${S.WS.player?.name ?? 'save'}-${new Date().toISOString().slice(0,10)}.md`;
+      const a = document.createElement('a');
+      a.href = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(text);
+      a.download = fname;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      if (statusEl) { statusEl.textContent = `Exported: ${fname}`; statusEl.className = ''; }
+    } catch(e) {
+      alert('Export failed: ' + e.message);
+      if (statusEl) { statusEl.textContent = 'Export failed.'; statusEl.className = 's-err'; }
+    }
   });
 }

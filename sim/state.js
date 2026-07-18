@@ -695,3 +695,96 @@ export async function saveClassifierOutput(turn, simTime, output) {
     saveId: _worldId,
   });
 }
+
+// ─── FULL SAVE EXPORT ─────────────────────────────────────────────────────────
+export async function exportFullSave(ws, saveId) {
+  if (!ws) return null;
+  const sid = saveId ?? _worldId;
+  const [narrations, actions, consoleMsgs] = await Promise.all([
+    loadNarrations(9999, sid),
+    loadPlayerActions(9999, sid),
+    loadConsoleHistory(sid),
+  ]);
+  const lorebook = (typeof localStorage !== 'undefined' ? localStorage.getItem('LOREBOOK') : '') ?? '';
+  const cur = (typeof localStorage !== 'undefined' ? localStorage.getItem('CURRENCY_SYMBOL') : null) || '₱';
+  const p = ws.player;
+  const out = [];
+  const H = (t, n = 2) => out.push('\n' + '#'.repeat(n) + ' ' + t + '\n');
+
+  out.push('# THE SIM — Full Save Export');
+  out.push(`**Exported:** ${new Date().toLocaleString()}`);
+  out.push(`**Save ID:** ${sid} | **Turn:** ${ws.turn} | **Sim Time:** ${new Date(ws.sim_time).toLocaleString()}`);
+
+  H('PLAYER');
+  out.push(`**Name:** ${p.name} | **Age:** ${p.age} | **Sex:** ${p.sex ?? '?'} | **Born:** ~${p.birthday ?? '?'}`);
+  out.push(`**Location:** ${p.location ?? '?'} | **Cash:** ${cur}${(p.cash ?? 0).toLocaleString()}`);
+  out.push('\n**Stats:**');
+  const _sn = {health:'Health',energy:'Energy',hunger:'Hunger (0=full 100=starving)',hygiene:'Hygiene',mood:'Mood',arousal:'Arousal',social:'Social',reputation:'Reputation',alcohol:'Alcohol'};
+  for (const [k,lbl] of Object.entries(_sn)) if (k in (p.stats ?? {})) out.push(`- ${lbl}: ${Math.round(p.stats[k])}`);
+  if (p.diseases?.length) { out.push('\n**Active Diseases:**'); p.diseases.forEach(d => out.push(`- ${d.name} (${d.severity}, ${d.duration_remaining} turns remaining) — ${d.cause}`)); }
+  if (p.possessions?.length) { out.push('\n**Possessions:**'); p.possessions.forEach(i => out.push(`- **${i.name}** (${i.condition ?? 'used'}${i.durability != null ? ', '+Math.round(i.durability)+'%' : ''})${i.note && i.note !== i.condition ? ' — '+i.note : ''}`)); }
+  if (p.irreversible?.length) { out.push('\n**Permanent Changes:**'); p.irreversible.forEach(i => out.push(`- ${i}`)); }
+  if (p.habits?.length) { out.push('\n**Habits:**'); p.habits.forEach(h => out.push(`- ${h}`)); }
+  if ((ws.addictions ?? []).length) { out.push('\n**Addictions:**'); ws.addictions.forEach(a => out.push(`- ${a.type} (${a.severity}, ${a.status})`)); }
+
+  H('WORLD STATE');
+  if (ws.setting_description) out.push(`**Setting:** ${ws.setting_description}\n`);
+  if (ws.job) {
+    out.push(`**Job:** ${ws.job.position ?? 'Worker'} at ${ws.job.employer ?? '?'}`);
+    out.push(`- Schedule: ${ws.job.schedule ?? 'N/A'} | Days employed: ${ws.job.days_employed ?? 0}`);
+    if (ws.job.description) out.push(`- ${ws.job.description}`);
+    if (ws.job.performance_flags?.length) out.push(`- Flags: ${ws.job.performance_flags.join(', ')}`);
+  } else out.push('**Job:** Unemployed');
+  if (ws.school) {
+    out.push(`**School:** ${ws.school.name} (${ws.school.grade_level ?? 'N/A'}, ${ws.school.status ?? 'active'})`);
+    out.push(`- Schedule: ${ws.school.schedule ?? 'N/A'} | Absences: ${ws.school.absence_count ?? 0}`);
+  }
+  if (ws.consequences?.length) { out.push('\n**Active Consequences:**'); ws.consequences.forEach(c => out.push(`- ${c.type} (${c.duration} turns left, ${c.severity})`)); }
+  if ((ws.criminal_record?.wanted_level ?? 0) > 0) out.push(`\n**Criminal Record:** Wanted Level ${ws.criminal_record.wanted_level}/5 | Has record: ${ws.criminal_record.has_record}`);
+  if ((ws.fame?.level ?? 0) > 0) out.push(`\n**Fame:** ${ws.fame.label} | ${(ws.fame.followers ?? 0).toLocaleString()} followers`);
+
+  H('NPCS');
+  const _active = Object.values(ws.npcs ?? {}).filter(n => n.status === 'active');
+  const _inactive = Object.values(ws.npcs ?? {}).filter(n => n.status !== 'active');
+  _active.forEach(n => {
+    H(`${n.name} [${n.id}]`, 3);
+    out.push(`**Type:** ${n.relationship_type ?? n.npc_class} | **Class:** ${n.npc_class} | **Age:** ${n.age}`);
+    out.push(`**Relationship:** ${n.relationship_meter > 0 ? '+' : ''}${n.relationship_meter} | **Trust:** ${n.trust_meter > 0 ? '+' : ''}${n.trust_meter} | **Significance:** ${n.significance}`);
+    if (n.bio) out.push(`**Bio:** ${n.bio}`);
+    if (n.traits) out.push(`**Traits:** ${Object.entries(n.traits).map(([k,v])=>`${k}:${v}`).join(' | ')}`);
+    if (n.active_flags?.length) out.push(`**Active Flags:** ${n.active_flags.join(', ')}`);
+    if (n.recent_interactions?.length) { out.push('**Recent Interactions:**'); n.recent_interactions.forEach(r => out.push(`  - ${r}`)); }
+  });
+  if (_inactive.length) { H('Inactive / Departed NPCs', 3); _inactive.forEach(n => out.push(`- **${n.name}** (${n.departure_reason ?? 'inactive'})`)); }
+
+  const _activeCh = (ws.challenges ?? []).filter(c => c.active && !c.resolved);
+  if (_activeCh.length) {
+    H('ACTIVE CHALLENGES');
+    _activeCh.forEach(c => { out.push(`**[${c.severity.toUpperCase()}] ${c.title}**`); out.push(`- Cause: ${c.cause}`); out.push(`- Effects: ${c.effects_text}`); out.push(`- Resolution: ${c.resolution_steps}\n`); });
+  }
+
+  const _activeDebts = (ws.debts ?? []).filter(d => d.status === 'active' || d.status === 'overdue');
+  if (_activeDebts.length) {
+    H('DEBTS');
+    _activeDebts.forEach(d => out.push(`- **${d.creditor}** (${d.type}) — ${cur}${d.amount.toLocaleString()} [${d.status.toUpperCase()}]${d.description ? ': '+d.description : ''}`));
+  }
+
+  if (lorebook.trim()) { H('LOREBOOK'); out.push(lorebook.trim()); }
+  if (ws.world_memory?.length) { H('COMPRESSED WORLD MEMORY'); ws.world_memory.forEach(m => out.push(`- ${m}`)); }
+
+  H('NARRATION LOG');
+  narrations.forEach(n => {
+    out.push(`\n---\n**Turn ${n.turn}** · ${n.data?.simTime ? new Date(n.data.simTime).toLocaleString() : ''} · ${n.data?.location ?? ''}\n`);
+    out.push(n.description);
+  });
+
+  H('ACTION LOG');
+  actions.forEach(a => out.push(`**T${a.turn}:** ${a.input}`));
+
+  if (consoleMsgs.length) {
+    H('AI CONSOLE LOG');
+    consoleMsgs.forEach(m => out.push(`**[${m.role.toUpperCase()} — ${new Date(m.timestamp).toLocaleTimeString()}]**\n${m.content.replace(/---\n\*Source:.*$/m,'').trim().slice(0,800)}\n`));
+  }
+
+  return out.join('\n');
+}

@@ -104,7 +104,8 @@ export async function startNewGame() {
         if (parsed.start_date?.year) {
           const yr = parsed.start_date.year;
           const mo = Math.max(0, Math.min(11, (parsed.start_date.month ?? 6) - 1));
-          ws.sim_time = new Date(yr, mo, 15, 8, 0, 0).toISOString();
+          const hr = parsed.start_date.hour != null ? Math.max(0, Math.min(23, parsed.start_date.hour)) : 8;
+          ws.sim_time = new Date(yr, mo, 15, hr, 0, 0).toISOString();
           ws.player.birthday = String(yr - age);
         }
       }

@@ -180,6 +180,10 @@ export async function processTurn(input) {
   let _turnCommitted = false;
   try {
     let ws = JSON.parse(JSON.stringify(S.WS));
+    // Capture pre-turn snapshot for delta display in UI
+    S._prevStats = { ...S.WS.player.stats };
+    S._prevNpcMeters = {};
+    Object.values(S.WS.npcs ?? {}).forEach(n => { S._prevNpcMeters[n.id] = { rel: n.relationship_meter, trust: n.trust_meter }; });
     let statDeltas={}, relDeltas={}, timeCost=0.25, locationChange=null, npcReactions=[];
     let riskResult={roll:100,severity:null,event:null}, consequenceUpd=null;
     let actionDesc = input, _mentionedNpc = null, _cls2Result = null, _npcWitnesses = [], _realityCheck = null;
@@ -259,7 +263,7 @@ export async function processTurn(input) {
         const _bystanderNote = _bystanders.length ? ` — others present but uninvolved: ${_bystanders.join('; ')}` : '';
         const partnerTag = (thirdParty && NEEDS_PARTNER.includes(type))
           ? ` — described partner in scene${_mentionedNpc ? ': '+_mentionedNpc.name : ''}`
-          : (!hasActiveNpc && !thirdParty ? ' — no established partner' : '');
+          : (_mentionedNpc ? '' : (NEEDS_PARTNER.includes(type) ? ' — no named partner: narrate as solo or ambiguous, do not invent a partner' : ''));
         actionDesc = `[explicit: ${type}${partnerTag}${_bystanderNote}]` + (compound.ate ? ' + ate' : '');
         if (thirdParty && !hasActiveNpc && NEEDS_PARTNER.includes(type)) {
           evaluateDescribedNpc(input).then(nd => {
@@ -329,8 +333,9 @@ export async function processTurn(input) {
       const _EXP = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
       const _eType = actionDesc.match(/\[explicit:\s*(\w+)/)?.[1] ?? '';
       const _wasRefused = actionDesc.startsWith('[intimate_attempt_refused');
-      if (!_wasRefused && _EXP.includes(_eType) && !actionDesc.includes('no established partner')) {
-        const _tNpc = _mentionedNpc ?? Object.values(ws.npcs).find(n => n.status==='active' && n.significance>=1);
+      // Only fire NPC reaction when player explicitly named/targeted someone — never pick a random NPC
+      if (!_wasRefused && _EXP.includes(_eType) && _mentionedNpc) {
+        const _tNpc = _mentionedNpc;
         if (_tNpc && ws.npcs[_tNpc.id]) {
           try {
             const _eCtx = buildNpcContextForGemini(_tNpc, ws.sim_time);

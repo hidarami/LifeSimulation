@@ -7,5 +7,7 @@ const S = {
   _sbClient:           null,   // Supabase client instance
   _imageCache:         {},     // { 'player': dataUrl, npc_id: dataUrl }
   _imgUploadTarget:    null,   // 'player' or an NPC id string
+  _prevStats:          null,   // player stats snapshot before last turn (for delta display)
+  _prevNpcMeters:      {},     // { npc_id: { rel, trust } } snapshot before last turn
 };
 export default S;

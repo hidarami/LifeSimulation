@@ -51,9 +51,15 @@ export function renderCenterStats(stats) {
     const val  = Math.round(stats[key]);
     const fill = meta.invert ? 100 - val : val;
     const disp = meta.invert ? (100 - val) : val;
+    const _prevRaw = S._prevStats?.[key];
+    const _prevDisp = _prevRaw != null ? (meta.invert ? 100 - Math.round(_prevRaw) : Math.round(_prevRaw)) : null;
+    const _delta = _prevDisp !== null ? disp - _prevDisp : 0;
+    const _dHtml = _delta !== 0
+      ? `<span class="cstat-delta ${_delta > 0 ? 'cdelta-pos' : 'cdelta-neg'}">${_delta > 0 ? '+' : ''}${_delta}</span>`
+      : '';
     const row  = document.createElement('div');
     row.className = 'cstat-row';
-    row.innerHTML = `<span class="cstat-icon">${meta.icon}</span><span class="cstat-label">${meta.label}</span><div class="cstat-track"><div class="cstat-fill ${cstatColor(fill)}" style="width:${fill}%"></div></div><span class="cstat-val">${disp}</span>`;
+    row.innerHTML = `<span class="cstat-icon">${meta.icon}</span><span class="cstat-label">${meta.label}</span><div class="cstat-track"><div class="cstat-fill ${cstatColor(fill)}" style="width:${fill}%"></div></div><span class="cstat-val">${disp}${_dHtml}</span>`;
     c.appendChild(row);
   }
 }
@@ -140,7 +146,7 @@ export function renderAll() {
       return `<span class="emotion-badge ${cls}">${em.label}<span class="emotion-cause">${em.cause}</span></span>`;
     }).join('');
   }
-  renderNpcPanel(S.WS.npcs, document.getElementById('npc-cards'), S.WS.sim_time, S.WS.player.name, S.WS.player.location ?? 'home');
+  renderNpcPanel(S.WS.npcs, document.getElementById('npc-cards'), S.WS.sim_time, S.WS.player.name, S.WS.player.location ?? 'home', S._prevNpcMeters ?? {});
   renderJobPanel(S.WS.job, S.WS.school ?? null, document.getElementById('p-job'));
   renderPossessionsPanel(S.WS.player.possessions, S.WS.player.irreversible, document.getElementById('p-items'));
   renderChallengesPanel(S.WS.challenges, S.WS.debts ?? [], S.WS.fame ?? null, document.getElementById('p-challenges'));

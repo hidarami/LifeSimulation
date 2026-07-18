@@ -573,6 +573,10 @@ body{background:var(--bg);color:var(--txt);font-family:var(--f);font-size:15px;l
 .cstat-track{flex:1;height:4px;background:var(--bdr);border-radius:2px;overflow:hidden}
 .cstat-fill{height:100%;border-radius:2px;transition:width .4s,background .4s}
 .cstat-val{width:22px;text-align:right;color:var(--dim);font-size:10px;font-variant-numeric:tabular-nums;flex-shrink:0}
+.cstat-delta{font-size:8px;font-weight:700;margin-left:2px;vertical-align:middle}
+.cdelta-pos{color:var(--pos)}
+.cdelta-neg{color:var(--neg)}
+.npc-meter-delta{font-size:8px;font-weight:700;margin-left:2px;vertical-align:middle}
 @media (min-width:768px){
   #panels-wrapper,
   #panels-wrapper.show-left,

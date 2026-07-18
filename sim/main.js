@@ -48,7 +48,7 @@ import { setStatus, setProcessing, renderAll, renderCenterStats,
          openCharModal, openNpcModal, runIntegrityCheck,
          showChallengeQueue } from './uiCore.js';
 import { initWizard, startNewGame } from './wizard.js';
-import { initSettings, initSupabaseAuth, initLoadModal, initPreferences } from './settingsUI.js';
+import { initSettings, initSupabaseAuth, initLoadModal, initPreferences, initExportButton } from './settingsUI.js';
 import { initConsoleUI, sendConsoleMessage, loadConsoleHistoryForCurrentSave,
          appendConsoleMsg } from './consoleUI.js';
 import { initDevConsole } from './devConsoleUI.js';
@@ -78,6 +78,7 @@ initSettings(closeMenu);
 initPreferences(closeMenu);
 initLoadModal(loadImageCache);
 initSupabaseAuth();
+initExportButton(closeMenu);
 initConsoleUI(closeMenu);
 initDevConsole(() => S.WS, closeMenu);
 initImageUpload();

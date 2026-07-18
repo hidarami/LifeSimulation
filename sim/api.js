@@ -349,13 +349,13 @@ Return exactly this shape:
       "reputation": number_0_to_100_or_null
     }
   },
-  "start_date": { "year": number_or_null, "month": number_1_to_12_or_null },
+  "start_date": { "year": number_or_null, "month": number_1_to_12_or_null, "hour": number_0_to_23_or_null },
   "job": null,
   "npcs": [],
   "possessions": []
 }
 
-start_date: Extract the in-world year and month (e.g. "summer of 2018" → year:2018, month:7; "February 2020" → year:2020, month:2; "2024" → year:2024, month:null). If no date context is mentioned, return null for both fields.
+start_date: Extract in-world year, month, and time of day. Examples: "summer of 2018 at 5am" → year:2018, month:7, hour:5; "February 2020, 10pm" → year:2020, month:2, hour:22; "2024, afternoon" → year:2024, month:null, hour:14; "5:00 AM" alone → hour:5; "midnight" → hour:0; "noon" → hour:12. If no time mentioned return null for hour. If no year mentioned return null for year and month.
 initial_stats: Infer from character description ONLY — sick/injured→low health, depressed/grieving→low mood, isolated/alone→low social, filthy/homeless→low hygiene, well-rested→high energy, charismatic/popular→high reputation. Return null for any stat the lorebook does not imply. hunger and arousal are NOT included (always initialized separately). Never invent values — null is correct when unspecified.
 
 If employed, job shape:

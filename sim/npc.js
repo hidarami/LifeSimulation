@@ -330,11 +330,12 @@ export function computeWitnessReaction(witnessNpc, primaryNpcId, actType) {
   const FAMILY = new Set(['mother','father','brother','sister','uncle','aunt','grandmother','grandfather',
     'lola','lolo','guardian','parent_father','parent_mother','stepmother','stepfather','stepbrother','stepsister']);
   if (FAMILY.has(witnessNpc.relationship_type ?? '')) {
-    result.rel_delta   = isFullAct ? -15 : -8;
-    result.trust_delta = isFullAct ? -8  : -4;
+    result.rel_delta   = isFullAct ? -30 : -12;
+    result.trust_delta = isFullAct ? -25 : -8;
     result.flags = [
-      { flag:'uncomfortable', decay_rate:'medium' },
-      ...(isFullAct ? [{ flag:'angry', decay_rate:'medium' }] : []),
+      { flag:'uncomfortable', decay_rate:'slow' },
+      { flag:'angry', decay_rate:'slow' },
+      ...(isFullAct ? [{ flag:'betrayed', decay_rate:'slow' }] : []),
     ];
     result.mood_label = 'horrified';
     result.summary = `${witnessNpc.name} stops dead in the doorway, then disappears. The silence that follows has weight.`;

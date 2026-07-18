@@ -129,7 +129,7 @@ export function renderStatPanel(stats, cash, container) {
 }
 
 // ─── NPC PANEL ────────────────────────────────────────────────────────────────
-export function renderNpcPanel(npcs, container, currentDate, playerName, playerLocation = 'home') {
+export function renderNpcPanel(npcs, container, currentDate, playerName, playerLocation = 'home', prevNpcMeters = {}) {
   container.innerHTML = '';
   const pkey = playerName?.toLowerCase().trim();
   const active = Object.values(npcs).filter(n =>
@@ -140,7 +140,7 @@ export function renderNpcPanel(npcs, container, currentDate, playerName, playerL
     container.innerHTML = '<p class="empty">No significant relationships yet.</p>';
     return;
   }
-  active.forEach(npc => container.appendChild(buildNpcCard(npc, currentDate, playerLocation)));
+  active.forEach(npc => container.appendChild(buildNpcCard(npc, currentDate, playerLocation, prevNpcMeters)));
 }
 
 function getNpcEmotionLabel(npc) {
@@ -155,7 +155,7 @@ function getNpcEmotionLabel(npc) {
   return e.slice(0, 2);
 }
 
-function buildNpcCard(npc, currentDate, playerLocation = 'home') {
+function buildNpcCard(npc, currentDate, playerLocation = 'home', prevNpcMeters = {}) {
   const card = document.createElement('div');
   card.className       = 'npc-card';
   card.dataset.id      = npc.id;
@@ -171,6 +171,11 @@ function buildNpcCard(npc, currentDate, playerLocation = 'home') {
   ).replace(/_/g, ' ');
   const relSign   = npc.relationship_meter > 0 ? '+' : '';
   const relClass  = npc.relationship_meter >= 30 ? 'mp' : npc.relationship_meter <= -30 ? 'mn' : 'mz';
+  const _prevM    = prevNpcMeters[npc.id];
+  const _relDelta = _prevM != null ? npc.relationship_meter - _prevM.rel : 0;
+  const _relDHtml = _relDelta !== 0
+    ? `<span class="npc-meter-delta ${_relDelta > 0 ? 'cdelta-pos' : 'cdelta-neg'}">${_relDelta > 0 ? '▲' : '▼'}${Math.abs(_relDelta)}</span>`
+    : '';
 
   // ── Collapsed header (always visible) ────────────────────────────────────
   // Only show flag-derived emotions; suppress generic relationship-state labels
@@ -181,7 +186,7 @@ function buildNpcCard(npc, currentDate, playerLocation = 'home') {
   header.innerHTML = `
     <div class="npc-col-top">
       <span class="npc-name">${npc.name}</span>
-      <span class="npc-rel-num ${relClass}">${relSign}${npc.relationship_meter}</span>
+      <span class="npc-rel-num ${relClass}">${relSign}${npc.relationship_meter}${_relDHtml}</span>
       <span class="npc-expand-icon">▶</span>
     </div>
     <div class="npc-col-bottom">
