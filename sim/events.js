@@ -591,6 +591,51 @@ export const WORLD_EVENT_TABLE = [
     effect: () => ({ stat_deltas: { energy: -8, health: -2, hygiene: -5 } }),
     challenge_trigger: false,
   },
+
+  // ── TEXTURE / AMBIENT HOOKS ────────────────────────────────────────────────
+  // Always-eligible world moments that fire on ordinary turns to give forward momentum.
+  // scene_driver: true signals turnProcessor to surface them to the narrator.
+  // These produce no stats, consequences, or challenges — only scene texture.
+  {
+    id: 'npc_ambient_moment',
+    category: 'social',
+    label: 'An NPC does something worth noticing',
+    condition: ws => Object.values(ws.npcs ?? {}).some(n => n.status === 'active' && n.significance >= 1),
+    probability: 0.28,
+    effect: ws => {
+      const eligible = Object.values(ws.npcs ?? {}).filter(n => n.status === 'active' && n.significance >= 1);
+      if (!eligible.length) return {};
+      const npc = eligible[Math.floor(Math.random() * eligible.length)];
+      return { scene_driver: { type: 'npc_ambient', npc_id: npc.id, npc_name: npc.name, weight: 'light' } };
+    },
+    scene_driver: true,
+    challenge_trigger: false,
+  },
+  {
+    id: 'environment_texture',
+    category: 'misc',
+    label: 'Environmental detail surfaces',
+    condition: () => true,
+    probability: 0.18,
+    effect: () => ({ scene_driver: { type: 'environment', weight: 'light' } }),
+    scene_driver: true,
+    challenge_trigger: false,
+  },
+  {
+    id: 'npc_unspoken_tension',
+    category: 'social',
+    label: 'Something unspoken between player and NPC',
+    condition: ws => Object.values(ws.npcs ?? {}).some(n => n.status === 'active' && n.significance >= 2),
+    probability: 0.15,
+    effect: ws => {
+      const eligible = Object.values(ws.npcs ?? {}).filter(n => n.status === 'active' && n.significance >= 2);
+      if (!eligible.length) return {};
+      const npc = eligible[Math.floor(Math.random() * eligible.length)];
+      return { scene_driver: { type: 'unspoken_tension', npc_id: npc.id, npc_name: npc.name, weight: 'light' } };
+    },
+    scene_driver: true,
+    challenge_trigger: false,
+  },
 ];
 
 // ─── NPC EVENT TABLE ──────────────────────────────────────────────────────────

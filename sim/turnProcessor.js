@@ -12,7 +12,8 @@ import { routeInput, classifyExplicitActivity,
          hasThirdPartyPresence } from './sanitizer.js';
 import { callGrok, classifyAction, evaluateNpcReaction, resetConvId,
          callGeminiAutopilot, compressSessionContext, evaluateDescribedNpc,
-         evaluateNpcFlagsInContext, extractNarrativeStateChanges, extractSceneContext } from './api.js';
+         evaluateNpcFlagsInContext, extractNarrativeStateChanges, extractSceneContext,
+         checkNpcInitiative } from './api.js';
 import { renderNarration, renderTurnAnchor, livesWithPlayer, getSmartNpcLabel } from './renderer.js';
 import { checkWorldEvents, checkNpcEvents, applyEventEffect, applyNpcEventEffect,
          progressDiseases, progressNpcDiseases, checkDiseaseContraction, checkNpcDiseaseSpread,
@@ -411,16 +412,43 @@ export async function processTurn(input) {
         const _sch = challengeFromDisease(_spread.disease, _spread.cause, ws.turn); ws.challenges=[...(ws.challenges??[]),_sch]; newChallenges.push(_sch);
       }
     }
+    let _sceneDriver = null;
+    let _hasMajorEvent = false;
     for (const ev of checkWorldEvents(ws)) {
       ws=applyEventEffect(ws,ev); await logEvent({turn:ws.turn,category:ev.category,description:ev.label});
       ws=updateEventIndex(ws,`last_${ev.category}`,ev.label,ws.turn);
-      if (ev.challenge_trigger) { const ch=challengeFromWorldEvent(ev,ws); if(ch){ws.challenges=[...(ws.challenges??[]),ch];newChallenges.push(ch);} }
+      if (ev.challenge_trigger) {
+        _hasMajorEvent = true;
+        const ch=challengeFromWorldEvent(ev,ws); if(ch){ws.challenges=[...(ws.challenges??[]),ch];newChallenges.push(ch);}
+      }
+      // Capture first texture scene driver; ignored if a major event fires
+      if (!_sceneDriver && ev.scene_driver && ev.effect_result?.scene_driver) {
+        _sceneDriver = ev.effect_result.scene_driver;
+      }
     }
+    // Major events (challenges) are their own scene drivers — suppress texture
+    if (_hasMajorEvent) _sceneDriver = null;
     for (const npcEv of checkNpcEvents(ws)) {
       ws=applyNpcEventEffect(ws,npcEv); await logEvent({turn:ws.turn,category:'npc_event',description:`${npcEv.npc_name}: ${npcEv.label}`});
       ws=appendSignificantEvent(ws,`Turn ${ws.turn}: ${npcEv.npc_name} ${npcEv.label}`);
       if (npcEv.creates_player_challenge) { const npc=ws.npcs[npcEv.npc_id]; if(npc){const ch=challengeFromNpcEvent(npcEv,npc,ws.turn);if(ch){ws.challenges=[...(ws.challenges??[]),ch];newChallenges.push(ch);}}}
     }
+    // NPC initiative — wired here for the first time; fires every 3rd turn when no scene driver captured
+    if (ws.turn % 3 === 0 && !_sceneDriver) {
+      const _initCtxs = Object.values(ws.npcs)
+        .filter(n => n.status === 'active' && n.significance >= 1)
+        .slice(0, 4)
+        .map(n => buildNpcContextForGemini(n, ws.sim_time));
+      if (_initCtxs.length) {
+        try {
+          const _inits = await checkNpcInitiative(_initCtxs, ws.player.stats, ws.turn);
+          if (_inits.length) {
+            _sceneDriver = { type: 'npc_initiative', npc_id: _inits[0].npc_id, brief: _inits[0].brief, contact_type: _inits[0].type, weight: 'medium' };
+          }
+        } catch {}
+      }
+    }
+
     for (const debt of (ws.debts??[])) {
       if (debt.status==='overdue') {
         const alreadyHas=(ws.challenges??[]).some(c=>c.active&&!c.resolved&&c.id.includes(debt.id));
@@ -453,7 +481,7 @@ export async function processTurn(input) {
     if (route === ROUTE.PATH_3_AUTOPILOT && turnClass === TURN_CLASSIFICATION.ROUTINE) {
       prose = await callGeminiAutopilot(sanitizeStateForGemini(ws), timeCost, input).catch(()=>`${timeCost}h passed.`);
     } else {
-      const brief = assembleTurnBrief(ws, { turnNumber:ws.turn, simTime:ws.sim_time, location:ws.player.location, actionDescription:actionDesc, statDeltas, riskResult, consequenceUpdate:consequenceUpd, npcReactions, turnClass, isExplicit:route===ROUTE.PATH_1_EXPLICIT, rawInput:input });
+      const brief = assembleTurnBrief(ws, { turnNumber:ws.turn, simTime:ws.sim_time, location:ws.player.location, actionDescription:actionDesc, statDeltas, riskResult, consequenceUpdate:consequenceUpd, npcReactions, turnClass, isExplicit:route===ROUTE.PATH_1_EXPLICIT, rawInput:input, sceneDriver:_sceneDriver });
       brief.npc_locations = {};
       const _nlInputLow=input.toLowerCase(), _nlReacted=new Set(npcReactions.map(r=>r.npc_id)), _nlAwayLocs=new Set(['workplace','school','transit']), _nlAbsent=[];
       for (const [_nlId,_nlNpc] of Object.entries(ws.npcs)) {

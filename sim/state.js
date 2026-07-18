@@ -330,7 +330,7 @@ export function assembleTurnBrief(worldState, turnData) {
   const {
     turnNumber, simTime, location, actionDescription,
     statDeltas, riskResult, consequenceUpdate,
-    npcReactions, turnClass, isExplicit, rawInput,
+    npcReactions, turnClass, isExplicit, rawInput, sceneDriver,
   } = turnData;
 
   // Build structured history from event_index — only non-null entries
@@ -391,6 +391,8 @@ export function assembleTurnBrief(worldState, turnData) {
     player_raw_input:   rawInput || null,
     // Upcoming schedule commitments within 2 hours
     upcoming_schedule:  _upSched.length ? _upSched : null,
+    // World-driven scene moment for this turn (texture event or NPC initiative)
+    scene_driver:       sceneDriver ?? null,
     // Active diseases (player)
     active_diseases:    (worldState.player?.diseases ?? []).map(d => ({
       id: d.id, name: d.name, severity: d.severity, duration: d.duration_remaining, cause: d.cause,

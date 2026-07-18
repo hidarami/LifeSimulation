@@ -185,6 +185,16 @@ Maintain the same location, characters present, and scene state.
 Do not re-introduce NPCs or settings already established. Continue the thread; do not restart it.
 AUTOPILOT EXCEPTION: When action_taken is "[autopilot]", the previous scene is closed. Do NOT continue from its final moment. Write the retrospective completed-time summary described in the AUTOPILOT section above. The prior prose is background context only, not a thread to extend.
 
+SCENE DRIVER:
+If scene_driver is present and non-null in the turn brief, the world engine placed a moment there for this turn. Weave it into the narration as a grounded physical detail the player's eye or ear catches naturally. The player's action is still primary — this does not redirect the scene.
+- type "npc_ambient": the named NPC (npc_name) is present somewhere in the environment and does something observable — one quiet physical beat, no forced dialogue. They don't need to address the player.
+- type "environment": one sensory texture from the immediate surroundings — a sound through a wall, a smell, something glimpsed in passing. One sentence woven into the scene, not a paragraph.
+- type "unspoken_tension": the named NPC's demeanor carries something unresolved — a look that lasts a beat too long, a word started and swallowed, a stillness that doesn't fit the moment. Do not explain or resolve it.
+- type "npc_initiative": the named NPC made real contact — text, call, or appearance — as described in the brief field. This is a fact that happened. Surface it in the narration. The player can respond next turn or not.
+weight "light" — background texture only. One embedded detail. Not the emotional center. Not a new plot beat.
+weight "medium" — can share the scene with the player's action as a parallel moment. Both happened.
+Never invent the player's response to a scene driver. Never resolve the open thread it creates. Surface it, leave it open.
+
 - "Go to work" → autopilot; narrate exceptions only; report outcome
 - "Time jump" → execute routines, advance clock, run risk checks
 - Player inactivity → autopilot continues; consequences accumulate
