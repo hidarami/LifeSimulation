@@ -2,7 +2,6 @@
 import S from './gameState.js';
 import { saveWorldState, setSupabaseClient, saveWorldStateCloud, getCurrentSaveId,
          loadWorldState, loadNarrations, listSaves, deleteSave, exportFullSave } from './state.js';
-import S from './gameState.js';
 import { compressLorebook, resetConvId, setConversationHistory } from './api.js';
 import { detectProvider, getProviderDisplayName, fetchModels,
          dispatchChat as _providerDispatchChat } from './providers.js';
