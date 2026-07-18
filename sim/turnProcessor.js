@@ -24,7 +24,8 @@ import { challengeFromDisease, challengeFromNpcEvent, challengeFromWorldEvent,
          challengeFromAddiction, challengeFromScandal, challengeFromLoanShark } from './challenges.js';
 import { tickFlagDecay, addFlag, incrementSignificance, FLAG_DECAY,
          buildNpcContextForGemini, applyRelationshipDelta, createNpc,
-         driftTraits, getNpcCurrentTask, updateNpcCareer } from './npc.js';
+         driftTraits, getNpcCurrentTask, updateNpcCareer,
+         checkNpcConsentGate, computeWitnessReaction } from './npc.js';
 import { renderAll, setStatus, setProcessing, showChallengeQueue, renderActionLog } from './uiCore.js';
 import { showCameraFlash } from './imageUpload.js';
 
@@ -79,6 +80,22 @@ function detectScheduleMiss(prevIso, newIso, playerAction, ws) {
     }
   }
   return missed;
+}
+
+// ── ACTION REALITY CHECK ──────────────────────────────────────────────────────
+// Returns null (grounded) or a tag passed to Grok to anchor narration.
+// Does NOT block the action — the world narrates what actually happened.
+function detectActionReality(input, ws) {
+  if (/\b(fly\b|teleport|levitat|walk through (the\s+)?wall|become invisible|time trave|resurrect|come back (from the\s+)?dead|breathe (in\s+)?space)\b/i.test(input))
+    return 'impossible_physics';
+  const hasFame = (ws.fame?.level ?? 0) >= 2;
+  if (/\b(become (a )?(celebrity|famous|president|prime minister|senator|CEO|billionaire|millionaire|movie star|pop star|idol))\b/i.test(input) && !hasFame)
+    return 'context_mismatch';
+  if (/\b(i am now|suddenly (am|become|have become)|instantly (become|transform into|am))\b/i.test(input))
+    return 'context_mismatch';
+  if (/^(i wish|if only|imagine (if|that)|what if i|someday i('ll| will)|i fantasize|i daydream)\b/i.test(input.toLowerCase()))
+    return 'fantasy_wish';
+  return null;
 }
 
 // ── DEATH / POV SHIFT ─────────────────────────────────────────────────────────
@@ -165,7 +182,7 @@ export async function processTurn(input) {
     let ws = JSON.parse(JSON.stringify(S.WS));
     let statDeltas={}, relDeltas={}, timeCost=0.25, locationChange=null, npcReactions=[];
     let riskResult={roll:100,severity:null,event:null}, consequenceUpd=null;
-    let actionDesc = input, _mentionedNpc = null, _cls2Result = null;
+    let actionDesc = input, _mentionedNpc = null, _cls2Result = null, _npcWitnesses = [], _realityCheck = null;
 
     let route = routeInput(input);
     if (route === ROUTE.PATH_1_EXPLICIT && localStorage.getItem('CONTENT_MODE') === 'filtered') {
@@ -177,14 +194,12 @@ export async function processTurn(input) {
     if (route === ROUTE.PATH_1_EXPLICIT) {
       let type = classifyExplicitActivity(input);
       const NEEDS_PARTNER = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
+      const FULL_ACTS     = ['intercourse','oral_giving','oral_receiving','mutual_masturbation'];
       const hasActiveNpc  = Object.values(ws.npcs).some(n => n.status==='active' && n.significance>=1);
       const thirdParty    = hasThirdPartyPresence(input);
       if (NEEDS_PARTNER.includes(type) && !hasActiveNpc && !thirdParty) type = 'solo_masturbation';
-      statDeltas = { ...(EXPLICIT_ACTIVITY_TABLE[type] ?? {}) };
-      const compound = extractCompoundContext(input);
-      if (compound.ate) { statDeltas.hunger=(statDeltas.hunger??0)-30; statDeltas.mood=(statDeltas.mood??0)+5; }
-      if (compound.location_hint) locationChange = compound.location_hint;
-      timeCost = 0.5;
+
+      // ── Identify target NPC FIRST so consent gate runs before actionDesc ────
       const _inputLower = input.toLowerCase();
       const _possNpc = Object.values(ws.npcs).find(n => n.status==='active' && n.name && _inputLower.includes(n.name.toLowerCase()+"'s"));
       let _closestNpc = null, _minVerbDist = Infinity;
@@ -197,27 +212,70 @@ export async function processTurn(input) {
         }
       }
       _mentionedNpc = _possNpc ?? _closestNpc ?? Object.values(ws.npcs).find(n => n.status==='active' && n.name && _inputLower.includes(n.name.toLowerCase()));
-      const _bystanders = Object.values(ws.npcs).filter(n => n.status==='active' && n.name && input.toLowerCase().includes(n.name.toLowerCase()) && n.id !== _mentionedNpc?.id)
-        .map(n => { const _bt = getNpcCurrentTask(n, ws.sim_time); return `${n.name} (${_bt.task.replace(/_/g,' ')} — bystander)`; });
-      const _bystanderNote = _bystanders.length ? ` — others present but uninvolved: ${_bystanders.join('; ')}` : '';
-      const partnerTag = (thirdParty && NEEDS_PARTNER.includes(type))
-        ? ` — described partner in scene${_mentionedNpc ? ': '+_mentionedNpc.name : ''}`
-        : (!hasActiveNpc && !thirdParty ? ' — no established partner' : '');
-      actionDesc = `[explicit: ${type}${partnerTag}${_bystanderNote}]` + (compound.ate ? ' + ate' : '');
-      if (thirdParty && !hasActiveNpc && NEEDS_PARTNER.includes(type)) {
-        evaluateDescribedNpc(input).then(nd => {
-          if (_turnToken !== S._processTurnCounter) return;
-          const _exists = Object.values(S.WS?.npcs??{}).some(n => n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim());
-          const _nh = ['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf'];
-          const _human = nd?.name && /^[A-Z]/.test(nd.name) && nd.name.split(/\s+/).length<=3 && nd.name.length<=28 && !_nh.some(w=>nd.name.toLowerCase().includes(w));
-          if (nd?.id && !S.WS?.npcs?.[nd.id] && !_exists && _human && nd.significance !== 'none') {
-            const _n = createNpc({ id:nd.id, name:nd.name, age:nd.age||20, npc_class:nd.npc_class||'household', traits:nd.traits||{} });
-            _n.relationship_meter = nd.relationship_meter ?? 20; _n.trust_meter = nd.trust_meter ?? 10; _n.significance = 1;
-            S.WS.npcs[nd.id] = _n; saveWorldState(S.WS).catch(()=>{}); renderAll();
-          }
-        }).catch(()=>{});
+
+      // ── Pre-consent gate — JS level, cannot be bypassed by player wording ──
+      let _consentResult = 'proceed';
+      if (_mentionedNpc && NEEDS_PARTNER.includes(type) && type !== 'solo_masturbation') {
+        _consentResult = checkNpcConsentGate(_mentionedNpc, type);
       }
-      riskResult = rollRisk('low', ws.player.stats);
+
+      if (_consentResult === 'refuse') {
+        // Act did NOT happen. Build refusal context for Grok.
+        const _refType = FULL_ACTS.includes(type) ? 'refused_explicit' : 'refused_light';
+        statDeltas = { ...(EXPLICIT_ACTIVITY_TABLE[_refType] ?? { mood: -5, social: -8 }) };
+        timeCost   = 0.1;
+        actionDesc = `[intimate_attempt_refused — ${type} — described partner in scene${_mentionedNpc ? ': ' + _mentionedNpc.name : ''}]`;
+        if (_mentionedNpc && ws.npcs[_mentionedNpc.id]) {
+          try {
+            const _rCtx = buildNpcContextForGemini(_mentionedNpc, ws.sim_time);
+            const _rRxn = await evaluateNpcReaction(_rCtx, `player attempted [${type}] — NPC declined based on traits and relationship standing`, ws.player.stats);
+            const _rDelta = _rRxn?.relationship_delta ?? -5;
+            ws.npcs[_mentionedNpc.id] = applyRelationshipDelta(ws.npcs[_mentionedNpc.id], _rDelta, _rRxn?.trust_delta ?? -3);
+            for (const f of (_rRxn?.flags_to_add ?? [{ flag:'uncomfortable', decay_rate:'fast' }])) {
+              ws.npcs[_mentionedNpc.id] = addFlag(ws.npcs[_mentionedNpc.id], f.flag, FLAG_DECAY[f.decay_rate] ?? FLAG_DECAY.fast);
+            }
+            ws.npcs[_mentionedNpc.id] = incrementSignificance(ws.npcs[_mentionedNpc.id]);
+            relDeltas[_mentionedNpc.id] = _rDelta;
+            const _rSum = _rRxn?.reaction_summary ?? `${_mentionedNpc.name} pulls back, making it clear this isn't going to happen.`;
+            npcReactions.push({ npc_id: _mentionedNpc.id, summary: _rSum });
+            ws.npcs[_mentionedNpc.id]._hidden = ws.npcs[_mentionedNpc.id]._hidden ?? {};
+            ws.npcs[_mentionedNpc.id]._hidden.last_interaction_turn = ws.turn;
+            ws.npcs[_mentionedNpc.id].recent_interactions = [...(ws.npcs[_mentionedNpc.id].recent_interactions ?? []), _rSum].slice(-5);
+            if (_rDelta <= -5) ws.npcs[_mentionedNpc.id] = driftTraits(ws.npcs[_mentionedNpc.id], { mistreated: true });
+          } catch {
+            npcReactions.push({ npc_id: _mentionedNpc.id, summary: `${_mentionedNpc.name} makes it clear this isn't happening.` });
+          }
+        }
+        riskResult = rollRisk('none', ws.player.stats);
+      } else {
+        // Consent granted (or solo) — proceed normally
+        statDeltas = { ...(EXPLICIT_ACTIVITY_TABLE[type] ?? {}) };
+        const compound = extractCompoundContext(input);
+        if (compound.ate) { statDeltas.hunger=(statDeltas.hunger??0)-30; statDeltas.mood=(statDeltas.mood??0)+5; }
+        if (compound.location_hint) locationChange = compound.location_hint;
+        timeCost = 0.5;
+        const _bystanders = Object.values(ws.npcs).filter(n => n.status==='active' && n.name && _inputLower.includes(n.name.toLowerCase()) && n.id !== _mentionedNpc?.id)
+          .map(n => { const _bt = getNpcCurrentTask(n, ws.sim_time); return `${n.name} (${_bt.task.replace(/_/g,' ')} — bystander)`; });
+        const _bystanderNote = _bystanders.length ? ` — others present but uninvolved: ${_bystanders.join('; ')}` : '';
+        const partnerTag = (thirdParty && NEEDS_PARTNER.includes(type))
+          ? ` — described partner in scene${_mentionedNpc ? ': '+_mentionedNpc.name : ''}`
+          : (!hasActiveNpc && !thirdParty ? ' — no established partner' : '');
+        actionDesc = `[explicit: ${type}${partnerTag}${_bystanderNote}]` + (compound.ate ? ' + ate' : '');
+        if (thirdParty && !hasActiveNpc && NEEDS_PARTNER.includes(type)) {
+          evaluateDescribedNpc(input).then(nd => {
+            if (_turnToken !== S._processTurnCounter) return;
+            const _exists = Object.values(S.WS?.npcs??{}).some(n => n.name?.toLowerCase().trim() === nd?.name?.toLowerCase().trim());
+            const _nh = ['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf'];
+            const _human = nd?.name && /^[A-Z]/.test(nd.name) && nd.name.split(/\s+/).length<=3 && nd.name.length<=28 && !_nh.some(w=>nd.name.toLowerCase().includes(w));
+            if (nd?.id && !S.WS?.npcs?.[nd.id] && !_exists && _human && nd.significance !== 'none') {
+              const _n = createNpc({ id:nd.id, name:nd.name, age:nd.age||20, npc_class:nd.npc_class||'household', traits:nd.traits||{} });
+              _n.relationship_meter = nd.relationship_meter ?? 20; _n.trust_meter = nd.trust_meter ?? 10; _n.significance = 1;
+              S.WS.npcs[nd.id] = _n; saveWorldState(S.WS).catch(()=>{}); renderAll();
+            }
+          }).catch(()=>{});
+        }
+        riskResult = rollRisk('low', ws.player.stats);
+      }
     }
     else if (route === ROUTE.PATH_2_NOVEL) {
       const safe = sanitizeStateForGemini(ws);
@@ -266,11 +324,12 @@ export async function processTurn(input) {
     }
     else { timeCost=autopilotHours(input); statDeltas=autopilotDeltas(input,timeCost); actionDesc='[autopilot]'; }
 
-    // Explicit NPC reaction
+    // Explicit NPC reaction — refused acts already handled in PATH_1 block above
     if (route === ROUTE.PATH_1_EXPLICIT) {
       const _EXP = ['intercourse','oral_giving','oral_receiving','manual_giving','manual_receiving','mutual_masturbation'];
       const _eType = actionDesc.match(/\[explicit:\s*(\w+)/)?.[1] ?? '';
-      if (_EXP.includes(_eType) && !actionDesc.includes('no established partner')) {
+      const _wasRefused = actionDesc.startsWith('[intimate_attempt_refused');
+      if (!_wasRefused && _EXP.includes(_eType) && !actionDesc.includes('no established partner')) {
         const _tNpc = _mentionedNpc ?? Object.values(ws.npcs).find(n => n.status==='active' && n.significance>=1);
         if (_tNpc && ws.npcs[_tNpc.id]) {
           try {
@@ -292,6 +351,34 @@ export async function processTurn(input) {
             }
           } catch {
             ws.npcs[_tNpc.id].recent_interactions = [...(ws.npcs[_tNpc.id].recent_interactions??[]), `Intimate encounter — turn ${ws.turn+1}`].slice(-5);
+          }
+        }
+      }
+    }
+
+    // ── WITNESS REACTIONS (NPCs physically present but not directly involved) ──
+    if (route === ROUTE.PATH_1_EXPLICIT && !actionDesc.startsWith('[intimate_attempt_refused') && _mentionedNpc) {
+      const _wActType = actionDesc.match(/\[explicit:\s*(\w+)/)?.[1] ?? '';
+      const _FULL_W = ['intercourse','oral_giving','oral_receiving','mutual_masturbation'];
+      if (_FULL_W.includes(_wActType)) {
+        for (const [_wId, _wNpc] of Object.entries(ws.npcs)) {
+          if (_wId === _mentionedNpc.id || _wNpc.status !== 'active') continue;
+          const _wTask = getNpcCurrentTask(_wNpc, ws.sim_time);
+          const _wAwayLoc = ['workplace','school','transit','outside'];
+          if (_wAwayLoc.includes(_wTask.location ?? '') || _wTask.present === false) continue;
+          if (!livesWithPlayer(_wNpc) && _wTask.location !== 'player_home' && _wTask.location !== 'with_player') continue;
+          const _wr = computeWitnessReaction(_wNpc, _mentionedNpc.id, _wActType);
+          if (_wr.rel_delta === 0 && _wr.trust_delta === 0 && !_wr.flags.length) continue;
+          ws.npcs[_wId] = applyRelationshipDelta(ws.npcs[_wId], _wr.rel_delta, _wr.trust_delta);
+          for (const f of _wr.flags) ws.npcs[_wId] = addFlag(ws.npcs[_wId], f.flag, FLAG_DECAY[f.decay_rate] ?? FLAG_DECAY.medium);
+          ws.npcs[_wId] = incrementSignificance(ws.npcs[_wId]);
+          if (_wr.mood_label === 'betrayed' || _wr.mood_label === 'horrified') ws.npcs[_wId] = driftTraits(ws.npcs[_wId], { mistreated: true });
+          if (_wr.summary) {
+            ws.npcs[_wId].recent_interactions = [...(ws.npcs[_wId].recent_interactions ?? []), _wr.summary].slice(-5);
+            ws.npcs[_wId]._hidden = ws.npcs[_wId]._hidden ?? {};
+            ws.npcs[_wId]._hidden.last_interaction_turn = ws.turn;
+            _npcWitnesses.push({ npc_id: _wId, name: _wNpc.name, mood: _wr.mood_label, summary: _wr.summary });
+            window._devlog?.npc(`Witness reaction: ${_wNpc.name}`, { mood: _wr.mood_label, rel_delta: _wr.rel_delta });
           }
         }
       }
@@ -485,6 +572,9 @@ export async function processTurn(input) {
     for (const id of Object.keys(ws.npcs)) ws.npcs[id] = tickFlagDecay(ws.npcs[id]);
     ws.turn += 1;
 
+    // Reality annotation — does not block; tells Grok what actually could occur
+    if (route === ROUTE.PATH_2_NOVEL) _realityCheck = detectActionReality(input, ws);
+
     let prose = '';
     if (route === ROUTE.PATH_3_AUTOPILOT && turnClass === TURN_CLASSIFICATION.ROUTINE) {
       prose = await callGeminiAutopilot(sanitizeStateForGemini(ws), timeCost, input).catch(()=>`${timeCost}h passed.`);
@@ -505,6 +595,8 @@ export async function processTurn(input) {
         brief.npc_locations[_nlId]={name:_nlNpc.name,task:_nlTask.task,location:_nlLoc,present:_nlTask.present!==false,context:_nlCtx};
       }
       if (_nlAbsent.length) brief.absent_npcs_note=`Away this turn (not in scene): ${_nlAbsent.join(', ')}`;
+      brief.action_reality_check = _realityCheck;
+      brief.npc_witnesses = _npcWitnesses.length ? _npcWitnesses : null;
       const mode={[TURN_CLASSIFICATION.ROUTINE]:'notable',[TURN_CLASSIFICATION.NOTABLE]:'notable',[TURN_CLASSIFICATION.CRISIS]:'crisis',[TURN_CLASSIFICATION.DEATH]:'death'}[turnClass]??'notable';
       prose = await callGrok(brief, mode, {
         isExplicit:route===ROUTE.PATH_1_EXPLICIT, hasDisease:(ws.player?.diseases?.length??0)>0,

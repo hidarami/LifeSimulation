@@ -257,3 +257,113 @@ export function buildNpcContextForGemini(npc, currentDate) {
     bio: npc.bio ?? null,
   };
 }
+
+// ─── PRE-CONSENT GATE ─────────────────────────────────────────────────────────
+// JS-level — cannot be bypassed by player wording. Openness rises slowly via
+// driftTraits (deepTrust, consistent_positive contexts), so the gate is not static.
+export function checkNpcConsentGate(npc, actType) {
+  const open  = npc.traits?.openness    ?? 50;
+  const rel   = npc.relationship_meter;
+  const trust = npc.trust_meter;
+
+  // Established intimate partner — only gate on very bad standing
+  if (npc.npc_class === 'intimate') {
+    if (rel < -20) return 'refuse';
+    return 'proceed';
+  }
+
+  const FULL_ACTS  = ['intercourse','oral_giving','oral_receiving','mutual_masturbation'];
+  const LIGHT_ACTS = ['manual_giving','manual_receiving','makeout'];
+
+  if (FULL_ACTS.includes(actType)) {
+    if (open < 30 && !(trust >= 60 && rel >= 40)) return 'refuse';
+    if (open < 50 && rel < 35)                    return 'refuse';
+    if (rel < 35 || trust < 25)                   return 'refuse';
+  }
+  if (LIGHT_ACTS.includes(actType)) {
+    if (open < 30 && trust < 40) return 'refuse';
+    if (rel < 15 || trust < 10)  return 'refuse';
+  }
+  return 'proceed';
+}
+
+// ─── WITNESS REACTION ─────────────────────────────────────────────────────────
+// How a bystander NPC reacts to witnessing an explicit act.
+// Co-presence check happens in turnProcessor before this is called.
+export function computeWitnessReaction(witnessNpc, primaryNpcId, actType) {
+  const open     = witnessNpc.traits?.openness    ?? 50;
+  const jealousy = witnessNpc.traits?.jealousy    ?? 30;
+  const impuls   = witnessNpc.traits?.impulsivity ?? 40;
+  const wRel     = witnessNpc.relationship_meter;
+
+  const knownPrimary     = witnessNpc.known_npcs?.[primaryNpcId];
+  const meterToPrimary   = knownPrimary?.meter ?? 0;
+  const isLinkedToPrimary = meterToPrimary > 55;
+
+  const FULL_ACTS = ['intercourse','oral_giving','oral_receiving','mutual_masturbation'];
+  const isFullAct = FULL_ACTS.includes(actType);
+
+  const result = { rel_delta: 0, trust_delta: 0, flags: [], summary: null, mood_label: 'neutral' };
+
+  // Case 1 — Close bond with primary NPC (betrayal witness)
+  if (isLinkedToPrimary && isFullAct) {
+    const anger = Math.max(-20, Math.round(-12 - jealousy * 0.08 - impuls * 0.04));
+    result.rel_delta   = anger;
+    result.trust_delta = -12;
+    result.flags = [{ flag:'betrayed', decay_rate:'slow' }, { flag:'angry', decay_rate:'medium' }];
+    result.mood_label = 'betrayed';
+    result.summary = `${witnessNpc.name} goes completely still — the kind of stillness that comes right before something breaks.`;
+    return result;
+  }
+
+  // Case 2 — Jealous of player (has feelings for player, sees them with someone else)
+  if (wRel > 40 && jealousy > 65 && isFullAct) {
+    result.rel_delta   = -8;
+    result.trust_delta = -4;
+    result.flags = [{ flag:'jealousy_triggered', decay_rate:'medium' }];
+    result.mood_label = 'jealous';
+    result.summary = `${witnessNpc.name} clocks what's happening and looks away sharply, something tight crossing their face.`;
+    return result;
+  }
+
+  // Case 3 — Family member (always uncomfortable regardless of openness)
+  const FAMILY = new Set(['mother','father','brother','sister','uncle','aunt','grandmother','grandfather',
+    'lola','lolo','guardian','parent_father','parent_mother','stepmother','stepfather','stepbrother','stepsister']);
+  if (FAMILY.has(witnessNpc.relationship_type ?? '')) {
+    result.rel_delta   = isFullAct ? -15 : -8;
+    result.trust_delta = isFullAct ? -8  : -4;
+    result.flags = [
+      { flag:'uncomfortable', decay_rate:'medium' },
+      ...(isFullAct ? [{ flag:'angry', decay_rate:'medium' }] : []),
+    ];
+    result.mood_label = 'horrified';
+    result.summary = `${witnessNpc.name} stops dead in the doorway, then disappears. The silence that follows has weight.`;
+    return result;
+  }
+
+  // Case 4 — High openness — curious or voyeuristic
+  if (open > 70 && isFullAct) {
+    result.rel_delta = Math.random() > 0.5 ? 2 : 0;
+    result.flags = [{ flag:'aroused', decay_rate:'fast' }];
+    result.mood_label = 'aroused';
+    result.summary = `${witnessNpc.name} hesitates a beat longer than they should before finding somewhere else to be.`;
+    return result;
+  }
+
+  // Case 5 — Low openness / conservative
+  if (open < 30) {
+    result.rel_delta   = isFullAct ? -6 : -3;
+    result.trust_delta = isFullAct ? -3 : -1;
+    result.flags = [{ flag:'uncomfortable', decay_rate:'medium' }];
+    result.mood_label = 'uncomfortable';
+    result.summary = `${witnessNpc.name} leaves without a word. The kind of silence that tends to linger.`;
+    return result;
+  }
+
+  // Default — average person, embarrassed
+  result.rel_delta = -2;
+  result.flags = [{ flag:'uncomfortable', decay_rate:'fast' }];
+  result.mood_label = 'embarrassed';
+  result.summary = `${witnessNpc.name} realizes what they walked in on a beat too late, then quietly exits.`;
+  return result;
+}

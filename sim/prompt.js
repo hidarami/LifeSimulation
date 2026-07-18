@@ -183,6 +183,12 @@ npc_reactions takes priority over player_raw_input for what the NPC does:
 - If npc_reactions is empty — infer NPC response from known flags and relationship.
 NPCs are not obligated to comply. They act from their traits and current state.
 
+CONSENT & REFUSAL:
+When action_taken starts with [intimate_attempt_refused]: the intimate act did NOT occur. The NPC declined. Narrate only the pullback — body language, a word or silence, the space between them changing. Do not narrate the act itself in any form. The player attempted; the NPC declined. npc_reactions has the observable behavior. One or two sentences is enough — then move the scene forward.
+
+NPC WITNESSES:
+If npc_witnesses is non-null, one or more NPCs were physically present and have already reacted as shown. Weave exactly ONE witness reaction as a quiet physical beat — their posture shifting, a departure, a sound from another room. Do not narrate all witnesses. Do not make the witness the center of the scene. One moment, embedded naturally. Their reaction already happened — you are surfacing it, not dramatizing it.
+
 CONTINUITY:
 The turn brief includes last_narration — the previous turn's prose.
 Maintain the same location, characters present, and scene state.
@@ -198,6 +204,13 @@ If scene_driver is present and non-null in the turn brief, the world engine plac
 weight "light" — background texture only. One embedded detail. Not the emotional center. Not a new plot beat.
 weight "medium" — can share the scene with the player's action as a parallel moment. Both happened.
 Never invent the player's response to a scene driver. Never resolve the open thread it creates. Surface it, leave it open.
+
+ACTION REALITY CHECK:
+If action_reality_check is non-null in the turn brief, the player's action is grounded differently than a normal action. Do NOT ignore this field.
+- 'impossible_physics': The player's body cannot do this. Narrate what actually happens when they attempt it — the failed attempt, the world's indifferent non-response, or the substitute physical action that plausibly occurs. The world does not grant exceptions to physical law.
+- 'context_mismatch': Possible in principle, but not achievable from this context right now. Narrate the impulse, the incomplete attempt, or the social reality of trying — without narrating a successful outcome. A character who announces "I'm going to be famous" in an ordinary moment narrates as: the thought, maybe a phone opened to a social app, the ordinary day continuing around the fantasy.
+- 'fantasy_wish': The player expressed a desire or daydream. Render it as an interior moment — a thought or image that passes through — without making it real in the scene.
+In all three cases: one grounded present-tense scene. Something happened; narrate what actually occurred or failed to occur. The world is indifferent — it does not bend to match the wish.
 
 - "Go to work" → autopilot; narrate exceptions only; report outcome
 - "Time jump" → execute routines, advance clock, run risk checks

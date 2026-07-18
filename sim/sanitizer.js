@@ -83,6 +83,8 @@ export const EXPLICIT_ACTIVITY_TABLE = {
   mutual_masturbation: { arousal: -30, mood: +15, energy: -10, social: +12 },
   makeout:             { arousal: +20, mood: +15, energy: -5,  social: +10 },
   solo_masturbation:   { arousal: -60, mood: +10, energy: -10              },
+  refused_explicit:    { mood: -5, social: -8 },
+  refused_light:       { mood: -3, social: -5 },
 };
 
 // ─── ROUTING ─────────────────────────────────────────────────────────────────
