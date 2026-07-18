@@ -420,6 +420,17 @@ export function assembleTurnBrief(worldState, turnData) {
       .filter(c => c.active && !c.resolved)
       .map(c => ({ type: c.type, title: c.title, severity: c.severity }))
       .slice(0, 3),
+    // Criminal record — affects ambient police presence and NPC wariness
+    criminal_status: (worldState.criminal_record?.wanted_level ?? 0) > 0 ? {
+      wanted_level: worldState.criminal_record.wanted_level,
+      has_record:   worldState.criminal_record.has_record,
+    } : null,
+    // Active addictions — craving/withdrawal state for narrator
+    active_addictions: (worldState.addictions ?? [])
+      .filter(a => a.status !== 'recovered')
+      .map(a => ({ type: a.type, severity: a.severity, status: a.status })),
+    // Recent compressed world memory — long-term story continuity
+    world_memory_recent: (worldState.world_memory ?? []).slice(-3),
   };
 }
 

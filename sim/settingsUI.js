@@ -140,8 +140,7 @@ function _renderFallbackSlots() {
 }
 
 // ── SETTINGS MODAL INIT ────────────────────────────────────────────────────────
-let _contentExplicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
-let _timeFormat24h   = localStorage.getItem('TIME_FORMAT_24H') === '1';
+// Preferences state is now managed by initPreferences()
 
 export function initSettings(closeMenuFn) {
   document.getElementById('k-custom-baseurl')?.addEventListener('input', _updateCustomBaseUrlRow);
@@ -162,35 +161,15 @@ export function initSettings(closeMenuFn) {
     document.getElementById('k-groq').value            = localStorage.getItem('GROQ_API_KEY') ?? '';
     document.getElementById('k-sb-url').value          = localStorage.getItem('SUPABASE_URL') ?? '';
     document.getElementById('k-sb-key').value          = localStorage.getItem('SUPABASE_ANON_KEY') ?? '';
-    document.getElementById('k-lorebook').value        = localStorage.getItem('LOREBOOK')  ?? '';
     document.getElementById('k-enricher').value        = localStorage.getItem('ENRICHER_KEY') ?? '';
     document.getElementById('k-enricher-model').value  = localStorage.getItem('ENRICHER_MODEL') ?? '';
     document.getElementById('k-enricher-provider').value = localStorage.getItem('ENRICHER_PROVIDER') ?? '';
-    document.getElementById('k-locale').value          = localStorage.getItem('LOCALE')    ?? 'Philippines';
-    document.getElementById('k-language').value        = localStorage.getItem('LANGUAGE')  ?? 'Tagalog';
-    document.getElementById('k-currency').value        = localStorage.getItem('CURRENCY_SYMBOL') ?? '';
     document.getElementById('auth-status').textContent = '';
-    const _cTog = document.getElementById('content-mode-tog');
-    _contentExplicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
-    if (_cTog) _cTog.classList.toggle('on', _contentExplicit);
-    const _tTog = document.getElementById('time-format-tog');
-    _timeFormat24h = localStorage.getItem('TIME_FORMAT_24H') === '1';
-    if (_tTog) _tTog.classList.toggle('on', _timeFormat24h);
     ['quickstart','narrator','classifier','enricher'].forEach(_wireSlot);
     _seedModelList('narrator'); _seedModelList('classifier'); _seedModelList('enricher');
     ['quickstart','narrator','classifier','enricher'].forEach(_updateSlotDetection);
     _updateMutualExclusion();
     _renderFallbackSlots();
-  });
-  document.getElementById('btn-content-mode')?.addEventListener('click', () => {
-    _contentExplicit = !_contentExplicit;
-    document.getElementById('content-mode-tog')?.classList.toggle('on', _contentExplicit);
-  });
-  document.getElementById('btn-time-format')?.addEventListener('click', () => {
-    _timeFormat24h = !_timeFormat24h;
-    document.getElementById('time-format-tog')?.classList.toggle('on', _timeFormat24h);
-    if (_timeFormat24h) localStorage.setItem('TIME_FORMAT_24H', '1'); else localStorage.removeItem('TIME_FORMAT_24H');
-    if (S.WS) renderAll();
   });
   [document.getElementById('btn-mcancel'), document.getElementById('btn-mcancel2')].forEach(b => b?.addEventListener('click', () => document.getElementById('modal').classList.remove('open')));
   document.getElementById('modal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('open'); });
@@ -211,22 +190,10 @@ export function initSettings(closeMenuFn) {
     localStorage.setItem('GROQ_API_KEY',       _sv('k-groq'));
     localStorage.setItem('SUPABASE_URL',       _sv('k-sb-url'));
     localStorage.setItem('SUPABASE_ANON_KEY',  _sv('k-sb-key'));
-    const _newLb = document.getElementById('k-lorebook')?.value ?? '';
-    localStorage.setItem('LOREBOOK', _newLb);
-    localStorage.removeItem('LOREBOOK_COMPRESSED');
-    if (_newLb.trim() && S.WS?.player?.name) {
-      compressLorebook(_newLb, S.WS.player.name, Object.values(S.WS?.npcs ?? {}).map(n => n.name).filter(Boolean)).catch(() => {});
-    }
     _set('ENRICHER_KEY',      _sv('k-enricher'));
     _set('ENRICHER_MODEL',    _sv('k-enricher-model') || _sv('k-enricher-model-list'));
     _set('ENRICHER_PROVIDER', _sv('k-enricher-provider'));
     _saveFallbackSlots();
-    localStorage.setItem('CONTENT_MODE', _contentExplicit ? 'explicit' : 'filtered');
-    if (_timeFormat24h) localStorage.setItem('TIME_FORMAT_24H', '1'); else localStorage.removeItem('TIME_FORMAT_24H');
-    localStorage.setItem('LOCALE',   document.getElementById('k-locale')?.value?.trim()   || 'Philippines');
-    localStorage.setItem('LANGUAGE', document.getElementById('k-language')?.value?.trim() || 'Tagalog');
-    const _saveCur = document.getElementById('k-currency')?.value?.trim();
-    if (_saveCur) localStorage.setItem('CURRENCY_SYMBOL', _saveCur); else localStorage.removeItem('CURRENCY_SYMBOL');
     const su = localStorage.getItem('SUPABASE_URL'), sk = localStorage.getItem('SUPABASE_ANON_KEY');
     if (su && sk && window.supabase) { S._sbClient = window.supabase.createClient(su, sk); setSupabaseClient(S._sbClient); }
     document.getElementById('modal').classList.remove('open');
@@ -352,5 +319,61 @@ export function initLoadModal(imageLoadFn) {
       }
       setStatus(`Turn ${S.WS.turn} · ${S.WS.player.name}`);
     } catch(e) { setStatus('Load error: ' + e.message, 'err'); console.error('[load confirm]', e); }
+  });
+}
+
+// ── PREFERENCES MODAL ─────────────────────────────────────────────────────────
+let _prefContentExplicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
+let _prefTimeFormat24h   = localStorage.getItem('TIME_FORMAT_24H') === '1';
+
+export function initPreferences(closeMenuFn) {
+  document.getElementById('btn-preferences')?.addEventListener('click', () => {
+    closeMenuFn();
+    document.getElementById('modal-preferences').classList.add('open');
+    document.getElementById('pref-locale').value    = localStorage.getItem('LOCALE')           ?? 'Philippines';
+    document.getElementById('pref-language').value  = localStorage.getItem('LANGUAGE')         ?? 'Tagalog';
+    document.getElementById('pref-currency').value  = localStorage.getItem('CURRENCY_SYMBOL')  ?? '';
+    document.getElementById('pref-lorebook').value  = localStorage.getItem('LOREBOOK')         ?? '';
+    _prefContentExplicit = localStorage.getItem('CONTENT_MODE') !== 'filtered';
+    _prefTimeFormat24h   = localStorage.getItem('TIME_FORMAT_24H') === '1';
+    document.getElementById('pref-content-mode-tog')?.classList.toggle('on', _prefContentExplicit);
+    document.getElementById('pref-time-format-tog')?.classList.toggle('on', _prefTimeFormat24h);
+  });
+
+  document.getElementById('pref-content-mode')?.addEventListener('click', () => {
+    _prefContentExplicit = !_prefContentExplicit;
+    document.getElementById('pref-content-mode-tog')?.classList.toggle('on', _prefContentExplicit);
+  });
+
+  document.getElementById('pref-time-format')?.addEventListener('click', () => {
+    _prefTimeFormat24h = !_prefTimeFormat24h;
+    document.getElementById('pref-time-format-tog')?.classList.toggle('on', _prefTimeFormat24h);
+  });
+
+  [document.getElementById('btn-pref-cancel'), document.getElementById('btn-pref-cancel2')]
+    .forEach(b => b?.addEventListener('click', () => document.getElementById('modal-preferences').classList.remove('open')));
+
+  document.getElementById('modal-preferences')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+  });
+
+  document.getElementById('btn-pref-save')?.addEventListener('click', () => {
+    const _sv = id => document.getElementById(id)?.value?.trim() ?? '';
+    localStorage.setItem('LOCALE',   _sv('pref-locale')   || 'Philippines');
+    localStorage.setItem('LANGUAGE', _sv('pref-language') || 'Tagalog');
+    const _cur = _sv('pref-currency');
+    if (_cur) localStorage.setItem('CURRENCY_SYMBOL', _cur); else localStorage.removeItem('CURRENCY_SYMBOL');
+    const _newLb = document.getElementById('pref-lorebook')?.value ?? '';
+    localStorage.setItem('LOREBOOK', _newLb);
+    localStorage.removeItem('LOREBOOK_COMPRESSED');
+    if (_newLb.trim() && S.WS?.player?.name) {
+      compressLorebook(_newLb, S.WS.player.name, Object.values(S.WS?.npcs ?? {}).map(n => n.name).filter(Boolean)).catch(() => {});
+    }
+    localStorage.setItem('CONTENT_MODE', _prefContentExplicit ? 'explicit' : 'filtered');
+    if (_prefTimeFormat24h) localStorage.setItem('TIME_FORMAT_24H', '1');
+    else localStorage.removeItem('TIME_FORMAT_24H');
+    document.getElementById('modal-preferences').classList.remove('open');
+    setStatus('Preferences saved.');
+    if (S.WS) renderAll();
   });
 }

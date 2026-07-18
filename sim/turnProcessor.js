@@ -6,7 +6,7 @@ import { saveWorldState, assembleTurnBrief, appendSignificantEvent, updateEventI
 import { applyDecay, applyDeltas, advanceTime,
          rollRisk, classifyTurn, advanceConsequences, TURN_CLASSIFICATION,
          applyCascadingEffects, applyCascadeEffectsToExternal,
-         getCircadianModifiers, getSleepEfficiency } from './engine.js';
+         getCircadianModifiers, getSleepEfficiency, applySleepRecovery } from './engine.js';
 import { routeInput, classifyExplicitActivity,
          EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE,
          hasThirdPartyPresence } from './sanitizer.js';
@@ -300,9 +300,12 @@ export async function processTurn(input) {
     const prevSimTime = ws.sim_time;
     if (route === ROUTE.PATH_3_AUTOPILOT && /sleep|nap/i.test(input)) {
       const _sH = new Date(prevSimTime).getHours(), _eff = getSleepEfficiency(_sH);
-      statDeltas.energy = Math.round(Math.min(timeCost*9*_eff,90));
-      statDeltas.mood   = Math.round(Math.min(timeCost*3*_eff,35));
-      statDeltas.health = (statDeltas.health??0) + Math.round(timeCost*0.4*_eff);
+      const _effHours = timeCost * _eff;
+      const _sleptStats = applySleepRecovery({ ...ws.player.stats }, _effHours);
+      statDeltas.energy  = Math.round(_sleptStats.energy  - ws.player.stats.energy);
+      statDeltas.mood    = Math.round(_sleptStats.mood    - ws.player.stats.mood);
+      statDeltas.hygiene = Math.round(_sleptStats.hygiene - ws.player.stats.hygiene);
+      statDeltas.health  = (statDeltas.health ?? 0) + Math.round(_effHours * 0.4);
     }
     ws.sim_time = advanceTime(ws.sim_time, timeCost).toISOString();
 
@@ -428,6 +431,11 @@ export async function processTurn(input) {
     }
     // Major events (challenges) are their own scene drivers — suppress texture
     if (_hasMajorEvent) _sceneDriver = null;
+    // Non-hidden director events seed a light scene_driver when nothing else claimed it
+    if (!_sceneDriver && !_hasMajorEvent && _directorEvents.length) {
+      const _lightDE = _directorEvents.find(e => !e.hidden && ['minor','moderate'].includes(e.severity) && !['job_terminated','school_failing_risk'].includes(e.type));
+      if (_lightDE) _sceneDriver = { type: 'environment', description: _lightDE.description, weight: 'light', source: 'director' };
+    }
     for (const npcEv of checkNpcEvents(ws)) {
       ws=applyNpcEventEffect(ws,npcEv); await logEvent({turn:ws.turn,category:'npc_event',description:`${npcEv.npc_name}: ${npcEv.label}`});
       ws=appendSignificantEvent(ws,`Turn ${ws.turn}: ${npcEv.npc_name} ${npcEv.label}`);

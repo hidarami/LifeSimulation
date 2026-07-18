@@ -48,7 +48,7 @@ import { setStatus, setProcessing, renderAll, renderCenterStats,
          openCharModal, openNpcModal, runIntegrityCheck,
          showChallengeQueue } from './uiCore.js';
 import { initWizard, startNewGame } from './wizard.js';
-import { initSettings, initSupabaseAuth, initLoadModal } from './settingsUI.js';
+import { initSettings, initSupabaseAuth, initLoadModal, initPreferences } from './settingsUI.js';
 import { initConsoleUI, sendConsoleMessage, loadConsoleHistoryForCurrentSave,
          appendConsoleMsg } from './consoleUI.js';
 import { initDevConsole } from './devConsoleUI.js';
@@ -75,6 +75,7 @@ function closeMenu() { document.getElementById('menu-overlay').classList.remove(
 // NOTE: closeMenu is a function declaration — hoisted — safe to pass before textual definition
 initWizard(closeMenu);
 initSettings(closeMenu);
+initPreferences(closeMenu);
 initLoadModal(loadImageCache);
 initSupabaseAuth();
 initConsoleUI(closeMenu);

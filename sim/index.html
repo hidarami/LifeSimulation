@@ -101,6 +101,7 @@
   <div class="menu-divider"></div>
   <div class="menu-section">Settings</div>
   <button class="menu-item" id="btn-settings"><span class="menu-icon">⚙</span>API Keys</button>
+  <button class="menu-item" id="btn-preferences"><span class="menu-icon">🎮</span>Preferences</button>
   <div class="menu-toggle-row" id="btn-theme">
     <span><span class="menu-icon" style="display:inline-block;width:20px;margin-right:12px">◑</span>Light Mode</span>
     <div class="tog" id="theme-tog"><div class="tog-knob"></div></div>
@@ -281,31 +282,6 @@
         <input class="field-input" id="k-custom-baseurl" placeholder="https://your-endpoint/v1">
       </div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
-      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Locale &amp; Language</div>
-      <div class="field-row">
-        <div class="field"><label class="field-label">Country / Culture</label><input class="field-input" id="k-locale" type="text" placeholder="Philippines"></div>
-        <div class="field"><label class="field-label">Local Language</label><input class="field-input" id="k-language" type="text" placeholder="Tagalog"></div>
-      </div>
-      <div class="field-row" style="margin-top:6px">
-        <div class="field" style="flex:0 0 120px"><label class="field-label">Currency Symbol</label><input class="field-input" id="k-currency" type="text" placeholder="₱" maxlength="4" style="font-size:13px;text-align:center"></div>
-        <div class="field"><label class="field-label">Notes</label><div style="font-size:10px;color:var(--dim);margin-top:6px;line-height:1.6">Affects UI cash display. Leave blank for ₱ (Philippine Peso).</div></div>
-      </div>
-      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Affects UI cash display. Leave blank for ₱ (Philippine Peso).</div>
-      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
-      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Time Display</div>
-      <div class="menu-toggle-row" id="btn-time-format" style="padding:10px 0;cursor:pointer">
-        <span style="font-size:13px">24-Hour Clock</span>
-        <div class="tog" id="time-format-tog"><div class="tog-knob"></div></div>
-      </div>
-      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6;margin-bottom:6px">Toggle between 12-hour (3:00 PM) and 24-hour (15:00) format used throughout the game and narrations.</div>
-      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
-      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Content Mode</div>
-      <div class="menu-toggle-row" id="btn-content-mode" style="padding:10px 0;cursor:pointer">
-        <span style="font-size:13px">Adult Content (Explicit)</span>
-        <div class="tog" id="content-mode-tog"><div class="tog-knob"></div></div>
-      </div>
-      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6">When off, explicit player actions skip narration and run as autopilot. Useful for filtered-model users.</div>
-      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Enricher — World-building AI (game init only)</div>
       <div style="font-size:10px;color:var(--dim);margin-bottom:8px;line-height:1.6">Dedicated slot for <strong>enrichWorldDetails()</strong> — the slowest, most creative init call. Falls through to fallback slots if it fails.</div>
       <div class="field">
@@ -350,8 +326,6 @@
       <div class="field"><label class="field-label">Groq API Key <span style="font-weight:400;opacity:.6">(fast helper for NPC analysis &amp; world building)</span></label><div class="pw-wrapper"><input class="field-input" id="k-groq" type="password"><button class="pw-toggle" data-target="k-groq">👁</button></div></div>
       <div class="field"><label class="field-label">OpenRouter API Key <span style="font-weight:400;opacity:.6">(narrator fallbacks — free uncensored models)</span></label><div class="pw-wrapper"><input class="field-input" id="k-or" type="password"><button class="pw-toggle" data-target="k-or">👁</button></div></div>
       <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
-      <div class="field"><label class="field-label">Lorebook — world &amp; character facts sent every narrator prompt</label><textarea class="field-input field-textarea" id="k-lorebook" placeholder="Add context here..." style="min-height:80px"></textarea></div>
-      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
       <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Fallback Slots — 8 configurable cascade providers</div>
       <div style="font-size:10px;color:var(--dim);margin-bottom:10px;line-height:1.6">Each enabled slot becomes available as a fallback when the primary slot fails or refuses. Slot 1 has highest priority.</div>
       <div id="fallback-slots-list"></div>
@@ -363,6 +337,51 @@
     <div class="modal-footer">
       <button class="btn" id="btn-mcancel2">Cancel</button>
       <button class="btn btn-primary" id="btn-msave">Save Keys</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── PREFERENCES MODAL ──────────────────────────────────────────────────── -->
+<div id="modal-preferences" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span class="modal-title">Preferences</span>
+      <button class="modal-close" id="btn-pref-cancel">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Locale &amp; Language</div>
+      <div class="field-row">
+        <div class="field"><label class="field-label">Country / Culture</label><input class="field-input" id="pref-locale" type="text" placeholder="Philippines"></div>
+        <div class="field"><label class="field-label">Local Language</label><input class="field-input" id="pref-language" type="text" placeholder="Tagalog"></div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Currency</div>
+      <div class="field-row">
+        <div class="field" style="flex:0 0 130px"><label class="field-label">Symbol</label><input class="field-input" id="pref-currency" type="text" placeholder="₱" maxlength="4" style="font-size:14px;text-align:center"></div>
+        <div class="field"><label class="field-label">Note</label><div style="font-size:10px;color:var(--dim);margin-top:6px;line-height:1.6">Affects all cash displays. Leave blank for ₱ (Philippine Peso).</div></div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Time Display</div>
+      <div class="menu-toggle-row" id="pref-time-format" style="padding:10px 0;cursor:pointer">
+        <span style="font-size:13px">24-Hour Clock</span>
+        <div class="tog" id="pref-time-format-tog"><div class="tog-knob"></div></div>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6">Toggle between 12-hour (3:00 PM) and 24-hour (15:00) display throughout the game.</div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Content Mode</div>
+      <div class="menu-toggle-row" id="pref-content-mode" style="padding:10px 0;cursor:pointer">
+        <span style="font-size:13px">Adult Content (Explicit)</span>
+        <div class="tog" id="pref-content-mode-tog"><div class="tog-knob"></div></div>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:2px;line-height:1.6">When off, explicit actions skip narration and run as autopilot. Useful for filtered-model users.</div>
+      <hr style="border:none;border-top:1px solid var(--bdr);margin:12px 0">
+      <div style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Lorebook</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:8px;line-height:1.6">World &amp; character facts injected into every narrator prompt. The AI treats this as absolute ground truth.</div>
+      <div class="field"><textarea class="field-input field-textarea" id="pref-lorebook" placeholder="Describe your character, their world, situation, and the people in their life..." style="min-height:140px"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="btn-pref-cancel2">Cancel</button>
+      <button class="btn btn-primary" id="btn-pref-save">Save</button>
     </div>
   </div>
 </div>

@@ -119,7 +119,11 @@ Never parse or interpret raw ISO timestamps. Never invent or approximate times.
 If sim_time_formatted says 09:45 PM, the scene is late evening — period.
 ${_schedule}
 SCENE CONTEXT:
-If scene_context is present in the turn brief, use it alongside last_narration to anchor continuity: scene_location tells you the setting of the previous scene; npcs_present shows who was there and their state; ongoing_thread identifies what was happening at the close; player_physical_state describes the player's body at that point. Do not re-introduce things already established. Continue the thread.
+If scene_context is present, use it alongside last_narration to anchor continuity: scene_location, npcs_present, ongoing_thread, player_physical_state, and open_tensions are all live data. Weave one open tension into the current scene organically if the action allows it. Do not re-introduce established elements. Continue the thread.
+
+CRIMINAL STATUS: If criminal_status is non-null in the turn brief, the player has an active police record. wanted_level 1–2: ambient wariness — strangers glance a beat too long, NPCs who know the player may act carefully; wanted_level 3–5: active heat — patrols notice, some NPCs become cagey or evasive. Show through texture, body language, and ambient behavior only — never label, explain, or state the wanted level.
+ADDICTION STATE: If active_addictions contains entries, let the state surface through the body. Withdrawal (status: "withdrawing"): restlessness, sweating, body ache, difficulty concentrating, short temper. Active dependency (status: "active", severity "moderate" or "severe"): the substance may color attention — the player notices the smell, the place, the time of day associated with it. Show through physical sensation and attention only. Never label the craving or name the dependency directly.
+WORLD MEMORY: If world_memory_recent has entries, these are compressed fragments from earlier in the story. Do not reference them as memories. Let them quietly inform what feels familiar, already-settled, or present in the world's texture.
 
 WORLD AMBIENT:
 The world has its own rhythm independent of the player. Use time-of-day to add grounding to scene-setting.

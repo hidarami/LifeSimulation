@@ -945,12 +945,24 @@ export function applyNpcEventEffect(worldState, npcEvent) {
 export function progressDiseases(worldState) {
   let ws = JSON.parse(JSON.stringify(worldState));
   if (!ws.player?.diseases?.length) return ws;
+  const _BASE_DECAY = { energy: 0.40, hunger: 0.50, hygiene: 0.30 };
   const remaining = [];
   for (const disease of ws.player.diseases) {
     for (const [stat, delta] of Object.entries(disease.per_turn_effects ?? {})) {
       if (stat in ws.player.stats) {
         ws.player.stats[stat] = Math.max(0, Math.min(100, ws.player.stats[stat] + delta));
       }
+    }
+    // Apply cascade_difficulty — disease-specific accelerated decay rates
+    const _dPool = DISEASE_POOL.find(d => d.id === disease.id);
+    if (_dPool?.cascade_difficulty) {
+      const cd = _dPool.cascade_difficulty;
+      if ((cd.energy_drain ?? 1) > 1)
+        ws.player.stats.energy  = Math.max(0,   ws.player.stats.energy  - _BASE_DECAY.energy  * (cd.energy_drain  - 1));
+      if ((cd.hunger_rate  ?? 1) > 1)
+        ws.player.stats.hunger  = Math.min(100, ws.player.stats.hunger  + _BASE_DECAY.hunger  * (cd.hunger_rate   - 1));
+      if ((cd.hygiene_drain ?? 1) > 1)
+        ws.player.stats.hygiene = Math.max(0,   ws.player.stats.hygiene - _BASE_DECAY.hygiene * (cd.hygiene_drain - 1));
     }
     disease.duration_remaining = (disease.duration_remaining ?? 1) - 1;
     const data = DISEASE_POOL.find(d => d.id === disease.id);
