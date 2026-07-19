@@ -153,7 +153,13 @@ export function _applySimPatch(patch) {
     if (patch.add_npcs?.length) {
       const _VALID = new Set(['intimate','household','professional','institutional']);
       for (const nd of patch.add_npcs) {
-        if (!nd.id || S.WS.npcs[nd.id]) continue;
+        if (!nd.id || typeof nd.id !== 'string' || nd.id === 'undefined' || nd.id === 'null' || !nd.id.trim()) {
+          window._devlog?.error('SIM_PATCH add_npcs: invalid id', { id: nd.id, name: nd.name }); continue;
+        }
+        if (!nd.name || typeof nd.name !== 'string' || nd.name === 'undefined' || nd.name === 'null' || !nd.name.trim()) {
+          window._devlog?.error('SIM_PATCH add_npcs: invalid name', { id: nd.id }); continue;
+        }
+        if (S.WS.npcs[nd.id]) continue;
         const _cls = _VALID.has(nd.npc_class) ? nd.npc_class : 'household';
         const _pn = createNpc({ id: nd.id, name: nd.name, age: nd.age ?? 20, npc_class: _cls, relationship_type: nd.relationship_type ?? null, traits: nd.traits ?? {} });
         _pn.relationship_meter = nd.relationship_meter ?? 0;
@@ -170,9 +176,9 @@ export function _applySimPatch(patch) {
     }
   if (patch.remove_npcs?.length) {
       for (const rid of patch.remove_npcs) {
-        // Guard against non-string values in remove_npcs array
-        if (typeof rid !== 'string') {
-          window._devlog?.error(`SIM_PATCH remove_npcs: invalid entry (not a string)`, { entry: rid });
+        // Guard against non-string, undefined, or null values in remove_npcs array
+        if (typeof rid !== 'string' || rid === 'undefined' || rid === 'null' || !rid.trim()) {
+          window._devlog?.error(`SIM_PATCH remove_npcs: invalid entry`, { entry: rid });
           continue;
         }
         const id = _resolveNpcPatchKey(rid);

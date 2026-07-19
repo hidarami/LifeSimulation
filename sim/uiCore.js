@@ -325,6 +325,25 @@ export function runIntegrityCheck(ws) {
   for (const c of (ws.consequences ?? [])) {
     if (c.duration <= 0) warnings.push(`Stale consequence "${c.type}" has duration ${c.duration} — should be cleared`);
   }
+  // Ghost NPCs — invalid ids or names from bad AI patches
+  for (const [id, npc] of Object.entries(ws.npcs ?? {})) {
+    if (id === 'undefined' || id === 'null')
+      failed.push(`Ghost NPC with invalid id "${id}" — fix: SIM_PATCH {"remove_npcs":["${id}"]}`);
+    else if (!npc.name || npc.name === 'undefined' || npc.name === 'null')
+      failed.push(`NPC "${id}": missing or invalid name — fix with SIM_PATCH or remove`);
+  }
+  // Absence sanity — counts can't exceed total turns played
+  if (ws.school?.status === 'active' && (ws.school.absence_count ?? 0) > ws.turn)
+    failed.push(`School absence_count (${ws.school.absence_count}) exceeds total turns (${ws.turn}) — overcounted. Fix: SIM_PATCH {"school_update":{"absence_count":1,"last_absence_date":null}}`);
+  if (ws.job && (ws.job.absent_count ?? 0) > ws.turn)
+    warnings.push(`Job absent_count (${ws.job.absent_count}) exceeds total turns (${ws.turn}) — likely overcounted`);
+  // Job with no employer name — possible misclassified family chore
+  if (ws.job && (!ws.job.employer || ws.job.employer === 'null' || ws.job.employer === 'undefined'))
+    warnings.push(`Job has no employer name — may be a misclassified household responsibility. Use SIM_PATCH job_update:null if incorrect`);
+  // Inactive NPCs retaining active flags can cause ghost reactions in narration
+  const _inactiveWithFlags = Object.values(ws.npcs ?? {}).filter(n => n.status !== 'active' && (n.active_flags?.length ?? 0) > 0);
+  if (_inactiveWithFlags.length)
+    warnings.push(`${_inactiveWithFlags.length} inactive NPC(s) still have active flags (ghost states): ${_inactiveWithFlags.map(n => n.name ?? n.id).join(', ')}`);
   return { failed, warnings };
 }
 

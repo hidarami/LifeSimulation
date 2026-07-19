@@ -539,11 +539,15 @@ Return ONLY valid JSON:
 // When player describes a third party in explicit content who isn't in the NPC system,
 // Groq quickly extracts enough info to register them.
 
-export async function evaluateDescribedNpc(playerInput) {
+export async function evaluateDescribedNpc(playerInput, targetName = null) {
   const helper = getHelperSlot();
   if (!helper.key || !helper.provider) return null;
 
-  const prompt = `Analyze this text and determine whether a specific human person had a meaningful interaction worth tracking as an ongoing character.
+  const _nameHint = targetName
+    ? `\nFocus your analysis specifically on the person named "${targetName}". Extract information about them even if others are also present.\n`
+    : '';
+
+  const prompt = `Analyze this text and determine whether a specific human person had a meaningful interaction worth tracking as an ongoing character.${_nameHint}
 
 Text: "${playerInput.slice(0, 400)}"
 

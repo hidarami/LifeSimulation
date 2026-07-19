@@ -435,12 +435,20 @@ export async function processTurn(input) {
     const missedSchedule = detectScheduleMiss(prevSimTime, ws.sim_time, input, ws);
     for (const miss of missedSchedule) {
       if (miss.type === 'school' && ws.school) {
+        // Only count ONE absence per calendar day regardless of how many turns cross school hours
+        const _absDayStr = new Date(prevSimTime).toISOString().slice(0, 10);
+        if (ws.school.last_absence_date === _absDayStr) continue;
+        ws.school.last_absence_date = _absDayStr;
         ws.school.absence_count = (ws.school.absence_count??0)+1; const n=ws.school.absence_count;
         statDeltas.mood       = (statDeltas.mood??0)+Math.max(-20,-(4+n*3));
         statDeltas.reputation = (statDeltas.reputation??0)-(n>2?3:1);
         await logEvent({ turn:ws.turn, category:'schedule_miss', description:`Missed school — ${n} total absence${n>1?'s':''}` });
       }
       if (miss.type === 'job' && ws.job) {
+        // Only count ONE absence per calendar day
+        const _absDayStr = new Date(prevSimTime).toISOString().slice(0, 10);
+        if (ws.job.last_absence_date === _absDayStr) continue;
+        ws.job.last_absence_date = _absDayStr;
         ws.job.absent_count = (ws.job.absent_count??0)+1; const n=ws.job.absent_count;
         statDeltas.mood       = (statDeltas.mood??0)+Math.max(-15,-(3+n*2));
         statDeltas.reputation = (statDeltas.reputation??0)-(n>1?2:1);
@@ -632,22 +640,31 @@ export async function processTurn(input) {
       window._devlog?.turn(`T${ws.turn} narrated`, { class:turnClass, route, chars:prose.length, first50:prose.slice(0,50) });
     }
 
-    // Auto-create NPCs Grok introduces
+    // Auto-create NPCs Grok introduces — up to 3 per turn, scanning both prose AND player input
     if (prose && route !== ROUTE.PATH_3_AUTOPILOT) {
       const _knownNames=new Set(Object.values(ws.npcs).map(n=>n.name?.toLowerCase()).filter(Boolean));
       const _skip=new Set(['The','You','Your','She','He','They','His','Her','Their','What','This','That','Then','Turn','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','January','February','March','April','May','June','July','August','September','October','November','December']);
       const _objWords=['holder','curtain','table','chair','door','wall','bed','floor','ceiling','window','lamp','sink','toilet','shower','stove','fan','rod','rack','post','knob','handle','frame','stool','barrel'];
       const _relTerms=['mother','father','brother','sister','aunt','uncle','cousin','grandmother','grandfather','mom','dad'];
-      const _newName=(prose.match(/\b([A-Z][a-z]{1,14})\b/g)??[]).filter(n=>!_skip.has(n)&&!_knownNames.has(n.toLowerCase())&&!_objWords.some(w=>n.toLowerCase().includes(w))).find((n,i,arr)=>arr.indexOf(n)===i);
-      const _relTerm=!_newName?_relTerms.find(term=>prose.toLowerCase().includes(term)&&!_knownNames.has(term)):null;
-      const _candidateName=_newName||(_relTerm?_relTerm.charAt(0).toUpperCase()+_relTerm.slice(1):null);
-      if (_candidateName) {
-        evaluateDescribedNpc(prose.slice(0,500)).then(nd=>{
+      const _nh=['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf','barrel'];
+      const _extractNewNames = (text) => (text.match(/\b([A-Z][a-z]{1,14})\b/g)??[])
+        .filter(n=>!_skip.has(n)&&!_knownNames.has(n.toLowerCase())&&!_objWords.some(w=>n.toLowerCase().includes(w)))
+        .filter((n,i,arr)=>arr.indexOf(n)===i);
+      // Scan both prose AND raw player input — catches cases like "Ara and Kiro arrive" in action text
+      const _allCandidates = [...new Set([..._extractNewNames(prose), ..._extractNewNames(input)])].slice(0, 3);
+      if (!_allCandidates.length) {
+        const _relTerm = _relTerms.find(term=>prose.toLowerCase().includes(term)&&!_knownNames.has(term));
+        if (_relTerm) _allCandidates.push(_relTerm.charAt(0).toUpperCase()+_relTerm.slice(1));
+      }
+      for (const _candidateName of _allCandidates) {
+        evaluateDescribedNpc(prose.slice(0,600), _candidateName).then(nd=>{
           if(_turnToken!==S._processTurnCounter) return;
-          const _exists=Object.values(S.WS?.npcs??{}).some(n=>n.name?.toLowerCase().trim()===nd?.name?.toLowerCase().trim());
-          const _nh=['holder','curtain','table','chair','door','wall','rack','rod','knob','sink','toilet','bucket','bin','stool','lamp','shelf','barrel','pillar','post'];
-          const _human=nd?.name&&/^[A-Z]/.test(nd.name)&&nd.name.split(/\s+/).length<=3&&nd.name.length<=28&&!_nh.some(w=>nd.name.toLowerCase().includes(w));
-          if (nd?.id&&nd?.name&&S.WS&&!S.WS.npcs?.[nd.id]&&!_exists&&_human&&nd.significance==='significant'){
+          // Hard guard: reject any NPC with undefined/null id or name from AI output
+          if (!nd?.id || typeof nd.id !== 'string' || nd.id === 'undefined' || nd.id === 'null') return;
+          if (!nd?.name || typeof nd.name !== 'string' || nd.name === 'undefined' || nd.name === 'null') return;
+          const _exists=Object.values(S.WS?.npcs??{}).some(n=>n.name?.toLowerCase().trim()===nd.name.toLowerCase().trim());
+          const _human=/^[A-Z]/.test(nd.name)&&nd.name.split(/\s+/).length<=3&&nd.name.length<=28&&!_nh.some(w=>nd.name.toLowerCase().includes(w));
+          if (S.WS&&!S.WS.npcs?.[nd.id]&&!_exists&&_human&&nd.significance==='significant'){
             const _nn=createNpc({id:nd.id,name:nd.name,age:nd.age||20,npc_class:nd.npc_class||'household',traits:nd.traits||{}});
             _nn.relationship_meter=nd.relationship_meter??10; _nn.trust_meter=nd.trust_meter??5; _nn.significance=1;
             _nn.recent_interactions=[`Appeared in scene — turn ${ws.turn}`];

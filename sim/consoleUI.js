@@ -607,10 +607,10 @@ export async function sendConsoleMessage() {
     reply = reply.replace(/<SIM_PATCH>[\s\S]*?<\/SIM_PATCH>/gi,'').replace(/<STATE_CHANGE>[\s\S]*?<\/STATE_CHANGE>/gi,'').replace(/<SIM_ACTION>[\s\S]*?<\/SIM_ACTION>/gi,'').trim();
     if (_actionSummaries.length) reply = (reply ? reply + '\n\n' : '') + '---\n' + _actionSummaries.join('\n\n');
     // Second pass if reply claims change but no patch found
+    const _userLast = _consoleMessages.filter(m => m.role === 'user').at(-1)?.content ?? '';
+    const _isChangeReq = /\b(give|set|change|update|add|remove|make|fix|adjust|modify|increase|decrease|boost|reset|delete|clear)\b/i.test(_userLast);
+    const _replyAcks = /\b(i['']ve|i have|updated?|changed?|applied|modified|done|set|added|removed)\b/i.test(reply);
     if (!_patchApplied && S.WS) {
-      const _userLast = _consoleMessages.filter(m => m.role === 'user').at(-1)?.content ?? '';
-      const _isChangeReq = /\b(give|set|change|update|add|remove|make|fix|adjust|modify|increase|decrease|boost|reset|delete|clear)\b/i.test(_userLast);
-      const _replyAcks = /\b(i['']ve|i have|updated?|changed?|applied|modified|done|set|added|removed)\b/i.test(reply);
       if (_isChangeReq && _replyAcks) {
         try {
           // Add 10-second timeout for second-pass patch generation

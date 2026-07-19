@@ -141,6 +141,9 @@ export function migrateSaveState(state) {
   if (!state.player.stats)                        state.player.stats             = {};
   if (state.player.stats.alcohol    == null)      state.player.stats.alcohol     = 0;
   if (state.player.stats.reputation == null)      state.player.stats.reputation  = 50;
+  // Absence date tracking fields (added with per-day absence counting fix)
+  if (state.school && state.school.last_absence_date === undefined) state.school.last_absence_date = null;
+  if (state.job    && state.job.last_absence_date    === undefined) state.job.last_absence_date    = null;
   // NPC fields
   for (const npc of Object.values(state.npcs ?? {})) {
     if (!npc.flag_timers)                               npc.flag_timers            = {};
