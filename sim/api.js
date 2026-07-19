@@ -189,6 +189,7 @@ export async function extractSceneContext(prose, location, activeNpcs) {
 // Saved to LOREBOOK_COMPRESSED; callGrok uses this on every subsequent call.
 export async function compressLorebook(lorebook, playerName, npcNames = []) {
   if (!lorebook?.trim() || lorebook.trim().length < 80) return;
+  if (!playerName || typeof playerName !== 'string') return;
   const helper = getHelperSlot();
   if (!helper.key || !helper.provider) return;
   try {

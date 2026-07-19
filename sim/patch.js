@@ -4,7 +4,7 @@ import { saveWorldState, savePatchAuditEntry } from './state.js';
 import { createNpc } from './npc.js';
 
 export function _resolveNpcPatchKey(key) {
-  if (!S.WS) return null;
+  if (!S.WS || !key || typeof key !== 'string') return null;
   if (S.WS.npcs[key]) return key;
   const kl = key.toLowerCase().replace(/[\s-]+/g, '_');
   const kFirst = kl.split('_')[0];
@@ -17,6 +17,7 @@ export function _resolveNpcPatchKey(key) {
 }
 
 export function _resolveEnrichmentKey(key, npcs) {
+  if (!key || typeof key !== 'string') return null;
   const k = key.toLowerCase().replace(/[\s-]+/g, '_');
   const kFirst = k.split('_')[0];
   const FAMILY_TERM_MAP = {

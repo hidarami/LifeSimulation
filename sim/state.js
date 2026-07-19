@@ -145,6 +145,12 @@ export function migrateSaveState(state) {
   if (state.school && state.school.last_absence_date === undefined) state.school.last_absence_date = null;
   if (state.job    && state.job.last_absence_date    === undefined) state.job.last_absence_date    = null;
   // NPC fields
+  // Strip ghost NPCs with invalid ids before migrating
+  for (const badKey of Object.keys(state.npcs ?? {})) {
+    if (!badKey || badKey === 'undefined' || badKey === 'null') {
+      delete state.npcs[badKey];
+    }
+  }
   for (const npc of Object.values(state.npcs ?? {})) {
     if (!npc.flag_timers)                               npc.flag_timers            = {};
     if (!Array.isArray(npc.active_flags))              npc.active_flags            = [];

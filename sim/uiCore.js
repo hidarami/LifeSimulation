@@ -136,7 +136,7 @@ export function renderAll() {
     overviewEl.classList.toggle('visible', !!ovTxt);
   }
   const charStatusEl = document.getElementById('char-status');
-  if (charStatusEl) {
+  if (charStatusEl && S.WS?.player?.stats) {
     const NEG = new Set(['Starving','Hungry','Sick','Unwell','Exhausted','Tired','Grimy','Depressed','Down','Isolated','Ill','Stressed','Tense','Embarrassed','Panicked']);
     const POS = new Set(['Upbeat','Connected','Happy','Grateful','Elated']);
     const BLANK = new Set(['Fine','Neutral']);

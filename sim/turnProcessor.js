@@ -650,7 +650,7 @@ export async function processTurn(input) {
       const _extractNewNames = (text) => (text.match(/\b([A-Z][a-z]{1,14})\b/g)??[])
         .filter(n=>!_skip.has(n)&&!_knownNames.has(n.toLowerCase())&&!_objWords.some(w=>n.toLowerCase().includes(w)))
         .filter((n,i,arr)=>arr.indexOf(n)===i);
-      // Scan both prose AND raw player input — catches cases like "Ara and Kiro arrive" in action text
+      // Scan both prose AND raw player input
       const _allCandidates = [...new Set([..._extractNewNames(prose), ..._extractNewNames(input)])].slice(0, 3);
       if (!_allCandidates.length) {
         const _relTerm = _relTerms.find(term=>prose.toLowerCase().includes(term)&&!_knownNames.has(term));
