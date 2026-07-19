@@ -23,7 +23,7 @@ export const THRESHOLDS = {
 export const STATS = {
   health:     { min: 0, max: 100, decay: 0.10 },
   energy:     { min: 0, max: 100, decay: 0.40 },
-  hunger:     { min: 0, max: 100, decay: 0.50 },  // 0=full, 100=starving
+  hunger:     { min: 0, max: 100, decay: 1.0 },  // 0=full, 100=starving - increased for realism
   hygiene:    { min: 0, max: 100, decay: 0.30 },
   mood:       { min: 0, max: 100, decay: 0.15 },
   arousal:    { min: 0, max: 100, decay: 0.60 },
@@ -67,13 +67,15 @@ export function applySleepRecovery(stats, hoursSlept) {
 // ─── CIRCADIAN RHYTHM ─────────────────────────────────────────────────────────
 export function getCircadianModifiers(simTimeIso) {
   const h = new Date(simTimeIso).getHours() + new Date(simTimeIso).getMinutes() / 60;
-  if (h >= 6  && h < 10) return { energy:  3, mood:  2 }; // morning clarity
-  if (h >= 10 && h < 13) return { energy:  1, mood:  1 }; // late morning
-  if (h >= 13 && h < 15) return { energy: -3, mood: -2 }; // post-lunch dip
-  if (h >= 15 && h < 19) return { energy:  0, mood:  0 }; // afternoon flat
-  if (h >= 19 && h < 22) return { energy: -2, mood: -1 }; // evening fade
-  if (h >= 22 || h < 2)  return { energy: -6, mood: -3 }; // late night
-  return                         { energy:-10, mood: -5 }; // deep night 2–6 AM
+  if (h >= 6  && h < 8)  return { energy:  3, mood:  2, hunger: 15 }; // breakfast time - hunger spike
+  if (h >= 8  && h < 10) return { energy:  3, mood:  2, hunger: 0 };  // morning clarity
+  if (h >= 10 && h < 13) return { energy:  1, mood:  1, hunger: 0 };  // late morning
+  if (h >= 13 && h < 15) return { energy: -3, mood: -2, hunger: 12 }; // post-lunch dip - lunch time hunger spike
+  if (h >= 15 && h < 18) return { energy:  0, mood:  0, hunger: 0 };  // afternoon flat
+  if (h >= 18 && h < 20) return { energy: -2, mood: -1, hunger: 15 };  // dinner time - hunger spike
+  if (h >= 20 && h < 22) return { energy: -2, mood: -1, hunger: 0 };   // evening fade
+  if (h >= 22 || h < 2)  return { energy: -6, mood: -3, hunger: 0 };   // late night
+  return                         { energy:-10, mood: -5, hunger: 0 };     // deep night 2–6 AM
 }
 
 export function getSleepEfficiency(startHour) {
@@ -232,9 +234,12 @@ export function applyCascadingEffects(stats) {
   else if (s.hunger <= 30)  { c.energy = (c.energy ?? 0) + 2; c.mood = (c.mood ?? 0) + 1; }
 
   // Apply at 50% weight to avoid instant death spirals
+  // Also prevent positive cascade lock at 100 - only apply positive deltas if stat is below 90
   for (const [key, delta] of Object.entries(c)) {
     if (!(key in STATS)) continue;
     const def = STATS[key];
+    // Prevent positive cascade lock: if stat is already high (90+), don't boost it further via cascade
+    if (delta > 0 && s[key] >= 90) continue;
     s[key] = Math.max(def.min, Math.min(def.max, s[key] + delta * 0.5));
   }
   return s;

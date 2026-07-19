@@ -169,7 +169,8 @@ function buildNpcCard(npc, currentDate, playerLocation = 'home', prevNpcMeters =
       ? 'stranger'
       : rawLabel || 'acquaintance'
   ).replace(/_/g, ' ');
-  const relSign   = npc.relationship_meter > 0 ? '+' : '';
+  // Show proper sign: + for positive, - for negative, no sign for zero
+  const relSign   = npc.relationship_meter > 0 ? '+' : npc.relationship_meter < 0 ? '-' : '';
   const relClass  = npc.relationship_meter >= 30 ? 'mp' : npc.relationship_meter <= -30 ? 'mn' : 'mz';
   const _prevM    = prevNpcMeters[npc.id];
   const _relDelta = _prevM != null ? npc.relationship_meter - _prevM.rel : 0;

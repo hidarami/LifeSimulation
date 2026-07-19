@@ -57,8 +57,14 @@ export function validatePatch(patch, ws) {
   const violations = [];
   const VALID_CLASSES = new Set(['intimate','household','professional','institutional']);
   const INTIMATE_TYPES = ['lover','partner','boyfriend','girlfriend','spouse'];
+  const VALID_TRAITS = new Set(['jealousy','honesty','patience','warmth','ambition','impulsivity','dominance','openness']);
   if (patch.npc_updates) {
     for (const [rawId, upd] of Object.entries(patch.npc_updates)) {
+      // Guard against non-string keys
+      if (typeof rawId !== 'string') {
+        violations.push(`NPC key is not a string: ${typeof rawId}`);
+        continue;
+      }
       const id = _resolveNpcPatchKey(rawId);
       if (!id) { violations.push(`Cannot resolve NPC "${rawId}" — use exact ids from CURRENT GAME STATE`); continue; }
       const npc = ws.npcs[id];
@@ -69,6 +75,14 @@ export function validatePatch(patch, ws) {
         violations.push(`${npc.name}: Cannot set relationship_type "${newType}" with rel_meter=${newMeter} (min 20).`);
       if (newClass && !VALID_CLASSES.has(newClass))
         violations.push(`${npc.name}: npc_class "${newClass}" invalid — use: intimate / household / professional / institutional`);
+      // Validate trait names
+      if (upd.traits) {
+        for (const traitName of Object.keys(upd.traits)) {
+          if (!VALID_TRAITS.has(traitName)) {
+            violations.push(`${npc.name}: Invalid trait "${traitName}" — valid traits: ${Array.from(VALID_TRAITS).join(', ')}`);
+          }
+        }
+      }
       if (upd.schedule?.weekday_routine) {
         const sorted = [...upd.schedule.weekday_routine].sort((a,b) => a.start_hour - b.start_hour);
         if (!sorted.length || sorted[0].start_hour !== 0 || sorted.at(-1).end_hour !== 24)
@@ -154,8 +168,13 @@ export function _applySimPatch(patch) {
         _changed.push(`add_npc:${nd.name}`);
       }
     }
-    if (patch.remove_npcs?.length) {
+  if (patch.remove_npcs?.length) {
       for (const rid of patch.remove_npcs) {
+        // Guard against non-string values in remove_npcs array
+        if (typeof rid !== 'string') {
+          window._devlog?.error(`SIM_PATCH remove_npcs: invalid entry (not a string)`, { entry: rid });
+          continue;
+        }
         const id = _resolveNpcPatchKey(rid);
         if (id && S.WS.npcs[id]) { S.WS.npcs[id].status = 'inactive'; _changed.push(`remove_npc:${id}`); }
       }

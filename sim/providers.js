@@ -378,8 +378,12 @@ export async function dispatchJSON(provider, key, model, prompt, maxTokens = 400
       const eb = await res.text().catch(() => '');
       throw new Error(`${getProviderDisplayName(provider)} HTTP ${res.status}: ${eb.slice(0, 160)}`);
     }
-    const raw = (await res.json()).choices?.[0]?.message?.content ?? '{}';
-    const clean = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim() || '{}';
+  const raw = (await res.json()).choices?.[0]?.message?.content ?? '{}';
+    // Strip DeepSeek/HuggingFace reasoning tags and markdown fences
+    const clean = raw
+      .replace(/<\/?thought>[\s\S]*?<\/?\/thought>/gi, '') // DeepSeek thought tags
+      .replace(/<\/?thinking>[\s\S]*?<\/?\/thinking>/gi, '') // Alternative thinking tags
+      .replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim() || '{}';
     try { return JSON.parse(clean); } catch { return {}; }
   }, provider);
 

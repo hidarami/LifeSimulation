@@ -405,12 +405,26 @@ export const WORLD_EVENT_TABLE = [
     id: 'viral_moment',
     category: 'fame',
     label: 'Something you did goes viral',
-    condition: ws => ws.player.stats.mood > 75 && ws.player.stats.social > 65,
-    probability: 0.02,
-    effect: () => ({
-      stat_deltas: { mood: 25, reputation: 12, social: 18 },
-      fame_followers: 8000,
-    }),
+    condition: ws => {
+      // Only in 2010+ with phone and social media capability
+      const hasPhone = (ws.player?.possessions ?? []).some(p => /phone|cellular|mobile/i.test(p.name));
+      const year = ws.sim_time ? new Date(ws.sim_time).getFullYear() : 2010;
+      // Must have done something actually noteworthy - check for recent significant events
+      const hasRecentEvent = (ws.recent_significant_events ?? []).length > 0;
+      // In 2010, viral means local radio/TV or early social media
+      // Must have done something actually noteworthy (not just high mood/social)
+      return hasPhone && year >= 2010 && hasRecentEvent && ws.player.stats.mood > 75 && ws.player.stats.social > 65;
+    },
+    probability: 0.002, // Even rarer - 0.2% per turn, requires actual event
+    effect: ws => {
+      const year = ws.sim_time ? new Date(ws.sim_time).getFullYear() : 2010;
+      // Scale followers based on era - 2010 had limited social media reach
+      const followers = year >= 2015 ? 3000 : year >= 2012 ? 1000 : 200;
+      return {
+        stat_deltas: { mood: 10, reputation: 5, social: 5 },
+        fame_followers: followers,
+      };
+    },
     challenge_trigger: false,
   },
   {

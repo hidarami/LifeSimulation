@@ -477,6 +477,15 @@ export async function buildWorldWithMultipleAIs(lorebook) {
     }
   }
 
+  // FIX: Correct NPC class misclassification for family members
+  // Parents, siblings, and other family should be "household", not "intimate"
+  const FAMILY_RELATIONSHIPS = ['mother', 'father', 'parent_mother', 'parent_father', 'brother', 'sister', 'uncle', 'aunt', 'cousin', 'grandmother', 'grandfather'];
+  for (const npc of base.npcs) {
+    if (FAMILY_RELATIONSHIPS.includes(npc.relationship_type)) {
+      npc.npc_class = 'household';
+    }
+  }
+
   return base;
 }
 
@@ -807,7 +816,8 @@ RULES:
 - cash_delta: ONLY when a specific peso amount is explicitly exchanged ("pays ₱150", "receives ₱500", "finds ₱200"). Range: -10000 to +10000. Do NOT infer from general activity.
 - possessions_gained: ONLY when a physical item is explicitly given to, bought by, or found by the player. One entry per item.
 - possessions_lost: ONLY when an item is definitively taken, broken beyond use, lost, or given away. Use exact names from possessions list above.
-- appearance_note: ONLY when a PERMANENT physical change is definitively completed (tattoo done, scar received, haircut finished). One per turn max. null if none.
+- appearance_note: ONLY when a PERMANENT physical change is definitively completed (tattoo done, scar received, haircut finished, piercing healed). One per turn max. null if none.
+- CRITICAL: Do NOT extract body fluids, sexual fluids, or act-related descriptions as appearance changes. "cum splatters", "semen on skin", "fluids on body" are NOT appearance notes.
 - NPC mood_event: one sentence describing a significant emotional moment for that NPC in this scene, if clearly stated. Used for interaction log only.
 - NPC relationship_note: ONLY if narration states an explicit declaration or irreversible shift in the relationship between player and NPC.
 

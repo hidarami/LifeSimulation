@@ -8,8 +8,8 @@ import { applyDecay, applyDeltas, advanceTime,
          applyCascadingEffects, applyCascadeEffectsToExternal,
          getCircadianModifiers, getSleepEfficiency, applySleepRecovery } from './engine.js';
 import { routeInput, classifyExplicitActivity,
-         EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE,
-         hasThirdPartyPresence } from './sanitizer.js';
+          EXPLICIT_ACTIVITY_TABLE, sanitizeStateForGemini, extractCompoundContext, ROUTE,
+          hasThirdPartyPresence, isWitnessingExplicit } from './sanitizer.js';
 import { callGrok, classifyAction, evaluateNpcReaction, resetConvId,
          callGeminiAutopilot, compressSessionContext, evaluateDescribedNpc,
          evaluateNpcFlagsInContext, extractNarrativeStateChanges, extractSceneContext,
@@ -54,29 +54,47 @@ function _parseMissEndHour(schedStr, fallback) {
 function detectScheduleMiss(prevIso, newIso, playerAction, ws) {
   const prev = new Date(prevIso), next = new Date(newIso), missed = [];
   if (ws.school?.status === 'active') {
-    const schoolAction = /\b(school|class|attend|lecture|go\s*to\s*school|pasok|eskwela)\b/i.test(playerAction);
-    if (!schoolAction) {
-      const endH = _parseMissEndHour(ws.school.schedule, 16);
-      const d = new Date(prev); d.setHours(0,0,0,0);
-      const last = new Date(next); last.setHours(0,0,0,0);
-      while (d <= last) {
-        const dow = d.getDay();
-        if (dow >= 1 && dow <= 5) { const end = new Date(d); end.setHours(endH,0,0,0); if (prev < end && next >= end) missed.push({ type:'school' }); }
-        d.setDate(d.getDate() + 1);
+    // Check if player was supposed to be at school during this time window
+    const schoolStartH = 7; // School starts at 7:00 AM
+    const schoolEndH = _parseMissEndHour(ws.school.schedule, 16);
+    const d = new Date(prev); d.setHours(0,0,0,0);
+    const last = new Date(next); last.setHours(0,0,0,0);
+    while (d <= last) {
+      const dow = d.getDay();
+      if (dow >= 1 && dow <= 5) {
+        // Check if the time window crosses a school day
+        const dayStart = new Date(d); dayStart.setHours(schoolStartH, 0, 0, 0);
+        const dayEnd = new Date(d); dayEnd.setHours(schoolEndH, 0, 0, 0);
+        // If the turn spans across school hours, check if player was late or missed
+        if (prev < dayEnd && next >= dayStart) {
+          // Player was supposed to be at school - check if they arrived on time
+          const schoolAction = /\b(school|class|attend|lecture|go\s*to\s*school|pasok|eskwela)\b/i.test(playerAction);
+          if (!schoolAction) {
+            missed.push({ type:'school' });
+          }
+        }
       }
+      d.setDate(d.getDate() + 1);
     }
   }
   if (ws.job?.employer && ws.job?.schedule) {
-    const workAction = /\b(work|shift|clocked?\s*(in|out)|go\s*to\s*work|office|overtime)\b/i.test(playerAction);
-    if (!workAction) {
-      const endH = _parseMissEndHour(ws.job.schedule, 17);
-      const d = new Date(prev); d.setHours(0,0,0,0);
-      const last = new Date(next); last.setHours(0,0,0,0);
-      while (d <= last) {
-        const dow = d.getDay();
-        if (dow >= 1 && dow <= 5) { const end = new Date(d); end.setHours(endH,0,0,0); if (prev < end && next >= end) missed.push({ type:'job' }); }
-        d.setDate(d.getDate() + 1);
+    const workStartH = 8; // Work starts at 8:00 AM
+    const workEndH = _parseMissEndHour(ws.job.schedule, 17);
+    const d = new Date(prev); d.setHours(0,0,0,0);
+    const last = new Date(next); last.setHours(0,0,0,0);
+    while (d <= last) {
+      const dow = d.getDay();
+      if (dow >= 1 && dow <= 5) {
+        const dayStart = new Date(d); dayStart.setHours(workStartH, 0, 0, 0);
+        const dayEnd = new Date(d); dayEnd.setHours(workEndH, 0, 0, 0);
+        if (prev < dayEnd && next >= dayStart) {
+          const workAction = /\b(work|shift|clocked?\s*(in|out)|go\s*to\s*work|office|overtime)\b/i.test(playerAction);
+          if (!workAction) {
+            missed.push({ type:'job' });
+          }
+        }
       }
+      d.setDate(d.getDate() + 1);
     }
   }
   return missed;

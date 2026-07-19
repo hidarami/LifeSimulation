@@ -613,11 +613,29 @@ export async function sendConsoleMessage() {
       const _replyAcks = /\b(i['']ve|i have|updated?|changed?|applied|modified|done|set|added|removed)\b/i.test(reply);
       if (_isChangeReq && _replyAcks) {
         try {
-          const _p2 = await callMetaConsole([..._consoleMessages.slice(-18), { role: 'assistant', content: reply }, { role: 'user', content: '(SYSTEM) Output the <SIM_PATCH> JSON block now to commit your changes. Output ONLY the opening tag, the JSON object, and the closing tag.' }], S.WS);
+          // Add 10-second timeout for second-pass patch generation
+          const _p2Promise = callMetaConsole([..._consoleMessages.slice(-18), { role: 'assistant', content: reply }, { role: 'user', content: '(SYSTEM) Output the <SIM_PATCH> JSON block now to commit your changes. Output ONLY the opening tag, the JSON object, and the closing tag.' }], S.WS);
+          const _timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000));
+          const _p2 = await Promise.race([_p2Promise, _timeoutPromise]);
           const _p2Result = _extractAndApplyPatch(_p2);
           if (_p2Result && !_p2Result?.rejected) _patchApplied = _p2Result;
-        } catch {}
+          else if (_p2Result?.rejected) {
+            // AI acknowledged but patch was rejected - show the violations
+            reply += '\n\n⚠ **Patch was rejected:**\n' + _p2Result.violations.map(v => '- ' + v).join('\n');
+          }
+        } catch (e) {
+          // AI failed to output valid patch - tell user what went wrong
+          if (e.message === 'timeout') {
+            reply += '\n\n⚠ **Patch generation timed out** (10s). The AI did not output a valid <SIM_PATCH> block. Use `preview patch: {...}` to test your changes manually.';
+          } else {
+            reply += '\n\n⚠ **Failed to apply changes:** The AI did not output a valid <SIM_PATCH> block. Try rephrasing your request or use `preview patch: {...}` to test your changes.';
+          }
+        }
       }
+    }
+    // FIX: Provide clear feedback when patch was expected but not applied
+    if (!_patchApplied && _isChangeReq && _replyAcks) {
+      reply += '\n\n⚠ **No <SIM_PATCH> was output.** The AI acknowledged your request but did not provide the required JSON block. Changes were NOT applied. Try rephrasing or use `preview patch: {...}` to test your patch first.';
     }
     if (_patchApplied?.patchId) reply += `\n\n✓ Changes applied — **Patch ${_patchApplied.patchId}** · type "show patches" to audit`;
     else if (_patchApplied) reply += '\n\n✓ Changes applied to game world.';

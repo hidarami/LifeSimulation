@@ -122,16 +122,29 @@ const AUTOPILOT_PATTERNS = [
   /\b(sleep|go\s*to\s*sleep|take\s*a\s*nap|nap|rest\s*for)\b/i,
   /\b(commute|take\s*the\s*(bus|train|jeep)|drive\s*to\s*work|walk\s*to\s*(work|school))\b/i,
   /\b(work\s*(shift|day)|standard\s*shift|regular\s*shift|clock\s*(in|out)|go\s*to\s*work)\b/i,
-  /\b(wait|idle|do\s*nothing|pass\s*(the\s*)?time|kill\s*time)\b/i,
+  /\b(wait|idle|do\s*nothing|pass\s*(the\s*)?time|kill\s*time|autopilot|time\s*jump)\b/i,
+  /\b(attend\s*class|attend\s*school|finish\s*class|finish\s*school|end\s*of\s*class|end\s*of\s*school|go\s*to\s*school)\b/i,
 ];
 
 export function routeInput(input) {
   if (isExplicit(input)) {
+    // Player is WITNESSING explicit acts (parents having sex, etc.) - route as novel
+    if (isWitnessingExplicit(input)) return ROUTE.PATH_2_NOVEL;
     // Viewing/receiving explicit content ≠ performing an act — classify via Gemini instead
+    // Player is a WITNESS to explicit content, not a participant
     if (isPassiveExplicit(input)) return ROUTE.PATH_2_NOVEL;
+    // Player is PERFORMING explicit content
+    if (!hasThirdPartyPresence(input)) return ROUTE.PATH_1_EXPLICIT;
+    // Player is PARTICIPATING in explicit content with others
     return ROUTE.PATH_1_EXPLICIT;
   }
-  if (AUTOPILOT_PATTERNS.some(p => p.test(input)))  return ROUTE.PATH_3_AUTOPILOT;
+  // Check for autopilot patterns, but exclude "going to sleep" when it's about others
+  const isAutopilot = AUTOPILOT_PATTERNS.some(p => p.test(input));
+  // Don't route as autopilot if the input is about someone else going to sleep
+  if (isAutopilot && /\b(they|he|she|father|mother|parents?)\b.{0,30}\b(going to|go to|wants to|will)\b.{0,20}\b(sleep|bed)\b/i.test(input)) {
+    return ROUTE.PATH_2_NOVEL;
+  }
+  if (isAutopilot) return ROUTE.PATH_3_AUTOPILOT;
   return ROUTE.PATH_2_NOVEL;
 }
 
@@ -171,6 +184,21 @@ export function hasThirdPartyPresence(input) {
     // Someone asking/offering sexual activity
     || /\b(ask(s|ed)?|want(s|ed)?|offer(s|ed)?)\b.{0,80}\b(to\s+)?(suck|blow|jerk|stroke|fuck|have\s+sex)\b/i.test(n)
   );
+}
+
+// ─── WITNESS DETECTION ───────────────────────────────────────────────────────────
+// Detects when player is WITNESSING explicit acts (not participating)
+// Used to prevent applying explicit stat deltas to witnesses
+export function isWitnessingExplicit(input) {
+  const n = input.toLowerCase();
+  // Patterns for witnessing explicit acts
+  const _witnessPatterns = [
+    /\b(your|the)\s+(parents?|mother|father|brother|sister)\s+(fuck|screw|have\s*sex|make\s*love|are\s*doing\s*it)\b/i,
+    /\b(parents?\s+fuck|parents?\s+are\s+doing\s*it|parents?\s+make\s*love)\b/i,
+    /\b(witness|watch|see|saw|spying|peek(ing|ed)?|eavesdrop)\b.{0,80}\b(fuck|sex|intercourse|naked|nude)\b/i,
+    /\b(caught|walk\s*in|walked\s*in|interrupt)\b.{0,60}\b(on\s*)?(them|them having sex|them fucking|them making love)\b/i,
+  ];
+  return _witnessPatterns.some(p => p.test(n));
 }
 
 // ─── GEMINI CONTEXT STRIPPING ─────────────────────────────────────────────────
