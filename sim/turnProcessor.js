@@ -66,8 +66,9 @@ function detectScheduleMiss(prevIso, newIso, playerAction, ws) {
         const dayStart = new Date(d); dayStart.setHours(schoolStartH, 0, 0, 0);
         const dayEnd = new Date(d); dayEnd.setHours(schoolEndH, 0, 0, 0);
         // If the turn spans across school hours, check if player was late or missed
-        if (prev < dayEnd && next >= dayStart) {
-          // Player was supposed to be at school - check if they arrived on time
+        const _sOverlapMs = Math.max(0,
+          Math.min(next.getTime(), dayEnd.getTime()) - Math.max(prev.getTime(), dayStart.getTime()));
+        if (_sOverlapMs / 3600000 >= 1.5) {
           const schoolAction = /\b(school|class|attend|lecture|go\s*to\s*school|pasok|eskwela)\b/i.test(playerAction);
           if (!schoolAction) {
             missed.push({ type:'school', date: new Date(d).toISOString().slice(0, 10) });
@@ -87,7 +88,9 @@ function detectScheduleMiss(prevIso, newIso, playerAction, ws) {
       if (dow >= 1 && dow <= 5) {
         const dayStart = new Date(d); dayStart.setHours(workStartH, 0, 0, 0);
         const dayEnd = new Date(d); dayEnd.setHours(workEndH, 0, 0, 0);
-        if (prev < dayEnd && next >= dayStart) {
+        const _wOverlapMs = Math.max(0,
+          Math.min(next.getTime(), dayEnd.getTime()) - Math.max(prev.getTime(), dayStart.getTime()));
+        if (_wOverlapMs / 3600000 >= 1.5) {
           const workAction = /\b(work|shift|clocked?\s*(in|out)|go\s*to\s*work|office|overtime)\b/i.test(playerAction);
           if (!workAction) {
             missed.push({ type:'job', date: new Date(d).toISOString().slice(0, 10) });
@@ -415,7 +418,14 @@ export async function processTurn(input) {
       statDeltas.energy  = Math.round(_sleptStats.energy  - ws.player.stats.energy);
       statDeltas.mood    = Math.round(_sleptStats.mood    - ws.player.stats.mood);
       statDeltas.hygiene = Math.round(_sleptStats.hygiene - ws.player.stats.hygiene);
-      statDeltas.health  = (statDeltas.health ?? 0) + Math.round(_effHours * 0.4);
+      // Health recovery scales with depletion — severe disease slows natural healing
+      const _hasSevDisease = (ws.player.diseases ?? []).some(d => ['moderate','serious'].includes(d.severity));
+      const _healthRate = _hasSevDisease ? 0.25
+        : ws.player.stats.health < 35 ? 2.0
+        : ws.player.stats.health < 60 ? 1.0
+        : ws.player.stats.health < 80 ? 0.5
+        : 0.2;
+      statDeltas.health = (statDeltas.health ?? 0) + Math.round(_effHours * _healthRate);
     }
     ws.sim_time = advanceTime(ws.sim_time, timeCost).toISOString();
 

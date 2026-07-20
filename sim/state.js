@@ -440,6 +440,14 @@ export function assembleTurnBrief(worldState, turnData) {
       .map(a => ({ type: a.type, severity: a.severity, status: a.status })),
     // Recent compressed world memory — long-term story continuity
     world_memory_recent: (worldState.world_memory ?? []).slice(-3),
+    // Possession wear — ambient item condition for narrator
+    worn_items: (() => {
+      const _poss = worldState.player?.possessions ?? [];
+      const _worn = _poss.filter(p => p.durability != null && p.durability > 10 && p.durability <= 35 && !/broken|destroyed/i.test(p.condition ?? ''));
+      const _broken = _poss.filter(p => (p.durability != null && p.durability <= 10) || /broken|destroyed|ruined/i.test(p.condition ?? ''));
+      if (!_worn.length && !_broken.length) return null;
+      return { worn: _worn.map(p => p.name), broken: _broken.map(p => p.name) };
+    })(),
   };
 }
 

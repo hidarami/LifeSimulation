@@ -112,15 +112,28 @@ export function buildCharacterOverview(ws) {
   const _time = _td.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: !_use24h });
   const _day  = _td.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const emotions = computeCharacterEmotions(player.stats, consequences ?? [], Object.values(npcs ?? {}));
-  const emoStr = emotions.slice(0, 2).map(e => e.label.toLowerCase()).join(' & ');
+  const emoLabel = emotions[0]?.label ?? '';
   const loc = (player.location ?? 'somewhere').replace(/_/g, ' ');
-  const nearby = Object.values(npcs ?? {}).filter(n => n.status === 'active' && n.significance >= 1).slice(0, 3).map(n => n.name);
+  const nearby = Object.values(npcs ?? {})
+    .filter(n => n.status === 'active' && n.significance >= 2)
+    .slice(0, 2)
+    .map(n => n.name);
+  const _cur = localStorage.getItem('CURRENCY_SYMBOL') || '₱';
+  const _activeChallenges = (ws.challenges ?? []).filter(c => c.active && !c.resolved);
   let text = `${_day}, ${_time}. At ${loc}.`;
-  if (emoStr) text += ` Feeling ${emoStr}.`;
-  if (ws.consequences?.length) text += ` Dealing with ${ws.consequences[0].type.replace(/_/g, ' ')}.`;
+  if (emoLabel && !['Fine','Neutral'].includes(emoLabel)) text += ` ${emoLabel}.`;
+  if (_activeChallenges.length === 1) text += ` Issue: ${_activeChallenges[0].title}.`;
+  else if (_activeChallenges.length > 1) text += ` ${_activeChallenges.length} active issues.`;
+  else if (consequences?.length) text += ` ${consequences[0].type.replace(/_/g,' ')}.`;
+  if (player.cash < 150 && !_activeChallenges.some(c => c.type === 'financial')) {
+    text += ` Low cash (${_cur}${player.cash}).`;
+  }
+  if (ws.school?.status === 'suspended') text += ` Suspended from school.`;
+  else if (ws.school?.status === 'active' && (ws.school.absence_count ?? 0) >= 4) {
+    text += ` ${ws.school.absence_count} absences.`;
+  }
   if (nearby.length) {
-    const nameStr = nearby.length === 1 ? nearby[0] + ' is nearby.' : nearby.slice(0, -1).join(', ') + ' and ' + nearby.at(-1) + ' are nearby.';
-    text += ' ' + nameStr;
+    text += ' ' + (nearby.length === 1 ? `${nearby[0]} nearby.` : `${nearby.join(' & ')} nearby.`);
   }
   return text;
 }

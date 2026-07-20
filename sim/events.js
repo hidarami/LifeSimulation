@@ -606,6 +606,56 @@ export const WORLD_EVENT_TABLE = [
     challenge_trigger: false,
   },
 
+// ── POSITIVE TEXTURE EVENTS ───────────────────────────────────────────────
+  {
+    id: 'unexpected_compliment',
+    category: 'social',
+    label: 'Received an unexpected genuine compliment',
+    condition: ws => ws.player.stats.reputation > 40 && ws.player.stats.social > 30 && ws.player.stats.mood < 68,
+    probability: 0.06,
+    effect: () => ({ stat_deltas: { mood: 18, social: 10, reputation: 2 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'small_act_of_kindness_received',
+    category: 'social',
+    label: 'A stranger did something unexpectedly kind',
+    condition: ws => ws.player.stats.mood < 52,
+    probability: 0.05,
+    effect: () => ({ stat_deltas: { mood: 14, social: 8 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'good_job_day',
+    category: 'employment',
+    label: 'Had an unusually smooth day at work',
+    condition: ws => ws.job && ws.player.stats.mood > 50 && ws.player.stats.energy > 40
+      && !(ws.job.performance_flags ?? []).some(f => ['formal_warning','final_warning','poor_performance'].includes(f)),
+    probability: 0.05,
+    effect: () => ({ stat_deltas: { mood: 12, reputation: 3 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'good_student_day',
+    category: 'academic',
+    label: 'Had a productive day at school',
+    condition: ws => ws.school?.status === 'active' && ws.player.stats.mood > 50
+      && (ws.school.absence_count ?? 0) < 3 && ws.player.stats.energy > 40
+      && !(ws.school.performance_flags ?? []).some(f => ['academic_warning','poor_performance'].includes(f)),
+    probability: 0.05,
+    effect: () => ({ stat_deltas: { mood: 10, social: 8, reputation: 2 } }),
+    challenge_trigger: false,
+  },
+  {
+    id: 'overheard_something_interesting',
+    category: 'misc',
+    label: 'Overheard something that gave pause',
+    condition: ws => ws.player.stats.social > 35 && ws.player.stats.mood > 40,
+    probability: 0.04,
+    effect: () => ({ stat_deltas: { mood: 6, social: 5 } }),
+    challenge_trigger: false,
+  },
+
   // ── TEXTURE / AMBIENT HOOKS ────────────────────────────────────────────────
   // Always-eligible world moments that fire on ordinary turns to give forward momentum.
   // scene_driver: true signals turnProcessor to surface them to the narrator.

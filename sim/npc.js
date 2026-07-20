@@ -63,8 +63,13 @@ export { DEFAULT_WEEKDAY, DEFAULT_WEEKEND, STUDENT_WEEKDAY, HOUSEHOLD_WEEKDAY, P
 
 function _pickSchedule(relationship_type, npc_class, age) {
   const rt = (relationship_type ?? '').toLowerCase();
-  if (rt === 'mother' || rt === 'father')                                               return PARENT_WEEKDAY;
-  if ((rt === 'brother' || rt === 'sister' || rt === 'classmate') && age && age < 23)  return STUDENT_WEEKDAY;
+  if (['mother','father','stepmother','stepfather','parent_mother','parent_father'].includes(rt)) return PARENT_WEEKDAY;
+  if (['uncle','aunt','tito','tita'].includes(rt))                                      return PARENT_WEEKDAY;
+  if (['grandmother','grandfather','lola','lolo'].includes(rt))                        return HOUSEHOLD_WEEKDAY;
+  if (['guardian'].includes(rt))                                                        return PARENT_WEEKDAY;
+  const _youngSibTypes = ['brother','sister','stepbrother','stepsister','classmate','cousin'];
+  if (_youngSibTypes.includes(rt) && age && age < 24)                                  return STUDENT_WEEKDAY;
+  if (['brother','sister','stepbrother','stepsister'].includes(rt) && age && age >= 24) return DEFAULT_WEEKDAY;
   if (npc_class === 'professional')                                                     return DEFAULT_WEEKDAY;
   if (npc_class === 'household' || npc_class === 'intimate')                           return HOUSEHOLD_WEEKDAY;
   return DEFAULT_WEEKDAY;

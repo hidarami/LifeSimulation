@@ -150,6 +150,12 @@ Only reflect other stats when critically low (below 25) or notably high (above 7
 Show through body-only prose: heavy limbs, stomach cramps, stale sweat, dull ache, dry mouth.
 One stat effect maximum per paragraph. Do not stack multiple stat references in one sentence.
 
+POSSESSION WEAR:
+If worn_items is non-null in the turn brief, embed ONE brief sensory detail per narration turn — only when the item naturally appears in the scene.
+- worn[]: fraying edge, cracked corner, faded colour, loose strap, worn-through sole — woven into touch or sight during use
+- broken[]: it misfires, screen flickers, tears further, won't power on, produces the wrong sound — show the practical failure, not drama
+Never list item names as status reports. One embedded detail per narration, no more. Skip entirely if the item is not part of this scene.
+
 ACTION FIDELITY:
 The turn brief contains two action fields:
 - action_taken: the mechanical classification the engine resolved
@@ -446,6 +452,25 @@ Rules:
 - npc_ids_involved: only NPC ids that appear in the player's current world state
 - future_plans: ONLY populate when player explicitly makes a concrete future plan/appointment with a specific NPC (e.g. "let's go swimming tomorrow", "meet me at the mall Saturday afternoon"). Each entry: { "npc_id": string (must be in npc_ids_involved), "offset_hours": number (hours from NOW until event starts — tomorrow afternoon ≈ 20-30h), "duration_hours": number (how long it lasts), "task": "brief activity label", "location": "outside|player_home|with_player" }. Empty array [] for anything that is not a concrete future appointment.
 - alcohol_consumed: detect if the player is drinking alcohol in this action. { "detected": boolean, "drink_type": "beer"|"light_beer"|"wine"|"spirit_shot"|"cocktail"|"hard_liquor"|"spiked_drink"|"none", "quantity": number }. Triggers: "drink a beer", "have shots", "orders wine", "take a shot of gin", "have a few drinks". "drink water/juice/soda/coffee/tea/milk" → detected: false. Default: { "detected": false, "drink_type": "none", "quantity": 1 }
+- ACTIVITY-SPECIFIC GUIDELINES — apply when player action clearly matches:
+  * Study/homework/reading: energy -10 to -20, mood +5 to +15, social -3; time 1.0–3.0h
+  * Exercise/sports/gym/swim/run: energy -20 to -35, health +3 to +8, mood +15 to +25, hygiene -12; time 0.5–2.0h; tag: physical_exertion
+  * Pray/mass/church/novena: mood +15 to +25, social +8; time 0.5–2.0h; tags: social_gathering (if at church)
+  * Clean/sweep/mop/laundry/dishes: hygiene +20, energy -10, mood +5; time 0.5–2.0h
+  * Watch TV/movie/series/YouTube/stream: energy +3, mood +12; time 0.5–3.0h
+  * Play video games: energy +2, mood +15, social +5 (if online); time 0.5–3.0h
+  * Hang out/visit friends/family gathering: social +20 to +35, mood +15; time 1.0–4.0h; tag: social_gathering
+  * Cook a meal (player eats too): energy -5, mood +8, hunger -25; time 0.5–1.5h
+  * Cook without eating / cook for others: energy -5, mood +5; time 0.5–1.5h
+  * Barber/salon/grooming/skincare: hygiene +15, mood +8; time 0.5–1.5h
+  * Job search/send applications/job interview prep: mood -5, energy -8; time 1.0–3.0h
+  * Argue/verbal fight/confrontation: mood -20 to -35, social -15; time 0.25–1.0h
+  * Cry/emotional release alone: mood -15 to -25, health -2, energy -10, social -5; time 0.25–1.0h
+  * Draw/paint/write/creative work: mood +10 to +20, energy -8; time 1.0–3.0h
+  * Listen to music alone: mood +8, energy +3; time 0.25–1.0h
+  * Scroll social media/browse phone/watch reels: social +5 to +12, mood ±5, energy -2; time 0.25–1.0h
+  * Go to mall/market/grocery/tindahan: energy -8, mood +8 to +15; time 0.5–3.0h; tags: outdoor, crowded_place
+  * Medical visit/checkup/hospital errand: mood -5, health +3; time 0.5–2.0h
 - context_tags: array of tags that apply from: "crowded_place", "rain_exposure", "outdoor", "physical_exertion", "social_gathering", "risky_activity". Empty array if none apply.`;
 }
 
