@@ -54,12 +54,26 @@ export function renderCenterStats(stats) {
     const _prevRaw = S._prevStats?.[key];
     const _prevDisp = _prevRaw != null ? (meta.invert ? 100 - Math.round(_prevRaw) : Math.round(_prevRaw)) : null;
     const _delta = _prevDisp !== null ? disp - _prevDisp : 0;
-    const _dHtml = _delta !== 0
-      ? `<span class="cstat-delta ${_delta > 0 ? 'cdelta-pos' : 'cdelta-neg'}">${_delta > 0 ? '+' : ''}${_delta}</span>`
-      : '';
     const row  = document.createElement('div');
     row.className = 'cstat-row';
-    row.innerHTML = `<span class="cstat-icon">${meta.icon}</span><span class="cstat-label">${meta.label}</span><div class="cstat-track"><div class="cstat-fill ${cstatColor(fill)}" style="width:${fill}%"></div></div><span class="cstat-val">${disp}${_dHtml}</span>`;
+    row.dataset.statKey = key;
+    row.dataset.delta = _delta;
+    row.dataset.baseValue = disp;
+    row.innerHTML = `<span class="cstat-icon">${meta.icon}</span><span class="cstat-label">${meta.label}</span><div class="cstat-track"><div class="cstat-fill ${cstatColor(fill)}" style="width:${fill}%"></div></div><span class="cstat-val">${disp}</span>`;
+    
+    row.addEventListener('click', () => {
+      const valEl = row.querySelector('.cstat-val');
+      if (_delta !== 0) {
+        const deltaSign = _delta > 0 ? '+' : '';
+        valEl.textContent = `${deltaSign}${_delta}`;
+        valEl.classList.add('cstat-delta', _delta > 0 ? 'cdelta-pos' : 'cdelta-neg');
+        setTimeout(() => {
+          valEl.textContent = disp;
+          valEl.classList.remove('cstat-delta', 'cdelta-pos', 'cdelta-neg');
+        }, 2000);
+      }
+    });
+    
     c.appendChild(row);
   }
 }
@@ -232,7 +246,7 @@ export function openCharModal() {
   const p = S.WS.player;
   const rows = [
     ['Name', p.name || '—'], ['Age', p.age ?? '—'], ['Sex', p.sex || '—'],
-    ['Born', p.birthday ? `~${p.birthday}` : '—'], ['Location', p.location || '—'],
+    ['Born', p.birthday ? `~${p.birthday}` : '—'], ['Home', p.home_location || '—'],
     ['Cash', `${localStorage.getItem('CURRENCY_SYMBOL')||'₱'}${(p.cash || 0).toLocaleString()}`],
   ];
   document.getElementById('modal-char-body').innerHTML = `

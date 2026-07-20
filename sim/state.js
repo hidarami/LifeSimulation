@@ -42,9 +42,10 @@ export function createInitialWorldState(playerName, startDate) {
     sim_time: startDate ?? new Date().toISOString(),
 
     player: {
-      name:     playerName,
-      age:      18,
-      location: 'home',
+      name:         playerName,
+      age:          18,
+      location:     'home',
+      home_location: 'home',
       stats: {
         health: 80, energy: 70, hunger: 20,
         hygiene: 70, mood: 60, arousal: 0,

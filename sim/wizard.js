@@ -114,7 +114,10 @@ export async function startNewGame() {
       setStage('Imagining your world...', 'Filling in missing details...', 48);
       const enriched = await enrichWorldDetails(lorebook || '', ws).catch(() => null);
       if (enriched) {
-        if (enriched.location_name) ws.player.location = enriched.location_name;
+        if (enriched.location_name) {
+          ws.player.location = enriched.location_name;
+          ws.player.home_location = enriched.location_name;
+        }
         if (enriched.setting_description) ws.setting_description = enriched.setting_description;
         if (enriched.npc_descriptions && typeof enriched.npc_descriptions === 'object') {
           for (const [key, bio] of Object.entries(enriched.npc_descriptions)) {

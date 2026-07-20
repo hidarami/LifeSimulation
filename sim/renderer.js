@@ -169,13 +169,13 @@ function buildNpcCard(npc, currentDate, playerLocation = 'home', prevNpcMeters =
       ? 'stranger'
       : rawLabel || 'acquaintance'
   ).replace(/_/g, ' ');
-  // Show proper sign: + for positive, - for negative, no sign for zero
-  const relSign   = npc.relationship_meter > 0 ? '+' : npc.relationship_meter < 0 ? '-' : '';
+  // Show sign only for delta changes from initial state, not for absolute values
   const relClass  = npc.relationship_meter >= 30 ? 'mp' : npc.relationship_meter <= -30 ? 'mn' : 'mz';
   const _prevM    = prevNpcMeters[npc.id];
   const _relDelta = _prevM != null ? npc.relationship_meter - _prevM.rel : 0;
+  const _relSign  = _relDelta > 0 ? '+' : _relDelta < 0 ? '-' : '';
   const _relDHtml = _relDelta !== 0
-    ? `<span class="npc-meter-delta ${_relDelta > 0 ? 'cdelta-pos' : 'cdelta-neg'}">${_relDelta > 0 ? '▲' : '▼'}${Math.abs(_relDelta)}</span>`
+    ? `<span class="npc-meter-delta ${_relDelta > 0 ? 'cdelta-pos' : 'cdelta-neg'}">${_relSign}${Math.abs(_relDelta)}</span>`
     : '';
 
   // ── Collapsed header (always visible) ────────────────────────────────────
@@ -187,7 +187,7 @@ function buildNpcCard(npc, currentDate, playerLocation = 'home', prevNpcMeters =
   header.innerHTML = `
     <div class="npc-col-top">
       <span class="npc-name">${npc.name}</span>
-      <span class="npc-rel-num ${relClass}">${relSign}${npc.relationship_meter}${_relDHtml}</span>
+      <span class="npc-rel-num ${relClass}">${npc.relationship_meter}${_relDHtml}</span>
       <span class="npc-expand-icon">▶</span>
     </div>
     <div class="npc-col-bottom">
@@ -214,8 +214,8 @@ function buildNpcCard(npc, currentDate, playerLocation = 'home', prevNpcMeters =
   details.style.display = 'none';
   details.innerHTML = `
     <div class="npc-meters" style="margin-top:6px">
-      ${buildMeter(npc.relationship_meter, 'Rel')}
-      ${buildMeter(npc.trust_meter, 'Trust')}
+      ${buildMeter(npc.relationship_meter, 'Rel', _prevM?.rel)}
+      ${buildMeter(npc.trust_meter, 'Trust', _prevM?.trust)}
     </div>
     <div style="margin-top:9px;margin-bottom:4px;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em">Personality</div>
     <div class="npc-traits">${traitBars}</div>
@@ -235,11 +235,15 @@ function buildNpcCard(npc, currentDate, playerLocation = 'home', prevNpcMeters =
   return card;
 }
 
-function buildMeter(val, label) {
+function buildMeter(val, label, prevVal = null) {
   const fill   = (val + 100) / 2;
   const cc     = val >= 30 ? 'mp' : val <= -30 ? 'mn' : 'mz';
-  const sign   = val > 0 ? '+' : '';
-  return `<div class="m-row"><span>${label}</span><div class="mt"><div class="mf ${cc}" style="width:${fill}%"></div></div><span class="mv">${sign}${val}</span></div>`;
+  const delta  = prevVal != null ? val - prevVal : 0;
+  const deltaSign = delta > 0 ? '+' : delta < 0 ? '-' : '';
+  const deltaHtml = delta !== 0
+    ? `<span class="npc-meter-delta ${delta > 0 ? 'cdelta-pos' : 'cdelta-neg'}">${deltaSign}${Math.abs(delta)}</span>`
+    : '';
+  return `<div class="m-row"><span>${label}</span><div class="mt"><div class="mf ${cc}" style="width:${fill}%"></div></div><span class="mv">${val}${deltaHtml}</span></div>`;
 }
 
 // ─── JOB PANEL ────────────────────────────────────────────────────────────────
