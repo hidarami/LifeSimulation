@@ -70,7 +70,7 @@ export async function loadConsoleHistoryForCurrentSave(saveId) {
   feed.innerHTML = '';
   const emptyEl = document.createElement('div'); emptyEl.id = 'console-empty';
   emptyEl.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--dim);text-align:center;padding:40px';
-  emptyEl.innerHTML = '<div class="ce-icon">⌘</div><div class="ce-text" style="text-align:left;max-width:340px;font-size:11px;line-height:1.9;opacity:1"><strong style="color:var(--acc);display:block;margin-bottom:8px;font-size:12px;letter-spacing:.06em">AI CONSOLE</strong><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Live Data (no AI):</span><br><span style="color:var(--txt)">show npcs &nbsp;·&nbsp; show npc [name] &nbsp;·&nbsp; show world</span><br><span style="color:var(--txt)">show errors &nbsp;·&nbsp; show logs [cat] &nbsp;·&nbsp; show model</span><br><span style="color:var(--txt)">show patches &nbsp;·&nbsp; check &nbsp;·&nbsp; undo</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Engine Actions (no AI):</span><br><span style="color:var(--txt)">generate npcs &nbsp;·&nbsp; regenerate bio [name]</span><br><span style="color:var(--txt)">rerun enrichment &nbsp;·&nbsp; reparse lorebook</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Ask Anything:</span><br><span style="color:var(--dim)">Other questions go to AI. Type <strong>help</strong> for this list.</span></div>';
+  emptyEl.innerHTML = '<div class="ce-icon">⌘</div><div class="ce-text" style="text-align:left;max-width:340px;font-size:11px;line-height:1.9;opacity:1"><strong style="color:var(--acc);display:block;margin-bottom:8px;font-size:12px;letter-spacing:.06em">AI CONSOLE</strong><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Live Data (no AI):</span><br><span style="color:var(--txt)">show npcs &nbsp;·&nbsp; show npc [name] &nbsp;·&nbsp; show player</span><br><span style="color:var(--txt)">show stats &nbsp;·&nbsp; show challenges &nbsp;·&nbsp; show debts</span><br><span style="color:var(--txt)">show diseases &nbsp;·&nbsp; show criminal &nbsp;·&nbsp; show fame &nbsp;·&nbsp; show time</span><br><span style="color:var(--txt)">check &nbsp;·&nbsp; undo &nbsp;·&nbsp; show errors &nbsp;·&nbsp; show patches</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Engine Actions (no AI):</span><br><span style="color:var(--txt)">generate npcs &nbsp;·&nbsp; regenerate bio [name]</span><br><span style="color:var(--txt)">rerun enrichment &nbsp;·&nbsp; reparse lorebook</span><br><br><span style="font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em">Ask Anything:</span><br><span style="color:var(--dim)">Other questions go to AI. Type <strong>help</strong> for this list.</span></div>';
   feed.appendChild(emptyEl);
   if (saveId === null || saveId === undefined) return;
   try {
@@ -454,6 +454,168 @@ export async function sendConsoleMessage() {
     return;
   }
 
+// ── show challenges / issues ───────────────────────────────────────────────
+  if (/^\s*(?:show|list)\s+(?:challenges?|issues?|problems?|active\s+challenges?)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _ac = (S.WS.challenges ?? []).filter(c => c.active && !c.resolved);
+    const _rc = (S.WS.challenges ?? []).filter(c => c.resolved).slice(-5);
+    let rep = `**Challenges — ${S.WS.player?.name} (Turn ${S.WS.turn}):**\n\n`;
+    if (!_ac.length) rep += '✓ No active challenges.\n';
+    else { rep += `**Active (${_ac.length}):**\n`; for (const c of _ac) rep += `- **[${c.severity.toUpperCase()}] ${c.title}**\n  Cause: ${c.cause}\n  Effects: ${c.effects_text}\n  Fix: ${c.resolution_steps}\n\n`; }
+    if (_rc.length) { rep += `\n**Recently Resolved (${_rc.length}):**\n`; for (const c of _rc) rep += `- ~~${c.title}~~ (${c.type})\n`; }
+    appendConsoleMsg('assistant', rep + '\n*Source: live engine data*', false);
+    return;
+  }
+
+  // ── show debts ─────────────────────────────────────────────────────────────
+  if (/^\s*(?:show|list)\s+debts?\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _debts = S.WS.debts ?? [];
+    const _cur = localStorage.getItem('CURRENCY_SYMBOL') || '₱';
+    if (!_debts.length) { appendConsoleMsg('assistant', '✓ No debts registered.\n\n*Source: live engine data*', false); return; }
+    let rep = `**Debts (${_debts.length} total):**\n\n`; let _total = 0;
+    for (const d of _debts) {
+      const _ic = d.status === 'overdue' ? '🔴' : d.status === 'paid' ? '✓' : '🟡';
+      rep += `${_ic} **${d.creditor}** (${d.type}) — ${_cur}${(d.amount ?? 0).toLocaleString()} [${(d.status ?? 'active').toUpperCase()}]\n`;
+      if (d.description) rep += `  ${d.description}\n`;
+      if (d.status !== 'paid' && d.status !== 'forgiven') { rep += `  Turns remaining: ${d.turns_remaining ?? '?'} | Interest: ${((d.interest_rate ?? 0) * 100).toFixed(0)}%/week\n`; _total += d.amount ?? 0; }
+      rep += '\n';
+    }
+    if (_total > 0) rep += `**Total owed: ${_cur}${_total.toLocaleString()}**\n`;
+    appendConsoleMsg('assistant', rep + '\n*Source: live engine data*', false);
+    return;
+  }
+
+  // ── show addictions ────────────────────────────────────────────────────────
+  if (/^\s*(?:show|list)\s+(?:addictions?|dependencies|cravings?|substances?)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _adds = (S.WS.addictions ?? []).filter(a => a.status !== 'recovered');
+    if (!_adds.length) { appendConsoleMsg('assistant', '✓ No active addictions.\n\n*Source: live engine data*', false); return; }
+    let rep = `**Active Addictions (${_adds.length}):**\n\n`;
+    for (const a of _adds) {
+      const _ic = a.status === 'withdrawing' ? '⚠' : a.severity === 'severe' ? '🔴' : a.severity === 'moderate' ? '🟡' : '🟢';
+      rep += `${_ic} **${a.type}** — ${a.severity} | Status: ${a.status}\n  Days active: ${a.days_active ?? 0} | Last fed: Turn ${a.last_fed_turn ?? '?'}`;
+      if (a.status === 'withdrawing') rep += ` | Withdrawal turns: ${a.withdrawal_turns ?? 0}`;
+      rep += '\n\n';
+    }
+    appendConsoleMsg('assistant', rep + '*Source: live engine data*', false);
+    return;
+  }
+
+  // ── show consequences ──────────────────────────────────────────────────────
+  if (/^\s*(?:show|list)\s+(?:consequences?|cons|active\s+effects?)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _cons = S.WS.consequences ?? [];
+    if (!_cons.length) { appendConsoleMsg('assistant', '✓ No active consequences.\n\n*Source: live engine data*', false); return; }
+    let rep = `**Active Consequences (${_cons.length}):**\n\n`;
+    for (const c of _cons) {
+      const _ic = c.severity === 'critical' ? '🔴' : c.severity === 'major' ? '🟠' : c.severity === 'moderate' ? '🟡' : '🟢';
+      rep += `${_ic} **${c.type.replace(/_/g, ' ')}** — ${c.severity} | ${c.duration} turn${c.duration !== 1 ? 's' : ''} remaining\n`;
+    }
+    appendConsoleMsg('assistant', rep + '\n*Source: live engine data*', false);
+    return;
+  }
+
+  // ── show criminal record ───────────────────────────────────────────────────
+  if (/^\s*(?:show|list|check)\s+(?:criminal|crime|wanted|record)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _cr = S.WS.criminal_record ?? { wanted_level: 0, crimes: [], has_record: false };
+    let rep = `**Criminal Record — ${S.WS.player?.name}:**\n\n`;
+    rep += `**Has Record:** ${_cr.has_record ? '⚠ Yes' : '✓ No'} | **Wanted Level:** ${_cr.wanted_level}/5\n\n`;
+    const _crimes = _cr.crimes ?? [];
+    if (!_crimes.length) rep += '✓ No crimes on record.\n';
+    else { rep += `**Crimes (${_crimes.length}):**\n`; for (const c of _crimes) rep += `- **${(c.type ?? 'unknown').replace(/_/g, ' ')}** (${c.severity ?? '?'}) — Turn ${c.turn ?? '?'} | ${c.status ?? 'active'}\n  ${c.description || 'No description'}\n`; }
+    appendConsoleMsg('assistant', rep + '\n*Source: live engine data*', false);
+    return;
+  }
+
+  // ── show time ──────────────────────────────────────────────────────────────
+  if (/^\s*(?:show|get|what.?s?\s+the)\s+(?:time|clock|date|sim\s+time)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _td = new Date(S.WS.sim_time);
+    const _use24h = localStorage.getItem('TIME_FORMAT_24H') === '1';
+    const _tStr = _td.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: !_use24h });
+    const _dStr = _td.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    appendConsoleMsg('assistant', `**Sim Time — Turn ${S.WS.turn}**\n\n**Time:** ${_tStr}\n**Date:** ${_dStr}\n**ISO:** \`${S.WS.sim_time}\`\n\n*Source: live engine data*`, false);
+    return;
+  }
+
+  // ── show fame ──────────────────────────────────────────────────────────────
+  if (/^\s*(?:show|get)\s+(?:fame|celebrity\s+status|followers?)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _fame = S.WS.fame ?? { level: 0, label: 'unknown', followers: 0, unlocked_perks: [] };
+    let rep = `**Fame — ${S.WS.player?.name}:**\n\n`;
+    rep += `**Level:** ${_fame.level} (${(_fame.label ?? 'unknown').charAt(0).toUpperCase() + (_fame.label ?? 'unknown').slice(1)})\n`;
+    rep += `**Followers:** ${(_fame.followers ?? 0).toLocaleString()}\n`;
+    if (_fame.unlocked_perks?.length) rep += `**Perks:** ${_fame.unlocked_perks.map(p => p.replace(/_/g,' ')).join(', ')}\n`;
+    else rep += '**Perks:** None unlocked yet\n';
+    if (_fame.level === 0) rep += '\n*No fame yet. Reputation 55+ with 100+ followers unlocks local fame.*\n';
+    appendConsoleMsg('assistant', rep + '\n*Source: live engine data*', false);
+    return;
+  }
+
+  // ── show diseases / health status ─────────────────────────────────────────
+  if (/^\s*(?:show|list)\s+(?:diseases?|sickness|illness|health\s+status|ailments?)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _dis = S.WS.player?.diseases ?? [];
+    let rep = `**Health Status — ${S.WS.player?.name}:**\n\n`;
+    rep += `**Health:** ${Math.round(S.WS.player?.stats?.health ?? 0)}/100 | **Alcohol:** ${Math.round(S.WS.player?.stats?.alcohol ?? 0)}/100\n\n`;
+    if (!_dis.length) rep += '✓ No active diseases.\n';
+    else { rep += `**Active Diseases (${_dis.length}):**\n`; for (const d of _dis) { rep += `- **${d.name}** (${d.severity}) — ${d.duration_remaining} turn${d.duration_remaining !== 1 ? 's' : ''} remaining\n  Cause: ${d.cause}\n  Recovery: ${d.resolution}\n\n`; } }
+    const _wth = (S.WS.addictions ?? []).filter(a => a.status === 'withdrawing');
+    if (_wth.length) rep += `\n**In Withdrawal (${_wth.length}):** ${_wth.map(a => a.type).join(', ')}\n`;
+    appendConsoleMsg('assistant', rep + '\n*Source: live engine data*', false);
+    return;
+  }
+
+  // ── show stats ─────────────────────────────────────────────────────────────
+  if (/^\s*(?:show|dump|list)\s+(?:all\s+)?stats?\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _st = S.WS.player?.stats ?? {};
+    const _cur = localStorage.getItem('CURRENCY_SYMBOL') || '₱';
+    const _labels = { health:'Health', energy:'Energy', hunger:'Hunger (0=full 100=starving)', hygiene:'Hygiene', mood:'Mood', arousal:'Arousal', social:'Social', reputation:'Reputation', alcohol:'Alcohol' };
+    let rep = `**Stats — ${S.WS.player?.name} (Turn ${S.WS.turn}):**\n\n`;
+    rep += `**Cash:** ${_cur}${(S.WS.player?.cash ?? 0).toLocaleString()} | **Location:** ${S.WS.player?.location ?? '?'}\n\n`;
+    for (const [k, lbl] of Object.entries(_labels)) {
+      if (!(k in _st)) continue;
+      const v = Math.round(_st[k]);
+      const _filled = Math.max(0, Math.min(10, Math.floor(v / 10)));
+      rep += `**${lbl}:** ${v.toString().padStart(3)} \`${'█'.repeat(_filled)}${'░'.repeat(10 - _filled)}\`\n`;
+    }
+    appendConsoleMsg('assistant', rep + '\n*Source: live engine data*', false);
+    return;
+  }
+
+  // ── show player ────────────────────────────────────────────────────────────
+  if (/^\s*(?:show|dump|get)\s+(?:player|character|self|me|myself)\s*$/i.test(content)) {
+    appendConsoleMsg('user', content);
+    if (!S.WS) { appendConsoleMsg('assistant', 'No game loaded.', false); return; }
+    const _p = S.WS.player;
+    const _cur = localStorage.getItem('CURRENCY_SYMBOL') || '₱';
+    let rep = `**Player — ${_p?.name} (Turn ${S.WS.turn}):**\n\n`;
+    rep += `**Age:** ${_p?.age} | **Sex:** ${_p?.sex ?? '?'} | **Location:** ${_p?.location ?? '?'}\n`;
+    rep += `**Cash:** ${_cur}${(_p?.cash ?? 0).toLocaleString()} | **Birthday:** ~${_p?.birthday ?? '?'}\n\n`;
+    const _st = _p?.stats ?? {};
+    rep += `**Stats:** ${['health','energy','hunger','hygiene','mood','social','reputation'].filter(k => k in _st).map(k => `${k}:${Math.round(_st[k])}`).join(' | ')}\n`;
+    if (_p?.diseases?.length) rep += `\n**Diseases:** ${_p.diseases.map(d => `${d.name}(${d.severity},${d.duration_remaining}t)`).join(', ')}\n`;
+    if (_p?.possessions?.length) rep += `**Possessions (${_p.possessions.length}):** ${_p.possessions.map(ps => ps.name).join(', ')}\n`;
+    if (_p?.irreversible?.length) rep += `**Permanent:** ${_p.irreversible.join(' | ')}\n`;
+    if (_p?.habits?.length) rep += `**Habits:** ${_p.habits.join(', ')}\n`;
+    if (S.WS.job) rep += `\n**Job:** ${S.WS.job.position ?? 'Worker'} at ${S.WS.job.employer ?? '?'} (${S.WS.job.days_employed ?? 0} days)\n`;
+    if (S.WS.school?.name) rep += `**School:** ${S.WS.school.name} | ${S.WS.school.grade_level ?? '?'} | Absences: ${S.WS.school.absence_count ?? 0}\n`;
+    appendConsoleMsg('assistant', rep + '\n*Source: live engine data*', false);
+    return;
+  }
+
   // ── show init log ──────────────────────────────────────────────────────────
   if (/^\s*(?:show|get|read|dump)\s+(?:init(?:ialization)?|startup|pipeline|enrich(?:ment)?\s+log)\s*$/i.test(content)) {
     appendConsoleMsg('user', content);
@@ -475,7 +637,7 @@ export async function sendConsoleMessage() {
   if (/^\s*(?:help|commands?|what\s+can\s+you\s+do)\s*$/i.test(content)) {
     appendConsoleMsg('user', content);
     appendConsoleMsg('assistant',
-      '**SIM CONSOLE — Commands**\n\n**LIVE DATA (no AI):**\n- `show npcs` — all active NPCs\n- `show npc [name]` — full NPC data\n- `show world` — world state snapshot\n- `show lorebook` — lorebook text\n- `show items` / `show possessions` — player inventory\n- `show providers` — API slot config\n- `show init` — enrichment & startup log\n- `show patches` — patch audit log\n- `show errors` — recent errors\n- `show logs [category]` — filter devlog\n- `show api calls` — recent API calls\n- `show recent` — last 15 devlog entries\n- `show model` — active AI slot config\n- `check` — engine rule validation\n- `explain last turn` — last turn breakdown\n- `preview patch: {...}` — dry-run a patch\n- `undo` / `undo N` — reverse patches\n\n**ENGINE ACTIONS (no AI):**\n- `generate npcs` — create NPCs from lorebook\n- `regenerate bio [name]` — rebuild NPC bio\n- `generate items` — create player inventory\n- `fix schedules` — repair broken NPC schedules\n- `rerun enrichment` — re-run world enrichment\n- `reparse lorebook` — parse lorebook again\n\n**ASK ANYTHING:**\nAll other input goes to AI with full game context.\n\n*Source: deterministic engine — no AI*', false);
+      '**SIM CONSOLE — Commands**\n\n**LIVE DATA (no AI):**\n- `show player` — full player snapshot\n- `show stats` — all stats with bar charts\n- `show npcs` — all active NPCs\n- `show npc [name]` — full NPC detail\n- `show world` — world state snapshot\n- `show lorebook` — lorebook text\n- `show items` / `show possessions` — inventory\n- `show challenges` / `show issues` — active challenges\n- `show debts` — all debts & amounts owed\n- `show addictions` — addiction & withdrawal tracker\n- `show consequences` — active consequence stack\n- `show criminal` — criminal record & wanted level\n- `show diseases` / `show health status` — disease tracker\n- `show fame` — fame level & followers\n- `show time` — current sim time & date\n- `show providers` — API slot config\n- `show model` — active AI slot config\n- `show init` — enrichment & startup log\n- `show patches` — patch audit log\n- `show errors` — recent errors\n- `show logs [category]` — filter devlog\n- `show api calls` — recent API calls\n- `show recent` — last 15 devlog entries\n- `check` — engine rule validation\n- `explain last turn` — last turn breakdown\n- `preview patch: {...}` — dry-run a patch\n- `undo` / `undo N` — reverse patches\n\n**ENGINE ACTIONS (no AI):**\n- `generate npcs` — create NPCs from lorebook\n- `regenerate bio [name]` — rebuild NPC bio\n- `generate items` — create player inventory\n- `fix schedules` — repair broken NPC schedules\n- `rerun enrichment` — re-run world enrichment\n- `reparse lorebook` — parse lorebook again\n\n**ASK ANYTHING:**\nAll other input goes to AI with full game context.\n\n*Source: deterministic engine — no AI*', false);
     return;
   }
 

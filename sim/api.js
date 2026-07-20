@@ -639,20 +639,36 @@ function _backfillEnrichment(parsed, ws) {
     }
   }
 
-  // npc_descriptions: each bio must be at least 2 short sentences (~15 words)
-  if (parsed.npc_descriptions && typeof parsed.npc_descriptions === 'object') {
-    for (const [key, bio] of Object.entries(parsed.npc_descriptions)) {
-      if (!bio || _wc(String(bio)) < 15) {
-        const _npcMatch = Object.values(ws.npcs ?? {}).find(n => {
-          if (!n.name) return false;
-          return n.name.toLowerCase().split(/\s+/)[0] === key.toLowerCase().split('_')[0] || n.id === key;
-        });
-        const _relLabel = (_npcMatch?.relationship_type ?? 'acquaintance').replace(/_/g, ' ');
-        const _nameStr  = _npcMatch?.name ?? key;
-        parsed.npc_descriptions[key] =
-          `${_nameStr} is a ${_relLabel} in the character's life, familiar from shared routines and close daily proximity. ` +
-          `They move through their shared spaces with a quiet ease that comes from long familiarity, their presence a reliable constant.`;
-      }
+  // npc_descriptions: ensure object exists, backfill short entries, add missing NPCs
+  if (!parsed.npc_descriptions || typeof parsed.npc_descriptions !== 'object') {
+    parsed.npc_descriptions = {};
+  }
+  for (const [key, bio] of Object.entries(parsed.npc_descriptions)) {
+    if (!bio || _wc(String(bio)) < 15) {
+      const _npcMatch = Object.values(ws.npcs ?? {}).find(n => {
+        if (!n.name) return false;
+        return n.name.toLowerCase().split(/\s+/)[0] === key.toLowerCase().split('_')[0] || n.id === key;
+      });
+      const _relLabel = (_npcMatch?.relationship_type ?? 'acquaintance').replace(/_/g, ' ');
+      const _nameStr  = _npcMatch?.name ?? key;
+      parsed.npc_descriptions[key] =
+        `${_nameStr} is a ${_relLabel} in the character's life, familiar from shared routines and close daily proximity. ` +
+        `They move through their shared spaces with a quiet ease that comes from long familiarity, their presence a reliable constant.`;
+    }
+  }
+  // Add placeholder bios for NPCs completely absent from enrichment result
+  for (const npc of Object.values(ws.npcs ?? {})) {
+    if (!npc.name || npc.status !== 'active') continue;
+    const _fk = npc.name.toLowerCase().split(/\s+/)[0];
+    const _hasEntry = Object.keys(parsed.npc_descriptions).some(k => {
+      const kBase = k.toLowerCase().split('_')[0];
+      return kBase === _fk || k === npc.id || k === npc.name.toLowerCase().replace(/\s+/g, '_');
+    });
+    if (!_hasEntry) {
+      const _relLabel = (npc.relationship_type ?? npc.npc_class ?? 'acquaintance').replace(/_/g, ' ');
+      parsed.npc_descriptions[_fk] =
+        `${npc.name} is a ${_relLabel} in the character's life, familiar from shared routines and close daily proximity. ` +
+        `They move through their shared spaces with a quiet ease that comes from long familiarity, their presence a reliable constant.`;
     }
   }
 

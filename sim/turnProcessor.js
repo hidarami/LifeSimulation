@@ -70,7 +70,7 @@ function detectScheduleMiss(prevIso, newIso, playerAction, ws) {
           // Player was supposed to be at school - check if they arrived on time
           const schoolAction = /\b(school|class|attend|lecture|go\s*to\s*school|pasok|eskwela)\b/i.test(playerAction);
           if (!schoolAction) {
-            missed.push({ type:'school' });
+            missed.push({ type:'school', date: new Date(d).toISOString().slice(0, 10) });
           }
         }
       }
@@ -90,7 +90,7 @@ function detectScheduleMiss(prevIso, newIso, playerAction, ws) {
         if (prev < dayEnd && next >= dayStart) {
           const workAction = /\b(work|shift|clocked?\s*(in|out)|go\s*to\s*work|office|overtime)\b/i.test(playerAction);
           if (!workAction) {
-            missed.push({ type:'job' });
+            missed.push({ type:'job', date: new Date(d).toISOString().slice(0, 10) });
           }
         }
       }
@@ -436,7 +436,7 @@ export async function processTurn(input) {
     for (const miss of missedSchedule) {
       if (miss.type === 'school' && ws.school) {
         // Only count ONE absence per calendar day regardless of how many turns cross school hours
-        const _absDayStr = new Date(prevSimTime).toISOString().slice(0, 10);
+        const _absDayStr = miss.date || new Date(prevSimTime).toISOString().slice(0, 10);
         if (ws.school.last_absence_date === _absDayStr) continue;
         ws.school.last_absence_date = _absDayStr;
         ws.school.absence_count = (ws.school.absence_count??0)+1; const n=ws.school.absence_count;
@@ -446,7 +446,7 @@ export async function processTurn(input) {
       }
       if (miss.type === 'job' && ws.job) {
         // Only count ONE absence per calendar day
-        const _absDayStr = new Date(prevSimTime).toISOString().slice(0, 10);
+        const _absDayStr = miss.date || new Date(prevSimTime).toISOString().slice(0, 10);
         if (ws.job.last_absence_date === _absDayStr) continue;
         ws.job.last_absence_date = _absDayStr;
         ws.job.absent_count = (ws.job.absent_count??0)+1; const n=ws.job.absent_count;
@@ -513,6 +513,8 @@ export async function processTurn(input) {
     if (!_contextTags.includes('crowded_place') && /crowd|mall|market|school|church|public|fiesta|concert/i.test(input)) _contextTags.push('crowded_place');
     if (!_contextTags.includes('rain_exposure') && /rain|wet|storm|baha|ulan/i.test(input)) _contextTags.push('rain_exposure');
     if (!_contextTags.includes('outdoor') && /outside|outdoors|park|street/i.test(input)) _contextTags.push('outdoor');
+    if (!_contextTags.includes('physical_exertion') && /exercise|run|jog|swim|workout|gym|basketball|sports|dance|fight|bike|climb|hike/i.test(input)) _contextTags.push('physical_exertion');
+    if (!_contextTags.includes('social_gathering') && /party|gathering|event|fiesta|celebration|reunion|get.together|bar|concert|nightclub|disco/i.test(input)) _contextTags.push('social_gathering');
 
     const newChallenges = [];
     for (const de of _directorEvents.filter(e=>['major','critical','moderate'].includes(e.severity)&&!e.hidden)) {
